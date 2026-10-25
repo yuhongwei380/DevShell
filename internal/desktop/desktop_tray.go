@@ -3,7 +3,7 @@
 package desktop
 
 import (
-	"cloudshell/internal/updater"
+	"devshell/internal/updater"
 	"context"
 	"errors"
 	"github.com/wailsapp/wails/v2/pkg/runtime"

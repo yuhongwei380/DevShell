@@ -22,7 +22,7 @@ try {
  const button=id=>row(id)+' [data-group-action=select]';
  const state=()=>page.evaluate(({root,child,leaf})=>({selected:serverManager.selectedGroup,collapsed:[...serverManager.collapsed],visible:[...document.querySelectorAll('#server-folder-list [data-group-id]')].map(e=>e.dataset.groupId),focused:document.activeElement.closest('[data-group-id]')?.dataset.groupId}),ids);
  for(const theme of ['light','dark']) {
-  await page.evaluate(t=>{CloudShellTheme.set(t);chooseServerFolder('')},theme);
+  await page.evaluate(t=>{DevShellTheme.set(t);chooseServerFolder('')},theme);
   await new Promise(r=>setTimeout(r,1000));
   await page.click(button(ids.root));let s=await state();assert.equal(s.selected,ids.root);assert(s.visible.includes(ids.child));
   await page.click(button(ids.root));s=await state();assert(s.collapsed.includes(ids.root)&&!s.visible.includes(ids.child));assert.equal(s.focused,ids.root);

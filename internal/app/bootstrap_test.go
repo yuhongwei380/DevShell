@@ -62,7 +62,7 @@ func TestBootstrapRequiresCapabilityAndRejectsOpaqueOrigins(t *testing.T) {
 					Build          uint64 `json:"build"`
 					ReleaseNotes   string `json:"releaseNotes"`
 				}
-				payload := strings.TrimSuffix(strings.TrimPrefix(string(data), "window.CLOUDSHELL = "), ";")
+				payload := strings.TrimSuffix(strings.TrimPrefix(string(data), "window.DEVSHELL = "), ";")
 				if err := json.Unmarshal([]byte(payload), &boot); err != nil {
 					t.Fatal(err)
 				}

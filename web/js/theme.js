@@ -9,7 +9,7 @@
   const valid = value => value === 'light' || value === 'dark';
   const validPreference = value => valid(value) || value === 'system';
   function read() { try { const value = JSON.parse(localStorage.getItem(key)); return validPreference(value) ? value : 'system'; } catch { return 'system'; } }
-  const bootTheme = window.CLOUDSHELL?.theme;
+  const bootTheme = window.DEVSHELL?.theme;
   let preference = validPreference(bootTheme) ? bootTheme : read();
   function resolved() { return preference === 'system' ? nativeTheme || (system.matches ? 'dark' : 'light') : preference; }
   function reflectSetting() {
@@ -63,7 +63,7 @@
   }
   async function refreshNativeTheme() {
     clearTimeout(nativeTimer);
-    if (nativePending || preference !== 'system' || document.hidden || window.DengShellWindowHidden) return;
+    if (nativePending || preference !== 'system' || document.hidden || window.DevShellWindowHidden) return;
     const desktop = window.go?.desktop?.Desktop;
     if (!desktop?.SystemTheme) { nativeTimer = setTimeout(refreshNativeTheme, 2000); return; }
     nativePending = true;
@@ -77,7 +77,7 @@
     } catch { /* Retain the last OS reading; browser media queries remain the fallback. */ }
     finally { nativePending = false; if (preference === 'system') nativeTimer = setTimeout(refreshNativeTheme, 2000); }
   }
-  window.CloudShellTheme = Object.freeze({
+  window.DevShellTheme = Object.freeze({
     get current() { return document.documentElement.dataset.theme; },
     get preference() { return preference; },
     set,

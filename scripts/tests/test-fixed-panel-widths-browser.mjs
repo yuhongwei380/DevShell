@@ -99,7 +99,7 @@ try {
   await page.click('.file-tab[data-pane="files"]');
   const output = process.env.DENGSHELL_LAYOUT_QA_DIR || stage; fs.mkdirSync(output, { recursive: true });
   for (const theme of ['light', 'dark']) {
-    await page.evaluate(theme => CloudShellTheme.set(theme), theme); await settle(); await fixed(theme + ' theme');
+    await page.evaluate(theme => DevShellTheme.set(theme), theme); await settle(); await fixed(theme + ' theme');
     await page.screenshot({ path: path.join(output, 'fixed-panels-' + theme + '.png') });
   }
   assert.deepEqual(errors, []);

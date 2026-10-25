@@ -74,7 +74,7 @@ func probeICMPTTL(ctx context.Context, targetIP string, ttl byte, timeout time.D
 		return result
 	}
 	defer closeHandle.Call(handle)
-	payload := []byte("DengShell ICMP connectivity probe")
+	payload := []byte("DevShell ICMP connectivity probe")
 	buffer := make([]byte, 512)
 	options := icmpOptions{TTL: ttl}
 	ms := uintptr(max(1, timeout.Milliseconds()))

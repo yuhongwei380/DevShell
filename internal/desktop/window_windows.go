@@ -22,16 +22,16 @@ func platformWebviewDataPath(configDir string) string {
 }
 
 func preparePlatformWindow() {
-	// A stable identity keeps running taskbar windows grouped as DengShell.
-	id, _ := windows.UTF16PtrFromString("DengShell.Desktop")
+	// A stable identity keeps running taskbar windows grouped as DevShell.
+	id, _ := windows.UTF16PtrFromString("DevShell.Desktop")
 	result, _, _ := windowShell32.NewProc("SetCurrentProcessExplicitAppUserModelID").Call(uintptr(unsafe.Pointer(id)))
 	if int32(result) < 0 {
-		log.Printf("DengShell taskbar identity could not be set: 0x%x", result)
+		log.Printf("DevShell taskbar identity could not be set: 0x%x", result)
 	}
 }
 
 func platformWindowHandle() uintptr {
-	class, _ := windows.UTF16PtrFromString("DengShellWindow")
+	class, _ := windows.UTF16PtrFromString("DevShellWindow")
 	var handle uintptr
 	// Inspect every matching top-level window, rather than assuming the first
 	// class match belongs to this process (for example during a parallel launch).
@@ -52,7 +52,7 @@ func platformWindowHandle() uintptr {
 func installPlatformWindowIcon() {
 	handle := platformWindowHandle()
 	if handle == 0 {
-		log.Print("DengShell window icon: window not found")
+		log.Print("DevShell window icon: window not found")
 		return
 	}
 	module, _, _ := windowKernel32.NewProc("GetModuleHandleW").Call(0)
@@ -76,7 +76,7 @@ func installPlatformWindowIcon() {
 		}
 		image, _, err := windowUser32.NewProc("LoadImageW").Call(module, 2, 1, size, size, 0x8000)
 		if image == 0 {
-			log.Printf("DengShell window icon could not be loaded: %v", err)
+			log.Printf("DevShell window icon could not be loaded: %v", err)
 			continue
 		}
 		windowUser32.NewProc("SendMessageW").Call(handle, 0x80, icon.kind, image)

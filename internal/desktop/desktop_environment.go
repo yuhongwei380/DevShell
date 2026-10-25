@@ -115,6 +115,8 @@ type initialWindowBounds struct {
 	WorkWidth, WorkHeight                    int
 }
 
+const defaultMinWindowWidth = 1100
+
 func initialWindowForMonitor(m monitorBounds) initialWindowBounds {
 	if m.Width <= 0 || m.Height <= 0 {
 		m = monitorBounds{Width: 1920, Height: 1080, WorkWidth: 1920, WorkHeight: 1080}
@@ -122,13 +124,11 @@ func initialWindowForMonitor(m monitorBounds) initialWindowBounds {
 	if m.WorkWidth <= 0 || m.WorkHeight <= 0 {
 		m.WorkX, m.WorkY, m.WorkWidth, m.WorkHeight = m.X, m.Y, m.Width, m.Height
 	}
-	w := min((m.Width*3+2)/4, m.WorkWidth)
+	w := min(max(defaultMinWindowWidth, (m.Width*3+2)/4), m.WorkWidth)
 	h := min((m.Height*3+2)/4, m.WorkHeight)
 	return initialWindowBounds{
 		X: m.WorkX + (m.WorkWidth-w)/2, Y: m.WorkY + (m.WorkHeight-h)/2,
-		// The 940px floor keeps the terminal header intact (encoding, clear,
-		// SFTP and popout buttons never collide) even with the sidebar shown.
-		Width: w, Height: h, MinWidth: min(940, w), MinHeight: min(360, h),
+		Width: w, Height: h, MinWidth: min(defaultMinWindowWidth, w), MinHeight: min(360, h),
 		WorkWidth: m.WorkWidth, WorkHeight: m.WorkHeight,
 	}
 }

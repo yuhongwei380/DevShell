@@ -87,6 +87,7 @@ function applyWorkspacePlacement() {
   } else splitter.removeAttribute('aria-hidden');
   if ($('#monitor-visible')) $('#monitor-visible').value = root.dataset.monitorVisible;
   if ($('#files-position')) $('#files-position').value = root.dataset.filesPosition;
+  syncRightPanelWindow();
   for (const dialog of movableColorDialogs) clampColorDialog(dialog);
 }
 function promptIdentity() {

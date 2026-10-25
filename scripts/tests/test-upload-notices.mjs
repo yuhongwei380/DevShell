@@ -35,7 +35,7 @@ try{
  await release();await settle();assert.equal(await pane(),'files');await assertCount(2);
  assert.equal(fs.readFileSync(path.join(remote,'one.txt'),'utf8'),'real SFTP payload');
  for(let i=0;i<3;i++)await page.evaluate(()=>pollTransfers());await assertCount(2);
- for(const theme of ['dark','light']){await page.evaluate(t=>CloudShellTheme.set(t),theme);await page.waitForFunction(t=>document.documentElement.dataset.theme===t&&!document.documentElement.dataset.lightSwitch,{},theme);const c=await page.$eval('#transfer-count',e=>({background:getComputedStyle(e).backgroundColor,color:getComputedStyle(e).color}));assert.equal(c.background,'rgb(201, 76, 87)');assert.equal(c.color,'rgb(255, 255, 255)');if(process.env.DENGSHELL_UI_ARTIFACTS)await (await page.$('.file-tabs')).screenshot({path:process.env.DENGSHELL_UI_ARTIFACTS+`/upload-badge-${theme}.png`});}
+ for(const theme of ['dark','light']){await page.evaluate(t=>DevShellTheme.set(t),theme);await page.waitForFunction(t=>document.documentElement.dataset.theme===t&&!document.documentElement.dataset.lightSwitch,{},theme);const c=await page.$eval('#transfer-count',e=>({background:getComputedStyle(e).backgroundColor,color:getComputedStyle(e).color}));assert.equal(c.background,'rgb(201, 76, 87)');assert.equal(c.color,'rgb(255, 255, 255)');if(process.env.DENGSHELL_UI_ARTIFACTS)await (await page.$('.file-tabs')).screenshot({path:process.env.DENGSHELL_UI_ARTIFACTS+`/upload-badge-${theme}.png`});}
  await read();await assertCount(0);await go('files');await page.evaluate(()=>pollTransfers());await assertCount(0);
  // Native file/folder uploads also leave the current pane alone, and completion
  // from several batches accumulates until the user opens the transfer list.
@@ -82,7 +82,7 @@ try{
  hold=true;await upload(['cancel.txt']);await page.evaluate(()=>cancelTask([...localTasks.values()].find(t=>t.name==='cancel.txt')));await release();await settle();await assertCount(0);
  // Hidden transfer panels and hidden native windows must not mark results read.
  await read();await page.evaluate(()=>setWorkspaceVisible(false,false));await upload(['hidden-panel.txt']);await settle();await assertCount(1);assert(await page.$eval('#files-panel',e=>e.hidden));await page.click('#toggle-sftp');await assertCount(1);await read();await assertCount(0);
- await page.evaluate(()=>{window.DengShellWindowHidden=true});await upload(['hidden-window.txt']);await settle();await assertCount(1);await page.evaluate(()=>{window.DengShellWindowHidden=false;updateTransferNotice()});await assertCount(0);
+ await page.evaluate(()=>{window.DevShellWindowHidden=true});await upload(['hidden-window.txt']);await settle();await assertCount(1);await page.evaluate(()=>{window.DevShellWindowHidden=false;updateTransferNotice()});await assertCount(0);
  await page.click('#clear-completed-transfers');await page.waitForFunction(()=>![...localTasks.values()].some(t=>t.status==='done'));await assertCount(0);
  // Exercise initial-history and fast native-upload races with controlled API
  // snapshots, keeping the real upload tests above free of status mocks.

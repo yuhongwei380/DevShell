@@ -38,7 +38,7 @@ try {
   await page.evaluate(()=>{document.querySelectorAll('dialog[open]').forEach(d=>d.close());setDrawer(false);});
   for(const theme of ['dark','light']){
    const check=await page.evaluate(({stats,theme})=>{
-    CloudShellTheme.set(theme);
+    DevShellTheme.set(theme);
     stats.sampleReady=true;stats.diskRead=326.3*1024;stats.diskWrite=9.2*1024**2;
     const text=id=>document.querySelector('#disk-'+id).textContent;
     const filesystems=document.querySelector('#disk-filesystems');

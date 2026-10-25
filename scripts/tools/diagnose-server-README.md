@@ -1,26 +1,26 @@
-# DengShell 功能异常排查脚本
+# DevShell 功能异常排查脚本
 
 用于排查：系统信息/CPU/内存/磁盘为空、活跃进程读取失败，以及 BBR/清理垃圾提示“服务器检查结果不完整，请重试”。
 
-**脚本应在出现问题的 Linux VPS 上运行，不是在 Windows 电脑上双击。使用与 DengShell 连接相同的账号，不要为了排查临时改成 sudo/root。**
+**脚本应在出现问题的 Linux VPS 上运行，不是在 Windows 电脑上双击。使用与 DevShell 连接相同的账号，不要为了排查临时改成 sudo/root。**
 
 ## 最简单的操作
 
-1. 把 `DengShell-diagnose.sh` 发给朋友，让他用 SFTP 上传到出现问题的 VPS 的 `/tmp/`。
+1. 把 `DevShell-diagnose.sh` 发给朋友，让他用 SFTP 上传到出现问题的 VPS 的 `/tmp/`。
 2. 先结束正在运行的 ping、YABS 等前台命令，回到空闲提示符。在该 VPS 终端运行：
 
 ```sh
-sh /tmp/DengShell-diagnose.sh /tmp
+sh /tmp/DevShell-diagnose.sh /tmp
 ```
 
 3. 等待完成。正常通常几秒；遇到多个卡住的检查，可能需要约 2 分钟。脚本会显示类似：
 
 ```text
-/tmp/DengShell-diagnose.ABC123/report.txt
-/tmp/DengShell-diagnose.ABC123/summary.txt
+/tmp/DevShell-diagnose.ABC123/report.txt
+/tmp/DevShell-diagnose.ABC123/summary.txt
 ```
 
-4. 通过 SFTP 下载并发回这两个文件，再补充 DengShell 的 **r 版本**。不要发回整个个人 `data` 目录、密码或私钥。
+4. 通过 SFTP 下载并发回这两个文件，再补充 DevShell 的 **r 版本**。不要发回整个个人 `data` 目录、密码或私钥。
 
 不知道 r 版本时，可在 Windows 的 EXE 所在目录打开 PowerShell，执行以下命令，把 SHA-256 一并发回，方便核对实际程序版本：
 
@@ -64,17 +64,17 @@ Linux
 __DS_EXEC_END__
 ```
 
-正常的 SSH 身份验证照常完成；不要关闭主机指纹校验，也不用导出 DengShell 的配置或密钥。如果只出现菜单/欢迎界面、没有结束标记、报 `administratively prohibited` 等错误，请把该输出发回。超过约 15 秒还不退出，可按 Ctrl+C 并说明卡住。
+正常的 SSH 身份验证照常完成；不要关闭主机指纹校验，也不用导出 DevShell 的配置或密钥。如果只出现菜单/欢迎界面、没有结束标记、报 `administratively prohibited` 等错误，请把该输出发回。超过约 15 秒还不退出，可按 Ctrl+C 并说明卡住。
 
 还可以让独立 SSH exec 直接启动已上传的诊断脚本，对比它与终端内运行是否相同：
 
 ```powershell
-ssh -T -o ConnectTimeout=8 -p 22 用户名@VPS地址 'sh /tmp/DengShell-diagnose.sh /tmp'
+ssh -T -o ConnectTimeout=8 -p 22 用户名@VPS地址 'sh /tmp/DevShell-diagnose.sh /tmp'
 ```
 
 该命令通常几秒完成，遇到卡住的探测可能约 2 分钟；诊断报告仍保存在 VPS。默认 Shell 与 sh 的详细采样对比已包含在脚本中。
 
-这个独立 SSH 连接并不与 DengShell 共用同一传输连接，不能单独证明 `MaxSessions` 是否足够；朋友若使用跳板机、代理或密钥认证，也需要按其正常 OpenSSH 用法配置同一路径。只有 DengShell 能登录而系统 OpenSSH 无法认证时，先发回 VPS 脚本报告即可。
+这个独立 SSH 连接并不与 DevShell 共用同一传输连接，不能单独证明 `MaxSessions` 是否足够；朋友若使用跳板机、代理或密钥认证，也需要按其正常 OpenSSH 用法配置同一路径。只有 DevShell 能登录而系统 OpenSSH 无法认证时，先发回 VPS 脚本报告即可。
 
 ## 只读范围和隐私
 

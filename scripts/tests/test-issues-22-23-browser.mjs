@@ -23,7 +23,7 @@ try{
  await page.keyboard.press('Enter');await page.waitForFunction(path=>current().cwd===path&&document.querySelector('#directory-favorites').hidden,{},a.directory);
  checks.push('Real isolated SFTP: add/search/jump, separate saved-server lists, duplicate prevention');
  for(const theme of ['light','dark']){
-  await page.evaluate(t=>CloudShellTheme.set(t),theme);await page.click('#directory-favorites-button');await page.waitForFunction(()=>document.querySelectorAll('.directory-favorite-row').length===2);
+  await page.evaluate(t=>DevShellTheme.set(t),theme);await page.click('#directory-favorites-button');await page.waitForFunction(()=>document.querySelectorAll('.directory-favorite-row').length===2);
   await page.screenshot({path:stage+`/favorites-${theme}.png`});await page.keyboard.press('Escape');
  }
  // Keep a former server's request pending while the active SSH tab changes.

@@ -24,7 +24,7 @@ def build(stage, output):
     output.parent.mkdir(parents=True, exist_ok=True)
     cache = Path.home() / '.cache/cloudshell-build'
     cache.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix='dengshell-nsis-', dir=cache) as temp:
+    with tempfile.TemporaryDirectory(prefix='devshell-nsis-', dir=cache) as temp:
         temp = Path(temp)
         # Ship the control helper inside the installer, not in the application
         # directory. It can safely replace a running/older DevShell executable.
@@ -57,7 +57,7 @@ def build(stage, output):
                 prefix = []
         subprocess.run(prefix + [tool, '-V2', '-INPUTCHARSET', 'UTF8',
                         '-DSTAGE='+str(stage), '-DFILESPEC='+str(stage / '*'), '-DOUTPUT='+str(output),
-                        '-DICON='+str(ROOT/'build/dengshell.ico'),
+                        '-DICON='+str(ROOT/'build/devshell.ico'),
                         '-DLICENSE_FILE='+str(ROOT/'LICENSE'),
                         '-DUNINSTALL_FILES='+str(temp/'uninstall-files.nsh'),
                         '-DINSTALLER_CONTROL='+str(installer_control),

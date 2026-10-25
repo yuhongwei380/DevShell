@@ -42,5 +42,5 @@ assert.match(progress.querySelector('p').textContent,/安装未开始/);
 assert.equal(f.unsubscribed,1);
 const retry=install.onclick();await tick();assert.equal(f.installs,2);assert.equal(bar.hidden,false);
 f.fail();await retry;assert.equal(f.unsubscribed,2);
-later.onclick();await f.window.DengShellStartupReady;
+later.onclick();await f.window.DevShellStartupReady;
 console.log('Startup update: build labels, preparation progress, failure recovery, retry and event cleanup passed.');

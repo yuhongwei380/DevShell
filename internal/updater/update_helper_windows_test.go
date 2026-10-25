@@ -3,7 +3,7 @@
 package updater
 
 import (
-	"cloudshell/internal/app"
+	"devshell/internal/app"
 	"encoding/json"
 	"os"
 	"path/filepath"

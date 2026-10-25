@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only check of DengShell development, desktop and packaging tools."""
+"""Read-only check of DevShell development, desktop and packaging tools."""
 
 import argparse
 import importlib.util

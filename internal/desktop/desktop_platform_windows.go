@@ -24,6 +24,7 @@ type desktopMonitorInfo struct {
 // window coordinates are physical pixels; Wails sizes are 96-DPI logical units.
 var initialPhysicalWindow initialWindowBounds
 var initialLogicalWindow initialWindowBounds
+var initialWindowDPIX, initialWindowDPIY uint32 = 96, 96
 
 func initialPlatformWindow() (initialWindowBounds, error) {
 	var point struct{ X, Y int32 }
@@ -51,6 +52,7 @@ func initialPlatformWindow() (initialWindowBounds, error) {
 		}
 	}
 	logical := func(value int, dpi uint32) int { return (value*96 + int(dpi)/2) / int(dpi) }
+	initialWindowDPIX, initialWindowDPIY = dpiX, dpiY
 	initialLogicalWindow = initialWindowForMonitor(monitorBounds{
 		X: logical(physical.X, dpiX), Y: logical(physical.Y, dpiY), Width: logical(physical.Width, dpiX), Height: logical(physical.Height, dpiY),
 		WorkX: logical(physical.WorkX, dpiX), WorkY: logical(physical.WorkY, dpiY), WorkWidth: logical(physical.WorkWidth, dpiX), WorkHeight: logical(physical.WorkHeight, dpiY),
@@ -61,8 +63,8 @@ func initialPlatformWindow() (initialWindowBounds, error) {
 func finalizeInitialPlatformWindow(ctx context.Context, logical initialWindowBounds) {
 	if handle := platformWindowHandle(); handle != 0 {
 		b := initialPhysicalWindow
-		width := (logical.Width*b.Width + initialLogicalWindow.Width/2) / initialLogicalWindow.Width
-		height := (logical.Height*b.Height + initialLogicalWindow.Height/2) / initialLogicalWindow.Height
+		width := (logical.Width*int(initialWindowDPIX) + 48) / 96
+		height := (logical.Height*int(initialWindowDPIY) + 48) / 96
 		b.X += (b.Width - width) / 2
 		b.Y += (b.Height - height) / 2
 		b.Width, b.Height = width, height
@@ -72,7 +74,7 @@ func finalizeInitialPlatformWindow(ctx context.Context, logical initialWindowBou
 		for range 2 {
 			ok, _, err := windowUser32.NewProc("SetWindowPos").Call(handle, 0, uintptr(b.X), uintptr(b.Y), uintptr(b.Width), uintptr(b.Height), 0x0014)
 			if ok == 0 {
-				log.Printf("DengShell initial window placement: %v", err)
+				log.Printf("DevShell initial window placement: %v", err)
 				break
 			}
 		}

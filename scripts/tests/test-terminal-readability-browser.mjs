@@ -48,7 +48,7 @@ try {
  });
  const foregrounds=[[0,0,0],[0,0,0],[0,0,255],[16,16,16],[255,0,0],[0,255,0],[0,0,255],[0,0,255],[143,181,209],[0,0,0],[0,0,0],[255,255,255],[0,0,255],[0,0,255],[42,90,130]];
  for(const theme of ['dark','light']){
-  await page.evaluate(theme=>CloudShellTheme.set(theme),theme);
+  await page.evaluate(theme=>DevShellTheme.set(theme),theme);
   for(const backgroundId of ['builtin:none','builtin:paperfolds'])for(const opacity of backgroundId==='builtin:none'?[0]:[0,.42,1]){
    await page.evaluate(async settings=>{await chooseAppearance(settings);await qaRender()},{backgroundId,backgroundOpacity:opacity});
    const rendered=await page.evaluate(()=>{
@@ -74,7 +74,7 @@ try {
  if(streamsPath){
   const streams=JSON.parse(fs.readFileSync(streamsPath));
   for(const theme of ['dark','light']){
-   await page.evaluate(async theme=>{CloudShellTheme.set(theme);await chooseAppearance({backgroundId:'builtin:paperfolds',backgroundOpacity:.42,terminalFontSize:16});},theme);
+   await page.evaluate(async theme=>{DevShellTheme.set(theme);await chooseAppearance({backgroundId:'builtin:paperfolds',backgroundOpacity:.42,terminalFontSize:16});},theme);
    for(const stream of streams){
     await page.evaluate(async stream=>{const t=current().term;t.reset();t.resize(stream.cols,36);await qaWrite('\x1b[?25l'+stream.text.replaceAll('\n','\r\n'));},stream);
     const model=await page.evaluate(cells=>cells.map(c=>qaCell(c.x,c.y)),stream.cells);

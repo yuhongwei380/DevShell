@@ -111,7 +111,7 @@ def build(args):
         for size in [16, 32, 128, 256, 512]:
             for scale in [1, 2]:
                 suffix = "@2x" if scale == 2 else ""
-                run("sips", "-z", size * scale, size * scale, ROOT / "build/dengshell.png",
+                run("sips", "-z", size * scale, size * scale, ROOT / "build/devshell.png",
                     "--out", iconset / f"icon_{size}x{size}{suffix}.png", stdout=subprocess.DEVNULL)
         run("iconutil", "-c", "icns", iconset, "-o", resources / "DevShell.icns")
         info = {

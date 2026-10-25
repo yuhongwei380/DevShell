@@ -23,7 +23,7 @@ VIAddVersionKey /LANG=2052 "LegalCopyright" "DevShell contributors · MIT"
 !define MUI_UNICON "${ICON}"
 !define MUI_ABORTWARNING
 !define MUI_WELCOMEPAGE_TITLE "安装 DevShell"
-!define MUI_WELCOMEPAGE_TEXT "将 DevShell 安装到当前用户目录，并创建开始菜单和桌面快捷方式。$\r$\n$\r$\n若 DevShell 正在运行，安装器会提示关闭并自动继续。请先保存编辑并完成传输。原有 data 配置、密钥、字体和背景会保留；此前 DengShell 的安装位置与数据会自动沿用。$\r$\n$\r$\n应用首次启动会检查 WebView2，缺少时提供安装指引。"
+!define MUI_WELCOMEPAGE_TEXT "将 DevShell 安装到当前用户目录，并创建开始菜单和桌面快捷方式。$\r$\n$\r$\n若 DevShell 正在运行，安装器会提示关闭并自动继续。请先保存编辑并完成传输。原有 data 配置、密钥、字体和背景会保留；旧版安装位置与数据会自动沿用。$\r$\n$\r$\n应用首次启动会检查 WebView2，缺少时提供安装指引。"
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "${LICENSE_FILE}"
 !insertmacro MUI_PAGE_DIRECTORY

@@ -45,7 +45,7 @@ try {
   await page.click('#about-button');
   await page.waitForSelector('#about-dialog[open]');
   assert.equal(await page.$eval('#settings-menu', el => el.hidden), true);
-  assert.deepEqual(await page.evaluate(() => [$('#about-version').textContent, $('#about-build').textContent]), await page.evaluate(() => [CLOUDSHELL.displayVersion || CLOUDSHELL.version, String(CLOUDSHELL.build)]));
+  assert.deepEqual(await page.evaluate(() => [$('#about-version').textContent, $('#about-build').textContent]), await page.evaluate(() => [DEVSHELL.displayVersion || DEVSHELL.version, String(DEVSHELL.build)]));
   if (process.env.DENGSHELL_ABOUT_SCREENSHOT) await page.screenshot({ path: process.env.DENGSHELL_ABOUT_SCREENSHOT });
   await page.click('#close-about');
   assert.equal(await page.$eval('#about-dialog', el => el.open), false);
@@ -75,8 +75,8 @@ try {
     await page.click('#release-notes-button');
     await page.waitForSelector('#release-notes-dialog[open]');
     assert.equal(await page.$eval('#settings-menu', el => el.hidden), true);
-    assert.equal(await page.$eval('#release-notes-content h1', el => el.textContent), await page.evaluate(() => CLOUDSHELL.releaseNotes.split(/\r?\n/)[0].replace(/^#\s*/, '')));
-    assert.equal(await page.$eval('#release-notes-version', el => el.textContent), await page.evaluate(() => `当前版本 ${CLOUDSHELL.displayVersion || CLOUDSHELL.version} · 构建 ${CLOUDSHELL.build}`));
+    assert.equal(await page.$eval('#release-notes-content h1', el => el.textContent), await page.evaluate(() => DEVSHELL.releaseNotes.split(/\r?\n/)[0].replace(/^#\s*/, '')));
+    assert.equal(await page.$eval('#release-notes-version', el => el.textContent), await page.evaluate(() => `当前版本 ${DEVSHELL.displayVersion || DEVSHELL.version} · 构建 ${DEVSHELL.build}`));
     if (process.env.DENGSHELL_NOTES_SCREENSHOT) await page.screenshot({ path: process.env.DENGSHELL_NOTES_SCREENSHOT });
     await page.keyboard.press('Escape');
     await page.waitForFunction(() => document.activeElement.id === 'settings-button');
@@ -85,7 +85,7 @@ try {
     assert.equal(await page.$eval('#release-notes-dialog', el => el.open), false);
   } finally { await page.setOfflineMode(false); }
   checks.push('Settings shows bundled current-version release notes offline and removes About software; GitHub opens the project through browser and native handlers');
-  const originalTheme = await page.evaluate(() => CloudShellTheme.preference);
+  const originalTheme = await page.evaluate(() => DevShellTheme.preference);
   const categoryParsing = await page.evaluate(() => {
     const container = document.createElement('div');
     container.innerHTML = '<p>新增：项目</p><p>修复: 项目</p><p>  1. 调整：项目</p><pre>新增：代码块</pre><p><code>修复：行内代码</code></p><p>正文中的调整：保持不变</p>';
@@ -126,11 +126,11 @@ try {
   }
   const releaseKinds = await page.evaluate(() => {
     const kinds = { 新增: 'added', 修复: 'fixed', 调整: 'changed' };
-    return [...new Set([...CLOUDSHELL.releaseNotes.matchAll(/(?:^|\n)\s*(?:[-*+]\s+)?(新增|修复|调整)[：:]/g)].map(match => kinds[match[1]]))].sort();
+    return [...new Set([...DEVSHELL.releaseNotes.matchAll(/(?:^|\n)\s*(?:[-*+]\s+)?(新增|修复|调整)[：:]/g)].map(match => kinds[match[1]]))].sort();
   });
   const categoryFixture = '新增：第一项\n修复: 第二项\n- 调整：第三项';
   for (const theme of ['light', 'dark']) {
-    await page.evaluate(value => CloudShellTheme.set(value), theme);
+    await page.evaluate(value => DevShellTheme.set(value), theme);
     await page.waitForFunction(() => !document.documentElement.dataset.lightSwitch);
     await page.click('#settings-button'); await page.click('#release-notes-button');
     await assertCategoryColors('#release-notes-content', releaseKinds);
@@ -140,7 +140,7 @@ try {
     }, categoryFixture);
     await assertCategoryAlignment('#release-notes-content');
     await page.click('#close-release-notes');
-    await page.evaluate(notes => { window.qaUpdateDialog = DengUpdates.showUpdate({ currentVersion: CLOUDSHELL.version, currentBuild: CLOUDSHELL.build, latestVersion: CLOUDSHELL.version, latestBuild: CLOUDSHELL.build + 1, platform: 'windows-amd64', installerReady: false, notes }); }, categoryFixture);
+    await page.evaluate(notes => { window.qaUpdateDialog = DengUpdates.showUpdate({ currentVersion: DEVSHELL.version, currentBuild: DEVSHELL.build, latestVersion: DEVSHELL.version, latestBuild: DEVSHELL.build + 1, platform: 'windows-amd64', installerReady: false, notes }); }, categoryFixture);
     await page.waitForSelector('#startup-update-dialog[open]');
     await assertCategoryColors('#startup-update-notes');
     await assertCategoryAlignment('#startup-update-notes');
@@ -149,7 +149,7 @@ try {
     await page.click('#startup-update-later');
     await page.evaluate(() => qaUpdateDialog);
   }
-  await page.evaluate(value => CloudShellTheme.set(value), originalTheme);
+  await page.evaluate(value => DevShellTheme.set(value), originalTheme);
   await page.waitForFunction(() => !document.documentElement.dataset.lightSwitch);
   checks.push('Added/fixed/changed use distinct bold colors with 4.5:1 contrast; mixed list markers and colon widths keep labels and body starts aligned in both themes');
   assert.equal(await page.$eval('#add-session', el => el.title), '新选项卡');
@@ -281,7 +281,7 @@ try {
   assert.equal(await page.$$eval('.session-tab.active', els => els.length), 1);
   checks.push('Closing a start page activates a neighbor without disconnecting another session');
   if (process.env.DENGSHELL_TABS_SCREENSHOT) {
-    await page.evaluate(() => { CloudShellTheme.set('dark'); DengStartTabs.create(); });
+    await page.evaluate(() => { DevShellTheme.set('dark'); DengStartTabs.create(); });
     await page.waitForFunction(() => !document.documentElement.dataset.lightSwitch); await settle();
     await page.click('#session-tabs-list');
     await page.screenshot({ path: process.env.DENGSHELL_TABS_SCREENSHOT });

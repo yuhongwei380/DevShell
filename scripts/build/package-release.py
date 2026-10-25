@@ -39,7 +39,7 @@ def zip_tree(folder, target, prefix=Path()):
 
 def distribution(folder, binary, windows, source_ref=VERSION):
     folder.mkdir(parents=True, exist_ok=False)
-    copy(binary, folder/('DevShell.exe' if windows else 'dengshell'))
+    copy(binary, folder/('DevShell.exe' if windows else 'devshell'))
     for sub, pattern, dest in [('web/assets/fonts/licenses','*.txt','fonts'), ('web/vendor','*LICENSE',''), ('build/go-licenses','*','go'), ('build/installer-licenses','*','installer')]:
         for p in (ROOT/sub).glob(pattern):
             if p.is_file(): copy(p, folder/'data/licenses'/dest/p.name)
@@ -100,7 +100,7 @@ def package(args):
         if not (ROOT/folder).is_dir(): continue
         sourcefiles += [p for p in (ROOT/folder).rglob('*') if p.is_file() and not any(part in ('__pycache__', '.cache', 'node_modules') for part in p.relative_to(ROOT/folder).parts)]
     sourcefiles += [p for p in (ROOT/'docs').rglob('*') if p.is_file()]
-    for name in ['dengshell.png','dengshell.svg','dengshell.ico','config.example.json','BACKGROUND-PROMPTS-v0.01.json','windows/app.manifest','windows/README.txt']:
+    for name in ['devshell.png','devshell.svg','devshell.ico','config.example.json','BACKGROUND-PROMPTS-v0.01.json','windows/app.manifest','windows/README.txt']:
         sourcefiles.append(ROOT/'build'/name)
     for folder in ['go-licenses','font-licenses','font-library-site','installer-licenses']:
         sourcefiles += [p for p in (ROOT/'build'/folder).glob('*') if p.is_file()]

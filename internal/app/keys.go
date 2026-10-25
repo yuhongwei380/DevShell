@@ -130,9 +130,9 @@ func (s *Store) SaveKey(input KeyInput) (ManagedKey, error) {
 		}
 		var block *pem.Block
 		if input.Passphrase == "" {
-			block, err = ssh.MarshalPrivateKey(private, "CloudShell")
+			block, err = ssh.MarshalPrivateKey(private, "DevShell")
 		} else {
-			block, err = ssh.MarshalPrivateKeyWithPassphrase(private, "CloudShell", []byte(input.Passphrase))
+			block, err = ssh.MarshalPrivateKeyWithPassphrase(private, "DevShell", []byte(input.Passphrase))
 			encrypted = true
 		}
 		if err != nil {

@@ -1,4 +1,4 @@
-module cloudshell
+module devshell
 
 go 1.26.10
 

@@ -1,5 +1,9 @@
 /* Session tools (断开 / 重新连接 / 清屏) and window actions share the terminal glass header. */
 .terminal-meta .terminal-encoding{margin-left:auto;white-space:nowrap}
+.terminal-panel .terminal-meta{height:auto;flex-shrink:0;flex-wrap:wrap;gap:8px;padding-block:5px}
+.terminal-meta .terminal-encoding{flex-shrink:0}
+.shell-transfer-status{flex:none;align-self:stretch;text-align:left;padding:6px 17px;color:inherit;background:#7198b126;border:0;border-bottom:1px solid #7198b140;font-size:11px;cursor:pointer}
+.shell-transfer-status:hover{background:#7198b140}
 .terminal-popout{flex:none;display:flex;align-items:center;gap:6px;height:28px;padding:4px 11px;border:1px solid #95bed540;border-radius:9px;color:#d5e7f1;background:#95bed530;font-size:11px;white-space:nowrap;--wails-draggable:no-drag;transition:background .18s,color .18s,border-color .18s}
 .terminal-popout svg{width:14px;height:14px}
 .terminal-popout[hidden]{display:none!important}

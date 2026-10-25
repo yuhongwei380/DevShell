@@ -97,7 +97,7 @@ try {
  assert.equal(await page.$('.session-tab-insertion'),null);
  // Visual feedback in both palettes.
  for(const theme of ['dark','light']){
-  await page.evaluate(theme=>{CloudShellTheme.set(theme);qaSetTabs(12);$('#session-tabs').scrollTop=0},theme);await new Promise(r=>setTimeout(r,950));
+  await page.evaluate(theme=>{DevShellTheme.set(theme);qaSetTabs(12);$('#session-tabs').scrollTop=0},theme);await new Promise(r=>setTimeout(r,950));
   const visible=await order();await begin(visible[0]);await moveTo(visible[5],true);await page.screenshot({path:stage+`/tab-drag-${theme}.png`});await page.keyboard.press('Escape');await drop();
  }
  assert.deepEqual(errors,[]);fs.writeFileSync(stage+'/tab-drag-results.json',JSON.stringify({passed:true,results,errors},null,2));

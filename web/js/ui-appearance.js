@@ -5,7 +5,7 @@ window.DengUIAppearance = (() => {
   const roles = ['--text', '--text-secondary', '--muted', '--text-faint'];
   const validColor = value => typeof value === 'string' && /^#[\da-f]{6}$/i.test(value);
   let catalog, catalogPromise, dialog, licenseDialog, operation = 0, selection = 0, activeID = defaultID;
-  let runtime = window.CLOUDSHELL?.uiFontRuntime || { availableIds: [], activeId: defaultID };
+  let runtime = window.DEVSHELL?.uiFontRuntime || { availableIds: [], activeId: defaultID };
   const faces = new Map();
   const available = id => id === defaultID || catalog?.fonts.some(font => font.id === id) || runtime.availableIds.includes(id);
   const fonts = () => [...(catalog?.fonts || []), ...managedAssets.filter(a => a.kind === 'ui-font').map(a => ({ ...a, family: `Deng UI custom ${a.id}` }))];

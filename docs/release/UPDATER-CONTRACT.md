@@ -1,4 +1,4 @@
-# DengShell 更新器约定
+# DevShell 更新器约定
 
 当前协议统一维护于 [在线更新协议](ONLINE-UPDATE-DESIGN.md)，签名细节见 [发行签名](SIGNED-UPDATES.md)，避免两份协议出现不一致。
 

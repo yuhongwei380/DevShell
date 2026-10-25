@@ -3,7 +3,7 @@
 package main
 
 import (
-	"cloudshell/internal/updatetrust"
+	"devshell/internal/updatetrust"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"

@@ -73,7 +73,7 @@ try {
  // Appearance and modal bounds in both themes. Delete key uses the same batch.
  await choose(['a.txt','b.txt']);await page.keyboard.press('Delete');await dialog();
  for(const theme of ['dark','light']){
-  await page.evaluate(t=>CloudShellTheme.set(t),theme);await page.waitForFunction(t=>document.documentElement.dataset.theme===t&&!document.documentElement.dataset.lightSwitch,{},theme);
+  await page.evaluate(t=>DevShellTheme.set(t),theme);await page.waitForFunction(t=>document.documentElement.dataset.theme===t&&!document.documentElement.dataset.lightSwitch,{},theme);
   if(process.env.DENGSHELL_UI_ARTIFACTS)await page.screenshot({path:process.env.DENGSHELL_UI_ARTIFACTS+`/file-multiselect-${theme}.png`});
   const colors=await page.$eval(row('a.txt'),r=>({selected:getComputedStyle(r).backgroundColor,plain:getComputedStyle(document.querySelector('tr[data-file-name="keep.txt"]')).backgroundColor}));assert.notEqual(colors.selected,colors.plain);
  }

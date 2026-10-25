@@ -28,7 +28,7 @@ func Prepare() (string, error) {
 		return "", err
 	}
 	digest := sha256.Sum256(payload)
-	dir := filepath.Join(cache, "DengShell", "rdp", "3.32.0-"+hex.EncodeToString(digest[:8]))
+	dir := filepath.Join(cache, "DevShell", "rdp", "3.32.0-"+hex.EncodeToString(digest[:8]))
 	if err = os.MkdirAll(dir, 0700); err != nil {
 		return "", err
 	}
@@ -50,7 +50,11 @@ func Prepare() (string, error) {
 		if err != nil {
 			return "", err
 		}
-		path := filepath.Join(dir, entry.Name)
+		name := entry.Name
+		if name == "DengShellRDP.exe" {
+			name = "DevShellRDP.exe"
+		} // Preserve the upstream payload; rename the extracted launcher.
+		path := filepath.Join(dir, name)
 		if info, e := os.Lstat(path); e == nil && info.Mode().IsRegular() {
 			if existing, e := os.ReadFile(path); e == nil && sha256.Sum256(existing) == sha256.Sum256(data) {
 				if entry.Name == "DengShellRDP.exe" {
@@ -85,5 +89,5 @@ func Prepare() (string, error) {
 	if !found {
 		return "", errors.New("内置 RDP 引擎缺失")
 	}
-	return filepath.Join(dir, "DengShellRDP.exe"), nil
+	return filepath.Join(dir, "DevShellRDP.exe"), nil
 }

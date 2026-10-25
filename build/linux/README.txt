@@ -1,4 +1,4 @@
-DengShell v26.10.0 · 原生 Linux x64 发行说明
+DevShell v26.10.0 · 原生 Linux x64 发行说明
 
 本发行包使用 Ubuntu 22.04 容器构建（glibc 2.35 基线），原生 GTK3 + WebKitGTK 4.1 桌面窗口，不需要 Go、Node、Chrome 或浏览器服务。
 
@@ -12,23 +12,23 @@ DengShell v26.10.0 · 原生 Linux x64 发行说明
 
 安装
 Debian / Ubuntu：
-  sudo apt install ./DengShell-linux-x64.deb
+  sudo apt install ./DevShell-linux-x64.deb
 Fedora：
-  sudo dnf install ./DengShell-linux-x64.rpm
+  sudo dnf install ./DevShell-linux-x64.rpm
 openSUSE：
-  sudo zypper install ./DengShell-linux-x64.rpm
+  sudo zypper install ./DevShell-linux-x64.rpm
 RPM 尚未签名；安装器会显示本地包签名提示。
 
 通用包：
-  tar -xzf DengShell-linux-x64.tar.gz
-  cd DengShell-linux-x64
+  tar -xzf DevShell-linux-x64.tar.gz
+  cd DevShell-linux-x64
   bash data/support/start.sh
 无需管理员权限安装到当前用户的应用菜单：
   bash data/support/install.sh
 可选系统安装：
   sudo bash data/support/install.sh --system
-默认用户安装位置：${XDG_DATA_HOME:-$HOME/.local/share}/dengshell/application。
-系统安装位置：/opt/dengshell。安装器只更新程序、说明和许可证，不复制便携配置或密钥。
+默认用户安装位置：${XDG_DATA_HOME:-$HOME/.local/share}/devshell/application。
+系统安装位置：/opt/devshell。安装器只更新程序、说明和许可证，不复制便携配置或密钥。
 
 首次启动会检查共享库和 ping，并按发行版提示缺失包；原生前端成功运行后在配置目录记录检查成功，之后直接启动。MTR 在使用网络诊断时再检测和引导。
 Arch / Manjaro 安装依赖：
@@ -41,8 +41,8 @@ Ubuntu24.04/26.04 / Debian13：sudo apt install libgtk-3-0t64 libwebkit2gtk-4.1-
 Linux 托盘依赖 AppIndicator 与桌面托盘扩展；不可用时使用正常最小化，不隐藏到无法恢复的托盘。
 
 配置和升级
-便携包解压后，顶层仅有 dengshell 与 data/；便携配置也存入 data/。
-DEB、RPM和通用安装版的数据位于 ${XDG_CONFIG_HOME:-$HOME/.config}/dengshell；程序目录仅保留发行资源。
+便携包解压后，顶层仅有 devshell 与 data/；便携配置也存入 data/。
+DEB、RPM和通用安装版的数据位于 ${XDG_CONFIG_HOME:-$HOME/.config}/devshell；程序目录仅保留发行资源。
 显式 --config 路径始终优先。应用内“设置 → 连接配置文档”显示实际路径。
 备份整个实际配置目录（含 .enc、.key、assets、keys）；只更新程序不会丢失 SSH、导入字体或背景。加密不能阻止同权限程序读取自动解锁密钥或删除文件，请保留备份。
 从便携版转为安装版时，安装器不自动迁移私人配置；可在退出程序后将原 data/ 中的配置内容备份并复制至实际用户配置目录。
@@ -57,10 +57,10 @@ ICMP经过系统路由/TUN，不是SSH按键计时。进程仅在展开时采集
 可复现构建
 先安装 Docker，在源码根目录执行：
   bash scripts/build-linux-release.sh
-原生程序和构建证据：build/linux/native/dengshell、build-info.json。
-镜像基础摘要和 Go1.27.1 的 SHA256 固定在 build/linux/Dockerfile；完整构建依赖版本和实际镜像ID记录在 build-info.json。apt安全更新会改变新建镜像的依赖版本；需要逐字节复现时应保存并复用记录的完整构建镜像，设置 DENGSHELL_LINUX_BUILDER 为其镜像ID。
+原生程序和构建证据：build/linux/native/devshell、build-info.json。
+镜像基础摘要和 Go1.27.1 的 SHA256 固定在 build/linux/Dockerfile；完整构建依赖版本和实际镜像ID记录在 build-info.json。apt安全更新会改变新建镜像的依赖版本；需要逐字节复现时应保存并复用记录的完整构建镜像，设置 DEVSHELL_LINUX_BUILDER 为其镜像ID。
 脚本强制 GOAMD64=v1、CGO原生编译并拒绝 GLIBC符号需求超过2.35、错误架构、缺少GTK/WebKit链接或含构建机RPATH的程序。
-构建后由 scripts/package-linux.py --stage <仅包含dengshell和data的发行资源目录> --release 40 生成 DEB、RPM、pacman .pkg.tar.zst、tar.gz 与 linux-packages.json。整体发布使用 scripts/package-release.py。
+构建后由 scripts/package-linux.py --stage <仅包含devshell和data的发行资源目录> --release 40 生成 DEB、RPM、pacman .pkg.tar.zst、tar.gz 与 linux-packages.json。整体发布使用 scripts/package-release.py。
 
 官方依赖参考：
 https://v2.wails.io/docs/gettingstarted/installation/
@@ -72,8 +72,8 @@ https://archlinux.org/packages/extra/x86_64/webkit2gtk-4.1/
 项目主页 https://github.com/yuhongwei380/DevShell · 应用代码MIT开源，第三方许可证见 data/licenses（本文件位于data/docs时为../licenses）。详细功能见程序顶部说明书按钮。
 
 Arch Linux / 兼容 pacman 的 x86-64 桌面：
-  sudo pacman -U ./DengShell-linux-x64.pkg.tar.zst
-卸载：sudo pacman -R dengshell（用户配置目录保留）。
+  sudo pacman -U ./DevShell-linux-x64.pkg.tar.zst
+卸载：sudo pacman -R devshell（用户配置目录保留）。
 Arch 依赖 gtk3、webkit2gtk-4.1、bash、iputils、glibc、pacman、libarchive、polkit；托盘可选 libayatana-appindicator。
 Windows、Debian/Ubuntu 和 Arch pacman 支持内置更新，确认后安装并重启。
 R28 起的 Arch 版可直接更新；更早版本先手动安装一次本次 v26.10.0，此后通过软件启动检查更新。

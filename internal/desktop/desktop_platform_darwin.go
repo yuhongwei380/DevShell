@@ -7,12 +7,12 @@ package desktop
 #cgo LDFLAGS: -framework Cocoa -framework UniformTypeIdentifiers
 #import <Cocoa/Cocoa.h>
 
-typedef struct { int width, height, workWidth, workHeight; } DengShellScreen;
-static DengShellScreen dengshell_main_screen(void) {
+typedef struct { int width, height, workWidth, workHeight; } DevShellScreen;
+static DevShellScreen dengshell_main_screen(void) {
 	@autoreleasepool {
 		NSScreen *screen = [NSScreen mainScreen];
 		NSRect frame = [screen frame], work = [screen visibleFrame];
-		return (DengShellScreen){(int)frame.size.width, (int)frame.size.height,
+		return (DevShellScreen){(int)frame.size.width, (int)frame.size.height,
 			(int)work.size.width, (int)work.size.height};
 	}
 }

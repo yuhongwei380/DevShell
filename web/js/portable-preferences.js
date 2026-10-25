@@ -1,7 +1,7 @@
 // Webview storage is a cache, never the owner of portable application settings.
 (() => {
   'use strict';
-  let entries = { ...(window.CLOUDSHELL?.uiPreferences || {}) }, ready = false, timer;
+  let entries = { ...(window.DEVSHELL?.uiPreferences || {}) }, ready = false, timer;
   const dirty = new Map(); let revision = 0;
   const allowed = key => ['cloudshell.layout', 'dengshell.appearance-palette', 'dengshell.server-groups.collapsed', 'dengshell.server-manager', 'dengshell.workspace', 'dengshell.pinned.v1'].includes(key) || /^dengshell\.(history|nic)\.[A-Za-z0-9_-]{1,128}$/.test(key);
   function read(key, fallback) { return Object.hasOwn(entries, key) ? structuredClone(entries[key]) : fallback; }
@@ -37,7 +37,7 @@
   }
   window.DengPortablePreferences = { read, write, accept, flush, cache: (key, value) => { if (allowed(key)) entries[key] = structuredClone(value); }, snapshot: () => ({ ...entries }), get ready() { return ready; } };
   window.addEventListener('cloudshell:theme-preference', () => {
-    if (ready) persistAppearance({ theme: window.CloudShellTheme.preference || 'system' }).catch(error => toast(`明暗设置未能保存：${error.message || error}`));
+    if (ready) persistAppearance({ theme: window.DevShellTheme.preference || 'system' }).catch(error => toast(`明暗设置未能保存：${error.message || error}`));
   });
   let windowTimer;
   window.addEventListener('resize', () => {

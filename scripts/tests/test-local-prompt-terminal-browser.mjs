@@ -52,7 +52,7 @@ try {
  // session token, so any HTTP status line proves the http:// default resolved
  // and connected (the functional 200 path is covered by the Go test).
  const curlOut=await page.evaluate(async()=>{
-  const bare=window.CLOUDSHELL.base.replace(/^http:\/\//,'')+'/boot.js';
+  const bare=window.DEVSHELL.base.replace(/^http:\/\//,'')+'/boot.js';
   const term=new Terminal({cols:80,rows:24,allowProposedApi:false});
   await window.DengLocalPrompt.run('curl '+bare,window.DengLocalPrompt.termSink(term));
   await new Promise(resolve=>term.write('',resolve));

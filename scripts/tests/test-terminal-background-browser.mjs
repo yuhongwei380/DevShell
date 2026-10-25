@@ -39,7 +39,7 @@ try{
  await strength(39);
  const clip=await page.$eval('.terminal-panel',el=>{const r=el.getBoundingClientRect();return{x:r.left+120,y:r.top+230,width:180,height:160};});
  for(const theme of ['dark','light']){
-  await page.evaluate(theme=>CloudShellTheme.set(theme),theme);
+  await page.evaluate(theme=>DevShellTheme.set(theme),theme);
   const rendered=[];
   for(const value of [0,39,100]){
    await strength(value);const state=await inspect();assert.equal(state.opacity,value/100);assert.notEqual(state.display,'none');assert.notEqual(state.image,'none');assert.notEqual(state.shadeDisplay,'none');
@@ -53,7 +53,7 @@ try{
   await page.screenshot({path:stage+'/background-'+theme+'.png'});
   checks.push({theme,values:[0,39,100],pixelsChanged:true,decoded:true});
  }
- await page.evaluate(()=>CloudShellTheme.set('dark'));
+ await page.evaluate(()=>DevShellTheme.set('dark'));
  await page.click('[data-asset-id="builtin:none"] .asset-choice');
  await page.waitForFunction(()=>!document.querySelector('.terminal-panel').classList.contains('has-background'));
  assert.equal((await inspect()).display,'none');
@@ -70,8 +70,8 @@ try{
  await page.reload({waitUntil:'networkidle0'});
  await page.waitForFunction(id=>appearance.backgroundId===id&&activeBackgroundID===id,{},custom.id);
  const saved=await inspect();await page.screenshot({path:stage+'/background-reload.png'});assert.equal(saved.id,custom.id);assert.equal(saved.opacity,.39);assert.notEqual(saved.display,'none');assert.notEqual(saved.image,'none');
- await page.evaluate(()=>CloudShellTheme.set('light'));assert.notEqual((await inspect()).display,'none');
- await page.evaluate(()=>CloudShellTheme.set('dark'));assert.notEqual((await inspect()).display,'none');
+ await page.evaluate(()=>DevShellTheme.set('light'));assert.notEqual((await inspect()).display,'none');
+ await page.evaluate(()=>DevShellTheme.set('dark'));assert.notEqual((await inspect()).display,'none');
  // Deleting an imported image must release its local Blob URL.
  await page.evaluate(()=>openAppearance('background'));
  await page.click('[data-asset-id="'+custom.id+'"] .asset-actions .danger-button');

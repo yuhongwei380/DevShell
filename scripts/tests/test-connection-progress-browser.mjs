@@ -62,7 +62,7 @@ try {
   });
   const text = id => page.evaluate(id => qa.text(id), id);
   for (const theme of ['dark','light']) {
-    await page.evaluate(theme => { CloudShellTheme.set(theme); qa.start(theme + '-slow'); }, theme);
+    await page.evaluate(theme => { DevShellTheme.set(theme); qa.start(theme + '-slow'); }, theme);
     const slow = theme + '-slow', fast = theme + '-fast';
     await page.waitForFunction(id => !!qa.requests[id], {}, slow);
     assert.equal((await text(slow)).trim(), '🔗  连接主机...');

@@ -17,7 +17,7 @@ try {
   document.querySelectorAll('dialog[open]').forEach(d=>d.close());setDrawer(false);
   qa={calls:[],rdp:[],seq:0};window.runtime={EventsOn:()=>()=>{}};
   const real=api;api=(path,options)=>path==='/api/rdp'?Promise.resolve({available:true,sessions:structuredClone(qa.rdp)}):real(path,options);
-  window.go={desktop:{Desktop:{Request:async(method,path,body)=>{const r=await fetch(CLOUDSHELL.base+path,{method,headers:{'Content-Type':'application/json','X-CloudShell-Token':CLOUDSHELL.token},body:method==='GET'?undefined:body});const data=await r.text();if(!r.ok)throw new Error('DENGSHELL_ERROR:'+data);return data},
+  window.go={desktop:{Desktop:{Request:async(method,path,body)=>{const r=await fetch(DEVSHELL.base+path,{method,headers:{'Content-Type':'application/json','X-CloudShell-Token':DEVSHELL.token},body:method==='GET'?undefined:body});const data=await r.text();if(!r.ok)throw new Error('DENGSHELL_ERROR:'+data);return data},
    RDPConnect:async(profileId,secret)=>{const p=connectionProfile(profileId);const item={id:'rdp-qa-'+(++qa.seq),profileId,name:p.name,status:'connecting',message:'🔗  正在连接远程桌面…',createdAt:new Date().toISOString()};qa.lastSecret=secret;qa.rdp.push(item);return structuredClone(item)},
    OpenTerminal:async()=>{},SendTerminal:async()=>{},CloseTerminal:async()=>{},RDPViewport:async(...args)=>{qa.calls.push(args);if(qa.calls.length>1000)qa.calls.shift()},RDPResolution:async(...args)=>{qa.resolution=args},RDPSendSecureAttention:async()=>{}
   }}};
@@ -54,7 +54,7 @@ try {
  await page.evaluate(()=>setSettingsMenu(true));await page.waitForFunction(()=>qa.calls.at(-1)?.at(-1)===false);
  await page.evaluate(()=>setSettingsMenu(false));await page.waitForFunction(()=>qa.calls.at(-1)?.at(-1)===true);
  assert.equal(await page.$eval('#rdp-resolution',e=>e.value),'1024x768');
- for(const theme of ['dark','light']){await page.evaluate(t=>CloudShellTheme.set(t),theme);await page.waitForFunction(t=>document.documentElement.dataset.theme===t,{},theme);await new Promise(r=>setTimeout(r,950));await page.screenshot({path:stage+'/rdp-'+theme+'.png'});}
+ for(const theme of ['dark','light']){await page.evaluate(t=>DevShellTheme.set(t),theme);await page.waitForFunction(t=>document.documentElement.dataset.theme===t,{},theme);await new Promise(r=>setTimeout(r,950));await page.screenshot({path:stage+'/rdp-'+theme+'.png'});}
  await page.setViewport({width:1000,height:700});await page.waitForFunction(()=>qa.calls.at(-1)?.[5]===1000);
  await page.evaluate(()=>{const state=makeSessionState({id:'ssh-qa',profileId:qa.rdp[0].profileId,home:'/'});state.connected=false;state.ready=false;state.tabOrder=0;sessions.set(state.id,state);createTerminal(state);activate(state.id)});
  await page.waitForFunction(()=>qa.calls.at(-1)?.at(-1)===false);

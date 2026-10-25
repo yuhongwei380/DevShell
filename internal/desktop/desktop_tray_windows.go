@@ -3,7 +3,7 @@
 package desktop
 
 import (
-	"cloudshell/internal/installguard"
+	"devshell/internal/installguard"
 	"golang.org/x/sys/windows"
 	"os"
 	"runtime"
@@ -120,14 +120,14 @@ func platformInitializeTray(_ string) {
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()
 		instance, _, _ := windowKernel32.NewProc("GetModuleHandleW").Call(0)
-		class := trayString("DengShellTrayWindow")
+		class := trayString("DevShellTrayWindow")
 		wc := trayWindowClass{Proc: trayCallback, Instance: instance, Name: class}
 		wc.Size = uint32(unsafe.Sizeof(wc))
 		registered, _, _ := windowUser32.NewProc("RegisterClassExW").Call(uintptr(unsafe.Pointer(&wc)))
 		if registered == 0 {
 			return
 		}
-		hwnd, _, _ := windowUser32.NewProc("CreateWindowExW").Call(0, uintptr(unsafe.Pointer(class)), uintptr(unsafe.Pointer(trayString("DengShell tray"))), 0, 0, 0, 0, 0, 0, 0, instance, 0)
+		hwnd, _, _ := windowUser32.NewProc("CreateWindowExW").Call(0, uintptr(unsafe.Pointer(class)), uintptr(unsafe.Pointer(trayString("DevShell tray"))), 0, 0, 0, 0, 0, 0, 0, instance, 0)
 		if hwnd == 0 {
 			return
 		}

@@ -44,8 +44,8 @@ function Passed([string]$Label){$script:report.checks+=$Label;Write-Host "PASS: 
 function Start-ExitNative([string]$Config){
  $p=Start-Process $Exe -ArgumentList @('--config',('"'+$Config+'"')) -PassThru
  $script:processes+=$p
- Wait-ExitQA {(Test-Path (Join-Path $Config 'runtime-success-v1-windows-amd64')) -and [DengExitQA]::Find($p.Id,'DengShellWindow') -ne [IntPtr]::Zero} 'native frontend ready'
- $script:handle=[DengExitQA]::Find($p.Id,'DengShellWindow');[DengExitQA]::SetForegroundWindow($script:handle)|Out-Null
+ Wait-ExitQA {(Test-Path (Join-Path $Config 'runtime-success-v1-windows-amd64')) -and [DengExitQA]::Find($p.Id,'DevShellWindow') -ne [IntPtr]::Zero} 'native frontend ready'
+ $script:handle=[DengExitQA]::Find($p.Id,'DevShellWindow');[DengExitQA]::SetForegroundWindow($script:handle)|Out-Null
  $script:root=[System.Windows.Automation.AutomationElement]::FromHandle($script:handle)
  return $p
 }
@@ -75,7 +75,7 @@ try{
  [DengExitQA]::ShowWindow($handle,6)|Out-Null;Start-Sleep -Milliseconds 600
  [DengExitQA]::PostMessage($handle,0x0010,[IntPtr]::Zero,[IntPtr]::Zero)|Out-Null;Confirm-Persistent;Click '继续使用'
  Passed 'Taskbar-equivalent WM_CLOSE restores hidden/minimized window and keeps confirmation visible'
- $tray=[DengExitQA]::Find($running.Id,'DengShellTrayWindow');if($tray -eq [IntPtr]::Zero){throw 'Native tray window missing'}
+ $tray=[DengExitQA]::Find($running.Id,'DevShellTrayWindow');if($tray -eq [IntPtr]::Zero){throw 'Native tray window missing'}
  # Explorer can move a newly added icon into overflow while the test is
  # running. Resolve its rectangle afresh for each bounded attempt, and only
  # proceed after a visible popup owned by DengShell actually exists.

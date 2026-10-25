@@ -29,7 +29,7 @@ async function api(path, options = {}) {
 function createWindow() {
   const context = vm.createContext({ console, structuredClone, Map, Set, Promise, crypto: { randomUUID }, clearTimeout, setTimeout, api, initial: () => ({ 'dengshell.history.profile': ['BEFORE'] }), patch: value => patches.push(value), notice: value => notices.push(value) });
   vm.runInContext(`
-    const window={CLOUDSHELL:{uiPreferences:{}},addEventListener(){},focus(){},DengWindowTransfers:{changed(){}},DengWindowPreview:{arrive(){}}};
+    const window={DEVSHELL:{uiPreferences:{}},addEventListener(){},focus(){},DengWindowTransfers:{changed(){}},DengWindowPreview:{arrive(){}}};
     const localStorage={length:0}, appearanceSave=Promise.resolve(), persistAppearance=async value=>patch(value), toast=notice, native=()=>null;
     ${read('js/portable-preferences.js')}
     const readSaved=(key,fallback)=>window.DengPortablePreferences.read(key,fallback);

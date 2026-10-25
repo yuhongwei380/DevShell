@@ -110,7 +110,7 @@ func automaticWindowsProxy(req *http.Request, pac string, detect bool) (*url.URL
 }
 
 func nativeAutomaticProxy(target *url.URL, pac string, detect bool) (*url.URL, error) {
-	agent, _ := windows.UTF16PtrFromString("DengShell update")
+	agent, _ := windows.UTF16PtrFromString("DevShell update")
 	h, _, _ := winOpen.Call(uintptr(unsafe.Pointer(agent)), 1, 0, 0, 0)
 	if h == 0 {
 		return nil, errPAC

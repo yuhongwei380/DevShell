@@ -318,7 +318,7 @@ func testHiddenPickerOwner(t *testing.T) (uintptr, func()) {
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()
 		defer close(stopped)
-		className, _ := windows.UTF16PtrFromString("DengShellWindow")
+		className, _ := windows.UTF16PtrFromString("DevShellWindow")
 		module, _, _ := windowKernel32.NewProc("GetModuleHandleW").Call(0)
 		type windowClass struct {
 			size, style          uint32

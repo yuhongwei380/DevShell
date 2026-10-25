@@ -87,7 +87,7 @@ try {
     chooseServerFolder('');profiles[0].notes='测试'.repeat(80);profiles[1].notes='';renderConnections();return profiles[0].id;
   });
   for (const theme of ['light','dark']) {
-    await page.evaluate(t=>CloudShellTheme.set(t),theme);
+    await page.evaluate(t=>DevShellTheme.set(t),theme);
     await page.waitForFunction(t=>document.documentElement.dataset.theme===t,{},theme);
     const metrics=await page.$$eval('.server-profile-row',es=>es.map(e=>{
       const b=e.querySelector('.server-card-notes'),t=e.querySelector('.server-card-notes-text'),label=e.querySelector('.server-card-notes-label');

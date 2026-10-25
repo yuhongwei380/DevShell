@@ -1,7 +1,7 @@
 package app
 
 import (
-	"cloudshell/internal/updatetrust"
+	"devshell/internal/updatetrust"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"

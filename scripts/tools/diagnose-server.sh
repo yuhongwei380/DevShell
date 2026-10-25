@@ -1,12 +1,12 @@
 #!/bin/sh
-# DengShell server diagnostics. POSIX sh; no installs, sysctl writes or cleanup utilities.
+# DevShell server diagnostics. POSIX sh; no installs, sysctl writes or cleanup utilities.
 # Generated read-only application probes are appended below; reports omit raw probe stdout.
 set -u
 umask 077
 export LC_ALL=C
-DS_VERSION='1.0 (DengShell r20/r21 probe snapshot)'
+DS_VERSION='1.0 (DevShell r20/r21 probe snapshot)'
 if [ "${1-}" = --help ]; then
-    printf '%s\n' 'Usage: sh DengShell-diagnose.sh [existing-output-directory]' 'Run on the affected Linux VPS as the SAME account used by DengShell. No sudo needed.'
+    printf '%s\n' 'Usage: sh DevShell-diagnose.sh [existing-output-directory]' 'Run on the affected Linux VPS as the SAME account used by DevShell. No sudo needed.'
     exit 0
 fi
 for ds_tool in mktemp cat rm sed grep tr head wc date timeout sh; do
@@ -22,7 +22,7 @@ timeout -k 1 2 "$DS_SH" -c : >/dev/null 2>&1 || { printf '%s\n' 'timeout -k is u
 directory=${1:-.}
 case "$directory" in -*) printf '%s\n' 'Use ./ before a relative output directory starting with -.' >&2; exit 2;; esac
 [ -d "$directory" ] || { printf '%s\n' 'Output directory does not exist.' >&2; exit 2; }
-report_dir=$(mktemp -d "$directory/DengShell-diagnose.XXXXXX") || exit 2
+report_dir=$(mktemp -d "$directory/DevShell-diagnose.XXXXXX") || exit 2
 work=$(mktemp -d "$report_dir/.work.XXXXXX") || exit 2
 report=$report_dir/report.txt
 summary=$report_dir/summary.txt
@@ -35,9 +35,9 @@ trap 'exit 143' TERM HUP
 : > "$summary"
 exec 3>&1
 exec > "$report" 2>&1
-printf 'DengShell read-only diagnosis %s\n' "$DS_VERSION"
+printf 'DevShell read-only diagnosis %s\n' "$DS_VERSION"
 printf 'Time (UTC): '; date -u '+%Y-%m-%dT%H:%M:%SZ'
-printf '%s\n' 'Run as the same VPS account as DengShell. This does NOT test the Windows GUI or the existing SSH transport.'
+printf '%s\n' 'Run as the same VPS account as DevShell. This does NOT test the Windows GUI or the existing SSH transport.'
 printf '%s\n' 'Raw probe stdout is temporary and removed. No private keys, passwords, command history, environment dumps or full process command lines are collected.'
 
 finding() { printf '%s\n' "$*" >> "$summary"; }
@@ -127,7 +127,7 @@ assess() {
     esac
 }
 
-# Exact read-only commands exported from DengShell source, not utility action scripts.
+# Exact read-only commands exported from DevShell source, not utility action scripts.
 cat > "$work/core.sh" <<'DENGSHELL_DIAG_CORE_PROBE'
 export LC_ALL=C
 
@@ -624,7 +624,7 @@ if section_has_data sh_full __CS_STAT__ && section_has_data sh_full __CS_MEM__ &
     finding '[SH_OK] 本次 sh 模式能返回基础 CPU/内存数据与常用应用结束标记；进程采样须单独查看 PROCESS/COMMAND 项，此项不代表所有功能通过。'
 fi
 if [ ! -s "$summary" ]; then finding '[LOCAL_PASS] 未发现本次本地探测故障；尚不能排除实际 SSH 连接、通道限制、启动逻辑及 Windows 客户端问题。'; fi
-finding '[NEXT] 请同时发回 report.txt 和 summary.txt，并告知 DengShell 的 r 版本及同账号在其他 SSH 客户端是否正常。'
+finding '[NEXT] 请同时发回 report.txt 和 summary.txt，并告知 DevShell 的 r 版本及同账号在其他 SSH 客户端是否正常。'
 finding '[BOUNDARY] 终端内脚本不能完整复现 SSH 通道准入/ForceCommand/PTY 行为。若探测通过但界面仍失败，请补做说明中的 ssh -T 标记检查。'
 cat "$summary"
 printf '\n%s\n' 'No BBR/SWAP/cleanup action was run. Only this private report directory and its temporary files were created.'

@@ -2,7 +2,7 @@ package updater
 
 import (
 	"archive/zip"
-	"cloudshell/internal/app"
+	"devshell/internal/app"
 	"errors"
 	"fmt"
 	"io"

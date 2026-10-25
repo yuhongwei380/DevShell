@@ -22,7 +22,7 @@ try {
   await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:'reduce'}]);
   await page.setViewport({width:1366,height:1000,deviceScaleFactor:1.25});
   await page.goto(fixture.url,{waitUntil:'networkidle0'});
-  await page.evaluate(()=>{document.querySelectorAll('dialog[open]').forEach(d=>d.close());setDrawer(false);CloudShellTheme.set('dark');});
+  await page.evaluate(()=>{document.querySelectorAll('dialog[open]').forEach(d=>d.close());setDrawer(false);DevShellTheme.set('dark');});
   const note='https://example.test/unique-renewal\n到期：2027-02-03\n<img src=x onerror="injected=1">';
   await page.evaluate((id)=>showConnectionForm(profiles.find(p=>p.id===id)),a.profileId);
   assert(await page.$eval('#connection-notes',e=>e.value.includes('2027-01-01')));
@@ -55,7 +55,7 @@ try {
   assert.equal(await page.$$eval('.path-history-row',es=>es.length),2);
   assert((await page.$$eval('.path-history-row mark',es=>es.length))>=2);
   for(const theme of ['dark','light']){
-    await page.evaluate(t=>CloudShellTheme.set(t),theme);
+    await page.evaluate(t=>DevShellTheme.set(t),theme);
     await page.waitForFunction(t=>document.documentElement.dataset.theme===t,{},theme);
     const geometry=await page.$eval('#path-history-dialog',e=>{const r=e.getBoundingClientRect();return {delta:Math.abs((r.left+r.right)/2-innerWidth/2),top:r.top,bottom:r.bottom,height:innerHeight,width:e.scrollWidth,client:e.clientWidth};});
     assert(geometry.delta<3&&geometry.top>=0&&geometry.bottom<=geometry.height&&geometry.width<=geometry.client+1,JSON.stringify(geometry));

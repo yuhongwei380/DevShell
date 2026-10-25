@@ -53,9 +53,9 @@ var enumerateProcessWindows = windows.NewCallback(func(hwnd, data uintptr) uintp
 	var class [128]uint16
 	user32.NewProc("GetClassNameW").Call(hwnd, uintptr(unsafe.Pointer(&class[0])), uintptr(len(class)))
 	switch windows.UTF16ToString(class[:]) {
-	case "DengShellWindow":
+	case "DevShellWindow", "DengShellWindow":
 		state.main = hwnd
-	case "DengShellTrayWindow":
+	case "DevShellTrayWindow", "DengShellTrayWindow":
 		state.tray = hwnd
 	}
 	return 1

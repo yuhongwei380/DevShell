@@ -26,10 +26,10 @@
     request.open('GET', 'boot.js', false);
     request.setRequestHeader('X-CloudShell-Token', token);
     request.send();
-    const prefix = 'window.CLOUDSHELL = ';
+    const prefix = 'window.DEVSHELL = ';
     const text = request.responseText;
     if (request.status !== 200 || !text.startsWith(prefix) || !text.endsWith(';')) throw new Error('bootstrap rejected');
-    window.CLOUDSHELL = JSON.parse(text.slice(prefix.length, -1));
+    window.DEVSHELL = JSON.parse(text.slice(prefix.length, -1));
   } catch {
     // A separate, script-free page avoids running the app against an absent
     // configuration and makes an expired launch address understandable.

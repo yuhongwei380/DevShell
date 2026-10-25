@@ -4,7 +4,7 @@ package desktop
 
 import (
 	"bytes"
-	"cloudshell/internal/app"
+	"devshell/internal/app"
 	"context"
 	"encoding/json"
 	"errors"

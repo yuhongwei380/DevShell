@@ -3,7 +3,7 @@
 package desktop
 
 import (
-	"cloudshell/internal/app"
+	"devshell/internal/app"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -41,7 +41,7 @@ func TestNativeAndDetachedBootstrapUsePrivateAuthorization(t *testing.T) {
 	}
 	remote.launch.Token = "invalid-stale-token"
 	stale := request(nativeAssetHandler(remote, assets))
-	if stale.Code != 403 || strings.Contains(stale.Body.String(), "window.CLOUDSHELL") {
+	if stale.Code != 403 || strings.Contains(stale.Body.String(), "window.DEVSHELL") {
 		t.Fatal("failed parent boot was served as executable success", stale.Code)
 	}
 	response, err := http.Get(a.URL() + "/boot.js")

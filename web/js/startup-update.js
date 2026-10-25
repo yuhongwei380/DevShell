@@ -1,6 +1,6 @@
 // The fixed-host metadata probe runs alongside native startup in Go.
 (() => {
- 'use strict';let resolveStartup;window.DengShellStartupReady=new Promise(resolve=>{resolveStartup=resolve});
+ 'use strict';let resolveStartup;window.DevShellStartupReady=new Promise(resolve=>{resolveStartup=resolve});
  function showUpdate(result){return new Promise(resolve=>{
   const dialog=document.createElement('dialog');dialog.id='startup-update-dialog';dialog.className='manager-dialog startup-update-dialog';dialog.setAttribute('aria-labelledby','startup-update-title');
   dialog.innerHTML='<div class="dialog-heading"><div><h2 id="startup-update-title">发现 DevShell 更新</h2><p id="startup-update-versions"></p></div><button type="button" class="icon-button" aria-label="稍后再说"><svg><use href="#i-close"/></svg></button></div><div class="startup-update-content"><p class="startup-update-source">更新来源：GitHub Releases · SHA-256 校验</p><h3>更新内容</h3><p id="startup-update-notes"></p><p class="startup-update-install-note"></p><div id="startup-update-progress" hidden><progress max="100" value="0"></progress><p role="status"></p></div><p id="startup-update-error" role="alert"></p></div><div class="startup-update-actions"><button type="button" class="secondary-button" id="startup-update-later">稍后再说</button><button type="button" class="primary-button" id="startup-update-install">下载并安装更新</button></div>';
@@ -33,5 +33,5 @@ async function checkNow(){
  finally{checking=false}
 }
 window.DengUpdates={checkNow,showUpdate};
-document.addEventListener('DOMContentLoaded',async()=>{let timer;try{if(window.CLOUDSHELL?.detachedNonce)return;const check=Promise.race([api('/api/updates/check').catch(()=>null),new Promise(resolve=>{timer=setTimeout(()=>resolve(null),3000)})]);const result=await check;clearTimeout(timer);if(result?.status==='available')await showUpdate(result);}catch(e){console.warn('启动更新检查未完成',e)}finally{clearTimeout(timer);resolveStartup();window.dispatchEvent(new Event('dengshell:startup-ready'))}},{once:true});
+document.addEventListener('DOMContentLoaded',async()=>{let timer;try{if(window.DEVSHELL?.detachedNonce)return;const check=Promise.race([api('/api/updates/check').catch(()=>null),new Promise(resolve=>{timer=setTimeout(()=>resolve(null),3000)})]);const result=await check;clearTimeout(timer);if(result?.status==='available')await showUpdate(result);}catch(e){console.warn('启动更新检查未完成',e)}finally{clearTimeout(timer);resolveStartup();window.dispatchEvent(new Event('dengshell:startup-ready'))}},{once:true});
 })();

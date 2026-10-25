@@ -1,6 +1,6 @@
 'use strict';
 
-let appearance = { uiFontId: 'builtin:ui-alibaba-puhuiti-3-55', uiTextColors: {}, fontId: 'builtin:jetbrains-mono', fontColors: {}, fontBold: {}, chartStyles: {}, backgroundId: 'builtin:none', backgroundOpacity: .42, backgroundVersion: 2, uiScale: Number(window.CLOUDSHELL?.uiScale) || 1, terminalFontSize: 14 };
+let appearance = { uiFontId: 'builtin:ui-alibaba-puhuiti-3-55', uiTextColors: {}, fontId: 'builtin:jetbrains-mono', fontColors: {}, fontBold: {}, chartStyles: {}, backgroundId: 'builtin:none', backgroundOpacity: .42, backgroundVersion: 2, uiScale: Number(window.DEVSHELL?.uiScale) || 1, terminalFontSize: 14 };
 const appearanceMapFields = new Set(['fontColors', 'fontBold', 'chartStyles', 'uiTextColors']);
 const appearanceOwnedElsewhere = new Set(['layout', 'windowWidth', 'windowHeight', 'windowMaximised', 'terminalBold']);
 let appearanceSaved = appearanceSnapshot(appearance);
@@ -319,9 +319,10 @@ async function chooseAppearance(patch) {
   catch (error) { if (operation !== appearanceOperation) return; appearance = previous; await applyAppearance().catch(() => {}); throw error; }
 }
 function applyUIScale() {
+  syncRightPanelWindow();
   // Scale the full logical viewport, including dialogs, without an overflowing page.
   const requested = Math.max(.5, Math.min(2, Number(appearance.uiScale) || 1));
-  effectiveScale = Math.min(requested, Math.max(.5, Math.floor(Math.min(innerWidth / 640, innerHeight / 420) * 100) / 100));
+  effectiveScale = Math.min(requested, Math.max(.5, Math.floor(Math.min(innerWidth / (1100 + (appearance.filesPosition === 'right' && !$('#files-panel').hidden ? 428 : 0)), innerHeight / 420) * 100) / 100));
   const width = logicalWidth(), height = logicalHeight(), root = document.documentElement;
   document.body.style.zoom = String(effectiveScale);
   document.body.style.width = `${width}px`; document.body.style.height = `${height}px`;
@@ -612,8 +613,8 @@ function initializeAppearance() {
   $('#settings-button').onclick = () => setSettingsMenu($('#settings-menu').hidden);
   $('#about-button').onclick = () => {
     setSettingsMenu(false);
-    $('#about-version').textContent = window.CLOUDSHELL?.displayVersion || window.CLOUDSHELL?.version || '—';
-    $('#about-build').textContent = String(window.CLOUDSHELL?.build ?? '—');
+    $('#about-version').textContent = window.DEVSHELL?.displayVersion || window.DEVSHELL?.version || '—';
+    $('#about-build').textContent = String(window.DEVSHELL?.build ?? '—');
     if (!$('#about-dialog').open) $('#about-dialog').showModal();
   };
   $('#close-about').onclick = () => $('#about-dialog').close();
@@ -624,7 +625,7 @@ function initializeAppearance() {
   });
   $('#release-notes-button').onclick = () => {
     setSettingsMenu(false);
-    const boot = window.CLOUDSHELL;
+    const boot = window.DEVSHELL;
     $('#release-notes-version').textContent = `当前版本 ${boot?.displayVersion || boot?.version || '—'} · 构建 ${boot?.build ?? '—'}`;
     const notes = boot?.releaseNotes || '当前版本尚未提供更新说明。';
     if (window.markdownit) $('#release-notes-content').innerHTML = window.markdownit({ html: false, linkify: false, breaks: true }).render(notes);

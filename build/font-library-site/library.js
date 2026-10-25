@@ -33,9 +33,9 @@
       const checksum=[...new Uint8Array(await crypto.subtle.digest('SHA-256',data))].map(x=>x.toString(16).padStart(2,'0')).join('');
       if(data.length!==font.file.size || checksum!==font.file.sha256 || String.fromCharCode(...data.subarray(0,4))!=='wOF2')throw new Error('字体校验失败，请稍后重试');
       if(controller.signal.aborted)return;
-      const note=`${font.name}\n来源：${font.project}\n版本：${font.version}\n许可：${font.licenseName}，完整版权与许可见 OFL.txt。\n${font.fallbackNote}\n\n解压后，在 DengShell 设置的${font.kind==='font'?'Shell 字体':'界面字体'}中导入 .woff2 文件。手动导入的界面字体需重启软件。\n\n格式适配版采用独立 Deng Library 内部家族名，保留上游版权；上游名称用于说明来源。\nSHA-256：${font.file.sha256}\n`;
+      const note=`${font.name}\n来源：${font.project}\n版本：${font.version}\n许可：${font.licenseName}，完整版权与许可见 OFL.txt。\n${font.fallbackNote}\n\n解压后，在 DevShell 设置的${font.kind==='font'?'Shell 字体':'界面字体'}中导入 .woff2 文件。手动导入的界面字体需重启软件。\n\n格式适配版采用独立 Deng Library 内部家族名，保留上游版权；上游名称用于说明来源。\nSHA-256：${font.file.sha256}\n`;
       const url=URL.createObjectURL(zip([[font.id+'.woff2',data],['OFL.txt',font.licenseText],['README.txt',note]]));
-      const link=el('a');link.href=url;link.download=`DengShell-${font.id}.zip`;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+      const link=el('a');link.href=url;link.download=`DevShell-${font.id}.zip`;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
       status.textContent='字体已准备好，请查看浏览器下载列表。ZIP 中附带完整许可证和导入说明。';
     }catch(error){if(!controller.signal.aborted)status.textContent=`下载未完成：${error.message}。请重试。`;}
     finally{if(downloadController===controller){downloadController=null;button.disabled=false;button.textContent='确认下载字体 ZIP';}}

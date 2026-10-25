@@ -22,7 +22,7 @@ import (
 	"sync"
 	"time"
 
-	"cloudshell/internal/app"
+	"devshell/internal/app"
 
 	"github.com/gorilla/websocket"
 	"github.com/wailsapp/wails/v2"
@@ -54,6 +54,9 @@ type Desktop struct {
 	pickerBusy            bool
 	lastDirs              map[string]string
 	windowClosed          bool
+	filesPanelMu          sync.Mutex
+	filesPanelOpen        bool
+	filesPanelGrowth      int
 }
 
 type nativeTerminal struct {
@@ -79,6 +82,9 @@ func (d *Desktop) CaptureWindowState() error {
 	maximised := runtime.WindowIsMaximised(d.ctx)
 	if !maximised && !runtime.WindowIsFullscreen(d.ctx) {
 		width, height = runtime.WindowGetSize(d.ctx)
+		d.filesPanelMu.Lock()
+		width -= d.filesPanelGrowth
+		d.filesPanelMu.Unlock()
 	}
 	if width <= 0 || height <= 0 {
 		return nil
@@ -185,45 +191,6 @@ func (d *Desktop) WindowAction(action string) (DesktopWindowState, error) {
 		return d.WindowState(), errors.New("未知窗口操作")
 	}
 	return d.WindowState(), nil
-}
-
-// ExpandWindowWidth resizes the main window horizontally by delta logical
-// pixels, keeping its left edge anchored so a right side panel grows into new
-// space instead of squeezing the terminal. Maximised or fullscreen windows are
-// left alone and expansion is clamped to the current monitor's work area;
-// shrinking is clamped by the window's minimum width. Returns the delta
-// actually applied (0 when the window was not touched).
-func (d *Desktop) ExpandWindowWidth(delta int) int {
-	if d.detachedNonce != "" || d.ctx == nil || delta == 0 || runtime.WindowIsMaximised(d.ctx) || runtime.WindowIsFullscreen(d.ctx) {
-		return 0
-	}
-	x, y := runtime.WindowGetPosition(d.ctx)
-	width, height := runtime.WindowGetSize(d.ctx)
-	target := width + delta
-	if delta > 0 {
-		for _, screen := range runtime.ScreenGetAll(d.ctx) {
-			if !screen.IsCurrent {
-				continue
-			}
-			if limit := screen.Position.X + screen.WorkArea.Width - x; target > limit {
-				target = limit
-			}
-		}
-	}
-	if target == width {
-		return 0
-	}
-	runtime.WindowSetSize(d.ctx, target, height)
-	applied, _ := runtime.WindowGetSize(d.ctx)
-	if applied == width {
-		return 0
-	}
-	// Some platforms re-centre while resizing; pin the left edge so the extra
-	// width always appears on the right, next to where the panel opens.
-	if nx, ny := runtime.WindowGetPosition(d.ctx); nx != x || ny != y {
-		runtime.WindowSetPosition(d.ctx, x, y)
-	}
-	return applied - width
 }
 
 func (d *Desktop) OpenTerminal(sessionID string) error {
@@ -491,7 +458,7 @@ func runDesktopBackend(application desktopBackend, assets fs.FS, configDir, deta
 		preferences.WindowMaximised = false
 	}
 	initial = restoreSavedWindowBounds(initial, preferences.WindowWidth, preferences.WindowHeight)
-	log.Printf("DengShell initial window: %dx%d logical pixels, position %d,%d", initial.Width, initial.Height, initial.X, initial.Y)
+	log.Printf("DevShell initial window: %dx%d logical pixels, position %d,%d", initial.Width, initial.Height, initial.X, initial.Y)
 	previouslyReady := runtimePreviouslyReady(configDir)
 	var readyOnce, windowOnce sync.Once
 	desktop := &Desktop{app: application, terminals: map[string]*nativeTerminal{}, detachedNonce: detachedNonce, children: map[string]*exec.Cmd{}, lastDirs: map[string]string{}}
@@ -534,12 +501,12 @@ func runDesktopBackend(application desktopBackend, assets fs.FS, configDir, deta
 			runtime.EventsOn(ctx, "cloudshell:ready", func(...interface{}) {
 				readyOnce.Do(func() {
 					if !previouslyReady {
-						log.Printf("DengShell first successful runtime check: %s", platformRuntimeDescription())
+						log.Printf("DevShell first successful runtime check: %s", platformRuntimeDescription())
 						if err := recordRuntimeReady(configDir); err != nil {
-							log.Printf("DengShell could not cache runtime check: %v", err)
+							log.Printf("DevShell could not cache runtime check: %v", err)
 						}
 					}
-					log.Print("DengShell frontend and local API ready")
+					log.Print("DevShell frontend and local API ready")
 				})
 			})
 			runtime.OnFileDrop(ctx, func(x, y int, paths []string) {
@@ -558,7 +525,7 @@ func runDesktopBackend(application desktopBackend, assets fs.FS, configDir, deta
 				// a second-instance launch must not change the active store on disk.
 				if detachedNonce == "" && (initial.Width != preferences.WindowWidth || initial.Height != preferences.WindowHeight) {
 					if err := application.SaveWindowState(initial.Width, initial.Height, preferences.WindowMaximised); err != nil {
-						log.Printf("DengShell window size could not be saved: %v", err)
+						log.Printf("DevShell window size could not be saved: %v", err)
 					}
 				}
 				if preferences.WindowMaximised {
@@ -570,7 +537,7 @@ func runDesktopBackend(application desktopBackend, assets fs.FS, configDir, deta
 				} else {
 					desktop.startDesktopLifecycle(ctx, "")
 				}
-				log.Print("DengShell desktop window ready")
+				log.Print("DevShell desktop window ready")
 			})
 		},
 		DragAndDrop: &options.DragAndDrop{EnableFileDrop: true, DisableWebViewDrop: false},
@@ -580,7 +547,7 @@ func runDesktopBackend(application desktopBackend, assets fs.FS, configDir, deta
 			About: &mac.AboutInfo{Title: "DevShell", Message: app.ApplicationDisplayVersion + " · SSH 终端与服务器管理", Icon: icon},
 		},
 		Windows: &windows.Options{
-			WindowClassName: "DengShellWindow", DisableWindowIcon: false,
+			WindowClassName: "DevShellWindow", DisableWindowIcon: false,
 			IsZoomControlEnabled: false, DisablePinchZoom: true,
 			WebviewUserDataPath: desktopWebviewPath(configDir, detachedNonce),
 			Messages: &windows.Messages{

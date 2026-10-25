@@ -2,7 +2,7 @@
 // workspace handlers. The backend remains authoritative across all windows.
 (() => {
  'use strict';
- const boot = window.CLOUDSHELL || {};
+ const boot = window.DEVSHELL || {};
  let state = boot.securityLock || { enabled:false, locked:false, revision:0 };
  let covered = !!state.locked, screen, settings, grant='', enrolling=false, lastSent=0, activityBusy=false, statusRequest=null, focusCheck=false, forcingLock=false;
  let resolveReady; const ready = new Promise(resolve => { resolveReady=resolve; });
@@ -118,7 +118,7 @@
   if(!state.enabled){try{grant=(await call('authorize',{})).grant;reflectSettings();}catch(e){el('security-settings-error').textContent=e.message;}}
  }
  async function activity(event){
-  if(!event.isTrusted||covered||!state.enabled||!state.idleSeconds||document.hidden||window.DengShellWindowHidden)return;
+  if(!event.isTrusted||covered||!state.enabled||!state.idleSeconds||document.hidden||window.DevShellWindowHidden)return;
   const interval=Math.min(1000,Math.max(100,state.idleSeconds*250));if(focusCheck||activityBusy||Date.now()-lastSent<interval)return;
   lastSent=Date.now();activityBusy=true;try{apply(await call('activity',{}));}catch{cover(true);}finally{activityBusy=false;}
  }

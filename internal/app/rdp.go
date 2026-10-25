@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"cloudshell/internal/rdpengine"
+	"devshell/internal/rdpengine"
 )
 
 type rdpState struct {

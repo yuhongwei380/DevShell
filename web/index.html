@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>DevShell · SSH 工作台</title>
   <meta name="referrer" content="no-referrer">
-  <script src="js/bootstrap.js"></script>
-  <script>if(location.protocol!=='wails:'&&location.hostname!=='wails.localhost'){const nonce=new URLSearchParams(location.search).get('window');if(/^[A-Za-z0-9_-]{24,96}$/.test(nonce||'')){window.CLOUDSHELL.detachedNonce=nonce;}}</script>
-  <script src="js/security-lock.js?v=20260921-v002-b72"></script>
-  <script src="js/theme.js?v=20261024-appearance-config"></script>
+  <script src="js/bootstrap.js?v=20261025-devshell-rc1"></script>
+  <script>if(location.protocol!=='wails:'&&location.hostname!=='wails.localhost'){const nonce=new URLSearchParams(location.search).get('window');if(/^[A-Za-z0-9_-]{24,96}$/.test(nonce||'')){window.DEVSHELL.detachedNonce=nonce;}}</script>
+  <script src="js/security-lock.js?v=20261025-devshell-rc1"></script>
+  <script src="js/theme.js?v=20261025-devshell-rc1"></script>
   <link rel="stylesheet" href="vendor/xterm.css">
   <link rel="stylesheet" href="css/style.css?v=20261020-icon2">
-  <link rel="stylesheet" href="css/theme.css?v=20261025-chip1">
+  <link rel="stylesheet" href="css/theme.css?v=20261025-transfer-ring">
   <link rel="stylesheet" href="css/workspace-tools.css?v=20261001-composer">
   <link rel="stylesheet" href="css/appearance.css?v=20261024-appearance-config">
   <link rel="stylesheet" href="css/process-view.css?v=20260920-v002-b70">
@@ -27,12 +27,12 @@
   <link rel="stylesheet" href="css/appearance-tools.css?v=20261024-monitor-visible">
   <link rel="stylesheet" href="css/pinned-nav.css?v=20261023-borderless1">
   <link rel="stylesheet" href="css/font-library.css?v=20260920-v002-b70">
-  <link rel="icon" href="assets/dengshell.svg" type="image/svg+xml">
+  <link rel="icon" href="assets/devshell.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/file-tools.css?v=20261023-notes1">
   <link rel="stylesheet" href="css/desktop-tray.css?v=20260920-v002-b70">
   <link rel="stylesheet" href="css/latency-chart.css?v=20260920-v002-b70">
   <link rel="stylesheet" href="css/common-apps.css?v=20261018-follow2">
-  <link rel="stylesheet" href="css/session-windows.css?v=20261024-meta-narrow">
+  <link rel="stylesheet" href="css/session-windows.css?v=20261025-sftp-feedback">
   <link rel="stylesheet" href="css/system-identity.css?v=20260920-v002-b70">
   <link rel="stylesheet" href="css/chart-styles.css?v=20260920-v002-b70">
   <link rel="stylesheet" href="css/light-theme.css?v=20260920-v002-b70">
@@ -88,7 +88,7 @@
 
   <header class="titlebar">
     <div class="brand">
-      <button class="icon-button" id="about-button" title="关于 DevShell" aria-label="关于 DevShell" aria-haspopup="dialog" aria-controls="about-dialog"><img class="brand-logo" src="assets/dengshell.svg" alt="" draggable="false"></button>
+      <button class="icon-button" id="about-button" title="关于 DevShell" aria-label="关于 DevShell" aria-haspopup="dialog" aria-controls="about-dialog"><img class="brand-logo" src="assets/devshell.svg" alt="" draggable="false"></button>
       <button class="icon-button" id="settings-button" title="设置" aria-label="设置" aria-haspopup="menu" aria-controls="settings-menu" aria-expanded="false"><svg><use href="#i-settings"/></svg></button>
       <button class="icon-button" id="github-button" title="GitHub 项目仓库" aria-label="GitHub 项目仓库"><svg><use href="#i-github"/></svg></button>
       <button class="icon-button theme-toggle header-pill theme-pill" id="theme-toggle" aria-label="深色模式" aria-pressed="false" title="切换到深色模式"><svg class="theme-moon"><use href="#i-moon"/></svg><svg class="theme-sun"><use href="#i-sun"/></svg></button>
@@ -143,6 +143,7 @@
       <div class="workspace files-hidden" id="workspace">
         <section class="terminal-panel" aria-label="SSH 终端">
           <div class="terminal-meta"><span><span class="status-dot green"></span><span id="terminal-meta-host">SSH 终端</span><span class="terminal-protocol" id="terminal-state">待连接</span><span class="session-current-badge" id="terminal-current-badge" hidden>当前连接</span></span><span class="terminal-encoding">UTF-8 <span class="meta-divider">│</span> xterm-256color</span><button class="terminal-popout" id="disconnect" type="button" title="断开连接，保留终端内容" aria-label="断开连接" disabled><svg><use href="#i-disconnect"/></svg></button><button class="terminal-popout" id="reconnect" type="button" title="重新连接" aria-label="重新连接"><svg><use href="#i-reconnect"/></svg></button><button class="terminal-popout" id="clear-terminal" type="button" title="清除终端滚屏" aria-label="清空终端"><svg><use href="#i-erase"/></svg></button><button id="toggle-sftp" class="terminal-popout" type="button" aria-expanded="false" aria-controls="files-panel" title="显示或隐藏 SFTP 面板"><svg><use href="#i-folder"/></svg><span>SFTP</span></button><button id="detach-terminal" class="terminal-popout" title="将当前 SSH 拆分为独立窗口" aria-label="拆分为独立窗口" hidden disabled><svg><use href="#i-popout"/></svg><span>独立窗口</span></button></div>
+          <button id="shell-transfer-status" class="shell-transfer-status" type="button" aria-live="polite" hidden></button>
           <div class="terminal-output" id="terminal-output"><div class="welcome-state" id="welcome-state"><span class="welcome-icon"><svg><use href="#i-terminal"/></svg></span><h1>你的服务器工作台</h1><p>连接服务器，终端、文件与运行状态尽在眼前。</p><button id="welcome-connect">添加或选择服务器 <svg><use href="#i-chevron"/></svg></button><small>支持密码、私钥和 SSH Agent 登录</small></div></div>
           <div class="terminal-command-bar"><svg><use href="#i-terminal"/></svg><form id="command-form"><textarea id="command-input" rows="1" aria-label="发送命令到服务器" placeholder="输入命令并回车发送 · ↑↓ 历史" autocomplete="off" spellcheck="false"></textarea></form><button class="terminal-tool" id="command-history" title="历史命令" aria-label="历史命令"><svg><use href="#i-history"/></svg></button><button class="terminal-tool" id="font-down" title="缩小终端字体 0.5 px" aria-label="缩小终端字体 0.5 px"><svg><use href="#i-font-decrease"/></svg></button><button class="terminal-tool" id="font-up" title="放大终端字体 0.5 px" aria-label="放大终端字体 0.5 px"><svg><use href="#i-font-increase"/></svg></button></div>
         </section>
@@ -365,8 +366,8 @@
   <script src="js/command-composer.js?v=20261001-composer"></script>
   <script src="js/workspace-tools.js?v=20260925-v002-b86"></script>
   <script src="js/release-note-tags.js?v=20261023-tags2"></script>
-  <script src="js/appearance.js?v=20261024-appearance-config"></script>
-  <script src="js/ui-appearance.js?v=20261019-brand1"></script>
+  <script src="js/appearance.js?v=20261025-devshell-rc1"></script>
+  <script src="js/ui-appearance.js?v=20261025-devshell-rc1"></script>
   <script src="js/font-library.js?v=20261019-brand1"></script>
   <script src="js/path-history.js?v=20260925-v002-b86"></script>
   <script src="js/directory-favorites.js?v=20260925-v002-b86"></script>
@@ -378,17 +379,17 @@
   <script src="js/terminal-integration.js?v=20261018-follow3"></script>
   <script src="js/mtr-installation.js?v=20261019-brand1"></script>
   <script src="js/config-document.js?v=20261024-appearance-config"></script>
-  <script src="js/startup-update.js?v=20261023-tags1"></script>
-  <script src="js/portable-preferences.js?v=20261018-pin2"></script>
+  <script src="js/startup-update.js?v=20261025-devshell-rc1"></script>
+  <script src="js/portable-preferences.js?v=20261025-devshell-rc1"></script>
   <script src="js/server-manager.js?v=20261019-serial1"></script>
   <script src="js/server-explorer.js?v=20261023-move145"></script>
-  <script src="js/help-guide.js?v=20261024-appearance-config"></script>
+  <script src="js/help-guide.js?v=20261025-devshell-rc1"></script>
   <script src="js/chart-styles.js?v=20260920-v002-b70"></script>
-  <script src="js/appearance-tools.js?v=20261024-monitor-visible"></script>
+  <script src="js/appearance-tools.js?v=20261025-devshell-rc1"></script>
   <script src="js/terminal-snapshot.js?v=20260920-v002-b70"></script>
   <script src="js/server-addresses.js?v=20261018-addr1"></script>
   <script src="js/window-preview.js?v=20260920-v002-b70"></script>
-  <script src="js/window-transfers.js?v=20261019-brand1"></script>
+  <script src="js/window-transfers.js?v=20261025-devshell-rc1"></script>
   <div id="session-tabs-menu" class="session-tabs-menu" role="menu" aria-label="选项卡列表" hidden></div>
   <script src="js/session-tab-order.js?v=20261022-tabs1"></script>
   <script src="js/session-windows.js?v=20261022-tabs1"></script>
@@ -398,7 +399,8 @@
   <script src="js/rdp.js?v=20261022-tabs1"></script>
   <script src="js/serial.js?v=20261022-tabs1"></script>
   <script src="js/upload-confirmation.js?v=20260928-overwrite1"></script>
-  <script src="js/app.js?v=20261025-sftp-expand"></script>
+  <script src="js/shell-transfers.js?v=20261025-progress"></script>
+  <script src="js/app.js?v=20261025-devshell-rc1"></script>
   <script src="js/quick-connect.js?v=20261022-tabs1"></script>
   <script src="js/local-prompt.js?v=20261022-tabs1"></script>
   <script src="js/command-completion.js?v=20261025-cmdtab1"></script>
@@ -412,6 +414,6 @@
   <script src="js/text-editor.js?v=20261010-editor-wrap"></script>
   <script src="js/file-tools.js?v=20261024-appearance-config"></script>
   <script src="js/zmodem-bridge.js?v=20261022-zmodem5"></script>
-  <script src="js/desktop-tray.js?v=20261024-appearance-config"></script>
+  <script src="js/desktop-tray.js?v=20261025-devshell-rc1"></script>
 </body>
 </html>

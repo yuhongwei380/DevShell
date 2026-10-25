@@ -41,8 +41,8 @@ try {
  await page.keyboard.press('Escape');await page.waitForFunction(()=>qaSettled);assert.equal(await page.evaluate(()=>localTasks.size),0);assert.equal(contents('甲.txt'),'old');
  await start(files);await ready();
  // Both themes and a narrow viewport: dialog/actions fit, long lists scroll.
- for(const theme of ['dark','light']){await page.evaluate(t=>CloudShellTheme.set(t),theme);await new Promise(r=>setTimeout(r,1000));
-   assert.equal(await page.evaluate(()=>CloudShellTheme.current),theme);
+ for(const theme of ['dark','light']){await page.evaluate(t=>DevShellTheme.set(t),theme);await new Promise(r=>setTimeout(r,1000));
+   assert.equal(await page.evaluate(()=>DevShellTheme.current),theme);
    if(process.env.DENGSHELL_UI_ARTIFACTS)await page.screenshot({path:process.env.DENGSHELL_UI_ARTIFACTS+`/overwrite-${theme}.png`});
    await page.setViewport({width:640,height:480});await new Promise(r=>setTimeout(r,300));
    const bounds=await page.$eval('#upload-confirmation-dialog',d=>{const r=d.getBoundingClientRect();return {top:r.top,bottom:r.bottom,left:r.left,right:r.right,overflow:d.scrollWidth>d.clientWidth+1}});

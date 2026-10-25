@@ -57,9 +57,10 @@ jobs:
         run: |
           $tag = "${{ github.event.inputs.tag || github.ref_name }}"
           $version = (Select-String -Path internal/app/updates.go -Pattern 'const ApplicationVersion = "([^"]+)"').Matches[0].Groups[1].Value
-          $notes = "docs/release/RELEASE-$version.md"
+          $notes = "docs/release/RELEASE-$tag.md"
+          if (-not (Test-Path $notes)) { $notes = "docs/release/RELEASE-$version.md" }
           $releaseOptions = @('--latest')
-          if ($tag -match '-(rc|alpha|beta)([.-]|$)') {
+          if ($tag -match '-(rc|alpha|beta)([0-9.-]|$)') {
             $releaseOptions = @('--prerelease', '--latest=false')
           }
           if (gh release view $tag 2>$null) {
@@ -88,9 +89,10 @@ jobs:
         run: |
           tag="${{ github.event.inputs.tag || github.ref_name }}"
           version=$(sed -n 's/^const ApplicationVersion = "\([^"]*\)".*/\1/p' internal/app/updates.go)
-          notes="docs/release/RELEASE-$version.md"
+          notes="docs/release/RELEASE-$tag.md"
+          if [[ ! -f "$notes" ]]; then notes="docs/release/RELEASE-$version.md"; fi
           release_options=(--latest)
-          if [[ "$tag" =~ -(rc|alpha|beta)([.-]|$) ]]; then
+          if [[ "$tag" =~ -(rc|alpha|beta)([0-9.-]|$) ]]; then
             release_options=(--prerelease --latest=false)
           fi
           if gh release view "$tag" >/dev/null 2>&1; then

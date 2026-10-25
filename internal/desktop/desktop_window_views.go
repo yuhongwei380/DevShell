@@ -3,7 +3,7 @@
 package desktop
 
 import (
-	"cloudshell/internal/app"
+	"devshell/internal/app"
 	"context"
 	"errors"
 	"github.com/gorilla/websocket"

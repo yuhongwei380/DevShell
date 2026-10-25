@@ -50,20 +50,20 @@ const safe = fn => (...args) => { try { return Promise.resolve(fn(...args)).catc
 const native = () => window.go?.desktop?.Desktop;
 function syncDesktopTheme() {
   const desktop = native();
-  if (desktop?.SetTheme) desktop.SetTheme(window.CloudShellTheme.preference).catch(error => console.warn('无法同步窗口主题', error));
+  if (desktop?.SetTheme) desktop.SetTheme(window.DevShellTheme.preference).catch(error => console.warn('无法同步窗口主题', error));
 }
 function reflectTheme() {
-  const dark = window.CloudShellTheme.current === 'dark';
+  const dark = window.DevShellTheme.current === 'dark';
   $('#theme-toggle').setAttribute('aria-pressed', String(dark));
-  const title = `${dark ? '切换到浅色模式' : '切换到深色模式'}${window.CloudShellTheme.preference === 'system' ? '（当前跟随系统，点击后改为手动）' : ''}`;
+  const title = `${dark ? '切换到浅色模式' : '切换到深色模式'}${window.DevShellTheme.preference === 'system' ? '（当前跟随系统，点击后改为手动）' : ''}`;
   $('#theme-toggle').title = title;
   $('#theme-toggle').setAttribute('aria-label', title);
   syncDesktopTheme();
 }
-$('#theme-toggle').onclick = () => window.CloudShellTheme.toggle();
+$('#theme-toggle').onclick = () => window.DevShellTheme.toggle();
 window.addEventListener('cloudshell:theme', reflectTheme);
 reflectTheme();
-const boot = window.CLOUDSHELL;
+const boot = window.DEVSHELL;
 const desktopPage = location.protocol === 'wails:' || location.hostname === 'wails.localhost';
 let bridgeReady;
 function waitForDesktop() {
@@ -147,7 +147,7 @@ async function loadProfiles() {
     if (['files', 'commands', 'common-apps', 'transfers'].includes(savedPane)) showPane(savedPane, false);
     setWorkspaceVisible(layout.filesHidden === false, false);
   }
-  window.DengShellHelp?.acceptConfig(config);
+  window.DevShellHelp?.acceptConfig(config);
 }
 
 function sessionDisplayName(state) {
@@ -808,7 +808,7 @@ async function renameRemoteFile(state, path) {
 let statsTimer = 0, networkTimer = 0, networkPolledSession = '';
 const statsRequests = new Set();
 const networkRequests = new Set();
-function monitorVisible() { return !document.hidden && !window.DengShellWindowHidden && !window.DengSecurityLock?.isLocked(); }
+function monitorVisible() { return !document.hidden && !window.DevShellWindowHidden && !window.DengSecurityLock?.isLocked(); }
 function monitorPollDelay(value, interval) { return Number.isFinite(value) ? Math.max(0, Math.min(interval, value)) + 5 : interval; }
 async function pollNetwork() {
   if(window.DengSecurityLock?.isLocked())return;
@@ -1011,27 +1011,24 @@ function setWorkspaceVisible(visible, persist = true) {
   $('#workspace').classList.toggle('files-hidden', !visible);
   $('#toggle-sftp').setAttribute('aria-expanded', String(visible));
   if (persist) { layout.filesHidden = !visible; save('cloudshell.layout', layout); }
-  requestAnimationFrame(fitActive);
+  syncRightPanelWindow();
+  requestAnimationFrame(applyUIScale);
 }
-// A right-docked SFTP panel opens into new window space instead of squeezing
-// the terminal: the window grows to the right by panel width plus splitter,
-// anchored on its left edge, and shrinks back by the same amount on close.
-// Maximised windows skip this; the recorded delta keeps reopen/close symmetric.
-let rightPanelExpansion = 0;
+// Serialize native resize requests, including placement changes and rapid toggles.
+let rightPanelOpen = false, rightPanelResize = Promise.resolve();
+function syncRightPanelWindow() {
+  const open = appearance.filesPosition === 'right' && !$('#files-panel').hidden;
+  if (open === rightPanelOpen) return;
+  rightPanelOpen = open;
+  const desktop = native();
+  if (!desktop?.SetFilesPanel) return;
+  const width = Math.round(428 * effectiveScale);
+  rightPanelResize = rightPanelResize.then(() => desktop.SetFilesPanel(open, width))
+    .catch(error => { console.warn('无法调整 SFTP 窗口宽度', error); });
+}
 $('#toggle-sftp').onclick = () => {
-  if ($('#files-panel').hidden) {
-    showPane('files'); setWorkspaceVisible(true);
-    const adjust = native()?.ExpandWindowWidth;
-    if (adjust && appearance.filesPosition === 'right') {
-      const panelWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--files-width')) || 420;
-      adjust(Math.round((panelWidth + 8) * effectiveScale)).then(applied => { rightPanelExpansion = applied || 0; }).catch(() => { rightPanelExpansion = 0; });
-    }
-  } else {
-    setWorkspaceVisible(false);
-    const adjust = native()?.ExpandWindowWidth, applied = rightPanelExpansion;
-    rightPanelExpansion = 0;
-    if (adjust && applied && appearance.filesPosition === 'right') adjust(-applied).catch(() => {});
-  }
+  if ($('#files-panel').hidden) { showPane('files'); setWorkspaceVisible(true); }
+  else setWorkspaceVisible(false);
 };
 function showPane(pane, persist = true) { workspaceInitialized = true; setWorkspaceVisible(true, false); $$('.file-tab').forEach(tab => tab.classList.toggle('active', tab.dataset.pane === pane)); $('#files-view').hidden = pane !== 'files'; $('#transfers-view').hidden = pane !== 'transfers'; $('#commands-view').hidden = pane !== 'commands'; $('#common-apps-view').hidden = pane !== 'common-apps'; window.DengCommonApps?.render(); $('.follow-label').hidden = pane !== 'files'; $('.files-tip').hidden = pane !== 'files'; if (persist) save('dengshell.workspace', { ...readSaved('dengshell.workspace', {}), pane }); updateTransferNotice(); }
 $$('.file-tab').forEach(tab => { tab.onclick = () => showPane(tab.dataset.pane); });
@@ -1083,7 +1080,7 @@ async function uploadNative(paths, state = current(), directory = state?.cwd) {
   if (!decision) return;
   const result = await post(`/api/sessions/${state.id}/upload-local`, { paths, directory, ...decision });
   for (const id of result.ids) { nativeUploadIDs.add(id); const task = localTasks.get(id); if (task?.historicalResult) { task.resultSeen = false; delete task.historicalResult; } }
-  await pollTransfers(); updateTransferNotice(); if (result.ids.length) toast(`已添加 ${result.ids.length} 个上传任务`); if (!result.ids.length) { toast(decision.skipTargets.length ? '已跳过同名项目' : '目录已创建'); await navigate(state.cwd, state); }
+  if (result.ids.length) toast(`已添加 ${result.ids.length} 个上传任务`); await pollTransfers(); updateTransferNotice(); if (!result.ids.length) { toast(decision.skipTargets.length ? '已跳过同名项目' : '目录已创建'); await navigate(state.cwd, state); }
 }
 window.cloudshellNativeDrop = safe(async ({ x, y, paths }) => {
   const rect = $('#files-panel').getBoundingClientRect(); if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) return toast('请将文件拖入下方文件区域');
@@ -1134,15 +1131,16 @@ async function cancelTask(task) {
 async function retryTask(task) {
   const overwrite = task.error?.includes('已存在'); if (overwrite && !await ask({ title: `覆盖 ${task.name}？`, description: `将替换远程文件 ${task.target}。`, confirm: '覆盖并上传' })) return;
   if (!task.file) { await post(`/api/transfers/${task.id}/retry`, { overwrite }); await remove(`/api/transfers/${task.id}`); localTasks.delete(task.id); await pollTransfers(); return; }
-  await remove(`/api/transfers/${task.id}`); localTasks.delete(task.id); const next = { ...task, id: crypto.randomUUID(), done: 0, error: '', status: 'queued', overwrite, refreshed: false, resultSeen: false, historicalResult: false }; localTasks.set(next.id, next); pumpUploads(); renderTransfers();
+  await remove(`/api/transfers/${task.id}`); localTasks.delete(task.id); const next = { ...task, id: crypto.randomUUID(), done: 0, error: '', status: 'queued', overwrite, refreshed: false, resultSeen: false, historicalResult: false, completionNotified: false }; localTasks.set(next.id, next); pumpUploads(); renderTransfers();
 }
 // Read state lives on each task so repeated polls cannot re-notify a result.
 // Initial history is already read; jobs created by this window are always new.
 function updateTransferNotice() {
-  const viewing = !document.hidden && !window.DengShellWindowHidden && !window.DengSecurityLock?.isLocked()
+  const viewing = !document.hidden && !window.DevShellWindowHidden && !window.DengSecurityLock?.isLocked()
     && !$('#files-panel').hidden && !$('#transfers-view').hidden && $('#transfers-view').getClientRects().length > 0
     && !document.querySelector('dialog[open]');
   const results = [...localTasks.values()].filter(task => ['done', 'failed'].includes(task.status));
+  window.DevShellTransfers?.update([...localTasks.values()], viewing);
   if (viewing) for (const task of results) { task.resultSeen = true; delete task.historicalResult; }
   const unread = results.filter(task => !task.resultSeen), failed = unread.filter(task => task.status === 'failed').length;
   const badge = $('#transfer-count'), tab = $('.file-tab[data-pane="transfers"]');

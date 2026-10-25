@@ -12,10 +12,10 @@ func TestInitialWindowUsesMonitorResolutionAndFitsWorkArea(t *testing.T) {
 		monitor monitorBounds
 		want    initialWindowBounds
 	}{
-		{"1080p", monitorBounds{Width: 1920, Height: 1080, WorkWidth: 1920, WorkHeight: 1040}, initialWindowBounds{240, 115, 1440, 810, 940, 360, 1920, 1040}},
-		{"small laptop", monitorBounds{Width: 1366, Height: 768, WorkWidth: 1366, WorkHeight: 728}, initialWindowBounds{170, 76, 1025, 576, 940, 360, 1366, 728}},
-		{"scaled logical display", monitorBounds{Width: 1093, Height: 614, WorkWidth: 1093, WorkHeight: 580}, initialWindowBounds{136, 59, 820, 461, 820, 360, 1093, 580}},
-		{"secondary negative origin", monitorBounds{X: -1920, Width: 1920, Height: 1080, WorkX: -1920, WorkY: 32, WorkWidth: 1920, WorkHeight: 1048}, initialWindowBounds{-1680, 151, 1440, 810, 940, 360, 1920, 1048}},
+		{"1080p", monitorBounds{Width: 1920, Height: 1080, WorkWidth: 1920, WorkHeight: 1040}, initialWindowBounds{240, 115, 1440, 810, 1100, 360, 1920, 1040}},
+		{"small laptop", monitorBounds{Width: 1366, Height: 768, WorkWidth: 1366, WorkHeight: 728}, initialWindowBounds{133, 76, 1100, 576, 1100, 360, 1366, 728}},
+		{"scaled logical display", monitorBounds{Width: 1093, Height: 614, WorkWidth: 1093, WorkHeight: 580}, initialWindowBounds{0, 59, 1093, 461, 1093, 360, 1093, 580}},
+		{"secondary negative origin", monitorBounds{X: -1920, Width: 1920, Height: 1080, WorkX: -1920, WorkY: 32, WorkWidth: 1920, WorkHeight: 1048}, initialWindowBounds{-1680, 151, 1440, 810, 1100, 360, 1920, 1048}},
 		{"tiny usable area", monitorBounds{Width: 800, Height: 600, WorkWidth: 450, WorkHeight: 320}, initialWindowBounds{0, 0, 450, 320, 450, 320, 450, 320}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -61,6 +61,9 @@ func TestDesktopInstancesIsolatePortableFolders(t *testing.T) {
 
 func TestRestoreSavedWindowBounds(t *testing.T) {
 	initial := initialWindowForMonitor(monitorBounds{Width: 1920, Height: 1080, WorkWidth: 1920, WorkHeight: 1040})
+	if narrow := restoreSavedWindowBounds(initial, 640, 600); narrow.Width != defaultMinWindowWidth {
+		t.Fatalf("old narrow window must adopt the toolbar minimum: %+v", narrow)
+	}
 	restored := restoreSavedWindowBounds(initial, 1400, 900)
 	if restored.Width != 1400 || restored.Height != 900 || restored.X != 260 || restored.Y != 70 {
 		t.Fatalf("saved dimensions not centered: %+v", restored)

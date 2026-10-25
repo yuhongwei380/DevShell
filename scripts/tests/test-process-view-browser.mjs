@@ -67,11 +67,11 @@ try {
  await page.evaluate(()=>activate('process-a'));n=await page.evaluate(()=>qaRequests.length);await new Promise(r=>setTimeout(r,1500));assert.equal(await page.evaluate(()=>qaRequests.length),n);
  await page.evaluate(()=>activate('process-a','processes'));await page.click('#process-view-pause');
  await page.waitForFunction(()=>!document.querySelector('#process-view-refresh').disabled);
- await page.evaluate(()=>window.DengShellWindowHidden=true);n=await page.evaluate(()=>qaRequests.length);await new Promise(r=>setTimeout(r,1500));assert.equal(await page.evaluate(()=>qaRequests.length),n);
- await page.evaluate(()=>window.DengShellWindowHidden=false);
+ await page.evaluate(()=>window.DevShellWindowHidden=true);n=await page.evaluate(()=>qaRequests.length);await new Promise(r=>setTimeout(r,1500));assert.equal(await page.evaluate(()=>qaRequests.length),n);
+ await page.evaluate(()=>window.DevShellWindowHidden=false);
  await page.click('#process-view-pause');
  for(const theme of ['light','dark']){
-  await page.evaluate(t=>CloudShellTheme.set(t),theme);await page.waitForFunction(()=>!document.documentElement.dataset.lightSwitch);
+  await page.evaluate(t=>DevShellTheme.set(t),theme);await page.waitForFunction(()=>!document.documentElement.dataset.lightSwitch);
   await page.screenshot({path:stage+'/process-view-'+theme+'.png'});
  }
  await page.setViewport({width:800,height:600});

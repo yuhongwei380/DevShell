@@ -54,7 +54,7 @@ dialog :is(input, select):focus { background-color: var(--focus-input); }
 [data-theme="dark"] :is(.tree-shortcut, .tree-row):hover { background: var(--surface-hover); }
 [data-theme="dark"] :is(button, summary):focus-visible { background-color: var(--focus-surface); }
 [data-theme="dark"] :is(.file-tab.active, .connection-card.selected, .tree-shortcut.selected, .tree-row.selected) { background: var(--surface-selected); color: var(--accent); }
-[data-theme="dark"] :is(.meter, .network-card, .path-form, .connection-search, .server-icon, .count-badge, .disk-total-bar, .transfer-progress, .input-with-button button) { background: var(--surface-inset); }
+[data-theme="dark"] :is(.meter, .network-card, .path-form, .connection-search, .server-icon, .count-badge, .disk-total-bar, .input-with-button button) { background: var(--surface-inset); }
 [data-theme="dark"] .connection-group h3 .group-count { background: var(--surface-inset); }
 [data-theme="dark"] .connection-card.selected .server-icon { background: #344f64; color: var(--accent); }
 [data-theme="dark"] .upload-button { background: #263b4b; }

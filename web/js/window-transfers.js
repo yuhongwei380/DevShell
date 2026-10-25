@@ -6,7 +6,7 @@
  const receiving=new Set(),completed=new Set();
  const available=()=>typeof sessions!=='undefined'&&window.DengPortablePreferences?.ready;
  function shortTitle(value){let title='',bytes=0;for(const c of value){bytes+=new TextEncoder().encode(c).length;if(bytes>220)return title+'…';title+=c;}return title;}
- function details(){const states=[...sessions.values()].filter(s=>!s.closed&&!s.localOnly);const names=states.map(s=>profileFor(s)?.name||'SSH');return{id,title:shortTitle((boot.detachedNonce?'独立窗口':'主窗口')+(names.length?' · '+names.slice(0,3).join('、'):' · DevShell')),sessionIds:states.map(s=>s.id),visible:!window.DengShellWindowHidden};}
+ function details(){const states=[...sessions.values()].filter(s=>!s.closed&&!s.localOnly);const names=states.map(s=>profileFor(s)?.name||'SSH');return{id,title:shortTitle((boot.detachedNonce?'独立窗口':'主窗口')+(names.length?' · '+names.slice(0,3).join('、'):' · DevShell')),sessionIds:states.map(s=>s.id),visible:!window.DevShellWindowHidden};}
  async function register(){
   if(!available()||closing)return;
   if(registerPromise){await registerPromise;return;}
@@ -14,7 +14,7 @@
   try{await registerPromise}finally{registerPromise=null}
  }
  async function incoming(){
-  if(!registered||pollBusy||closing||window.DengShellWindowHidden)return;
+  if(!registered||pollBusy||closing||window.DevShellWindowHidden)return;
   pollBusy=true;
   try{const list=await api('/api/windows/views/'+id+'/incoming');for(const item of list){if(receiving.has(item.nonce)||completed.has(item.nonce))continue;receiving.add(item.nonce);
     window.DengSessionWindows.receive(item.nonce,id).then(()=>{completed.add(item.nonce);if(completed.size>128)completed.delete(completed.values().next().value);return register()}).catch(error=>{toast('合并未完成：'+error.message)}).finally(()=>receiving.delete(item.nonce));

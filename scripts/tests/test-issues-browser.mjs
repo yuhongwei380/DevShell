@@ -49,8 +49,8 @@ try {
   sessions.clear();localTasks.clear();window.socketCloses=0;window.nativeQuits=0;window.nativeCancels=0;
   window.go={desktop:{Desktop:{ConfirmQuit:async()=>{nativeQuits++},CancelQuit:async()=>{nativeCancels++}}}};
   const id='lock-owner';sessions.set(id,{...makeSessionState({id,profileId:'issue-tab-0',home:'/'}),connected:true,ready:false,ws:{close(){socketCloses++}},term:{dispose(){}},host:document.createElement('div')});activeID=id;
-  const headers={'Content-Type':'application/json','X-CloudShell-Token':CLOUDSHELL.token};
-  const req=async(path,body)=>{const r=await fetch(CLOUDSHELL.base+'/api/security-lock/'+path,{method:'POST',headers,body:JSON.stringify(body)});return r.json()};
+  const headers={'Content-Type':'application/json','X-CloudShell-Token':DEVSHELL.token};
+  const req=async(path,body)=>{const r=await fetch(DEVSHELL.base+'/api/security-lock/'+path,{method:'POST',headers,body:JSON.stringify(body)});return r.json()};
   const {grant}=await req('authorize',{});await req('settings',{grant,enabled:true,idleSeconds:0,passwordEnabled:true,password:'4826',passwordHint:'fixture',twoFactorEnabled:false});await req('lock',{});
  });
  await page.waitForFunction(()=>DengSecurityLock.isLocked());await page.click('#security-unlock-open');
@@ -59,10 +59,10 @@ try {
  await page.click('#security-exit-cancel');assert.equal(await page.evaluate(()=>nativeCancels),1);assert.equal(await page.evaluate(()=>socketCloses),0);assert.equal(await page.evaluate(()=>nativeQuits),0);
  await page.evaluate(()=>requestQuit());await page.click('#security-exit-confirm');
  await page.waitForFunction(()=>nativeQuits===1);assert.equal(await page.evaluate(()=>socketCloses),1);assert(await page.evaluate(()=>DengSecurityLock.isLocked()));
- const locked=await page.evaluate(async()=>{const r=await fetch(CLOUDSHELL.base+'/api/config',{headers:{'X-CloudShell-Token':CLOUDSHELL.token}});return r.status});assert.equal(locked,423);
+ const locked=await page.evaluate(async()=>{const r=await fetch(DEVSHELL.base+'/api/config',{headers:{'X-CloudShell-Token':DEVSHELL.token}});return r.status});assert.equal(locked,423);
  await page.screenshot({path:stage+'/issue-locked-exit.png'});
  checks.push('Locked unlock-form can cancel/confirm native close; owning socket closes; no unlock or protected API access');
  // Restore the isolated fixture for following suites.
- await page.evaluate(async()=>{const request=async(path,body)=>(await fetch(CLOUDSHELL.base+'/api/security-lock/'+path,{method:'POST',headers:{'Content-Type':'application/json','X-CloudShell-Token':CLOUDSHELL.token},body:JSON.stringify(body)})).json();await request('unlock',{method:'password',value:'4826'});const{grant}=await request('authorize',{method:'password',value:'4826'});await request('settings',{grant,enabled:false,passwordEnabled:false,twoFactorEnabled:false,idleSeconds:0})});
+ await page.evaluate(async()=>{const request=async(path,body)=>(await fetch(DEVSHELL.base+'/api/security-lock/'+path,{method:'POST',headers:{'Content-Type':'application/json','X-CloudShell-Token':DEVSHELL.token},body:JSON.stringify(body)})).json();await request('unlock',{method:'password',value:'4826'});const{grant}=await request('authorize',{method:'password',value:'4826'});await request('settings',{grant,enabled:false,passwordEnabled:false,twoFactorEnabled:false,idleSeconds:0})});
  assert.deepEqual(errors,[]);fs.writeFileSync(stage+'/issues-browser.json',JSON.stringify({passed:true,checks,errors},null,2));console.log('PASS',checks);
 } catch(error){if(page)await page.screenshot({path:stage+'/issues-failure.png'});console.error({errors});throw error}finally{await browser.close()}

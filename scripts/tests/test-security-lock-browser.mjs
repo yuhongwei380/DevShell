@@ -61,7 +61,7 @@ try{
  await lock(first);await first.click('#security-unlock-open');assert.equal(await first.$$eval('#security-unlock-method option',es=>es.map(e=>e.value).join(',')),'totp');await unlock(first,otp(key,1),'totp');
  checks.push('Human activity resets idle, background polling does not; independent QR decoding and real TOTP-only unlock');
  await api('/api/security-lock/lock',{});await first.reload({waitUntil:'domcontentloaded'});await first.waitForSelector('#security-lock-screen[open]');assert.equal((await api('/api/config')).status,423);
- await first.evaluate(()=>CloudShellTheme.set('dark'));await first.waitForFunction(()=>!document.documentElement.dataset.lightSwitch);await first.screenshot({path:stage+'/locked-dark.png'});
+ await first.evaluate(()=>DevShellTheme.set('dark'));await first.waitForFunction(()=>!document.documentElement.dataset.lightSwitch);await first.screenshot({path:stage+'/locked-dark.png'});
  await first.setViewport({width:480,height:640});await first.click('#security-unlock-open');assert(await first.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await first.waitForFunction(()=>{const r=document.querySelector('#security-unlock-form').getBoundingClientRect();return Math.abs((r.left+r.right)/2-innerWidth/2)<2&&Math.abs((r.top+r.bottom)/2-innerHeight/2)<2;});await first.screenshot({path:stage+'/locked-narrow.png'});
  const geometry=[];
  for(const [width,height,scale]of [[480,640,1],[800,600,1],[1440,1000,1],[1440,1000,1.5],[1920,1200,2]]){

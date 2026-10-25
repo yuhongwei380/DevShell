@@ -1,10 +1,10 @@
 package main
 
 import (
-	"cloudshell/internal/app"
-	"cloudshell/internal/desktop"
-	"cloudshell/internal/installguard"
-	"cloudshell/internal/updater"
+	"devshell/internal/app"
+	"devshell/internal/desktop"
+	"devshell/internal/installguard"
+	"devshell/internal/updater"
 	"embed"
 	"errors"
 	"flag"
@@ -18,7 +18,7 @@ import (
 //go:embed web
 var assets embed.FS
 
-//go:embed build/dengshell.png
+//go:embed build/devshell.png
 var desktopIcon []byte
 
 func main() {
@@ -38,7 +38,7 @@ func main() {
 	browser := flag.Bool("browser", false, "run local browser mode instead of a desktop window")
 	address := flag.String("addr", "127.0.0.1:0", "local API listen address")
 	dev := flag.Bool("dev", false, "read frontend assets from the web directory")
-	config := flag.String("config", "", "configuration directory (default: data beside executable; macOS app: Application Support/DengShell)")
+	config := flag.String("config", "", "configuration directory (default: data beside executable; macOS app: Application Support/DevShell)")
 	flag.Parse()
 	var content fs.FS
 	var contentErr error

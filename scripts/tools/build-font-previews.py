@@ -8,7 +8,7 @@ from pathlib import Path
 from fontTools import subset
 from fontTools.ttLib import TTFont
 ROOT = Path(__file__).resolve().parent.parent.parent
-TEXT = 'DengShell SSH root@server:~$ echo "Hello" 0123456789 /home/user 简体中文 繁體中文 连接服务器 文件管理 网络流量 ABC abc ┌─────┐│'
+TEXT = 'DevShell SSH root@server:~$ echo "Hello" 0123456789 /home/user 简体中文 繁體中文 连接服务器 文件管理 网络流量 ABC abc ┌─────┐│'
 p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('website', type=Path)
 a = p.parse_args()

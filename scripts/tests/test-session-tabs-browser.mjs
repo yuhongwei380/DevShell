@@ -35,7 +35,7 @@ try {
  await page.evaluate(()=>chooseAppearance({monitorVisible:false,filesPosition:'top',terminalFontSize:19}));
  await page.click('#settings-button');await page.click('#reset-layout');
  await page.waitForFunction(()=>appearance.monitorVisible===true&&appearance.filesPosition==='right'&&terminalFont===14);
- await page.evaluate(()=>{DengShellHelp.replayGuide()});
+ await page.evaluate(()=>{DevShellHelp.replayGuide()});
  for(let i=0;i<12;i++){
    await page.waitForFunction(n=>document.querySelector('#help-guide-step').textContent.startsWith(n+' / '),{},i+1);await new Promise(r=>setTimeout(r,80));
    const target=await page.$eval('#help-guide-target',e=>e.dataset.target);
@@ -91,7 +91,7 @@ try {
  }
  await page.setViewport({width:1440,height:1000});await page.evaluate(()=>chooseAppearance({uiScale:1}));
  for(const theme of ['light','dark']){
-   await page.evaluate(t=>CloudShellTheme.set(t),theme);await page.waitForFunction(()=>!document.documentElement.dataset.lightSwitch);
+   await page.evaluate(t=>DevShellTheme.set(t),theme);await page.waitForFunction(()=>!document.documentElement.dataset.lightSwitch);
    await page.screenshot({path:stage+`header-${theme}.png`});
    await page.click('#settings-button');await page.screenshot({path:stage+`settings-${theme}.png`});await page.keyboard.press('Escape');
  }

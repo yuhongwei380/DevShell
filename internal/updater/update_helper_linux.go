@@ -4,7 +4,7 @@ package updater
 
 import (
 	"bytes"
-	"cloudshell/internal/app"
+	"devshell/internal/app"
 	"context"
 	"errors"
 	"fmt"

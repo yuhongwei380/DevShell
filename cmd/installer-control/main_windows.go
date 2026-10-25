@@ -1,7 +1,7 @@
 package main
 
 import (
-	"cloudshell/internal/installguard"
+	"devshell/internal/installguard"
 	"errors"
 	"flag"
 	"os"
