@@ -111,9 +111,10 @@ dialog :is(input, select):focus { background-color: var(--focus-input); }
 [data-theme="dark"] .primary-button { background: #416780; color: #eff6fb; }
 [data-theme="dark"] .primary-button:is(:hover, :focus-visible) { background: var(--primary-focus); color: #fff; }
 [data-theme="dark"] .popup-menu { box-shadow: 0 8px 30px #00000033; }
-[data-theme="dark"] .transfer-notice { color: #c6bba4; background: #323028; }
+[data-theme="dark"] .transfer-notice { color: #cfc4a8; background: #2d3742; }
 [data-theme="dark"] :is(.transfer-empty, .transfer-empty strong, .transfer-empty > svg, .transfer-info small, .transfer-size, .transfer-row > svg) { color: var(--muted); }
-[data-theme="dark"] .transfer-state { color: #d0bd96; background: #3a3327; }
+/* In-progress chips keep the amber cue but sit on the cool dark surface. */
+[data-theme="dark"] .transfer-state { color: #dcbd82; background: #2c3a45; }
 [data-theme="dark"] .transfer-state.done { color: #a3cbb6; background: #284338; }
 [data-theme="dark"] .transfer-state.failed { color: #e0aaa2; background: #452f32; }
 [data-theme="dark"] .transfer-state.cancelled { color: var(--muted); background: #293846; }
