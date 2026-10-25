@@ -1,6 +1,6 @@
 {
   "name": "dengshell",
-  "version": "26.10.1",
+  "version": "26.10.2",
   "private": true,
   "description": "DengShell SSH desktop workspace",
   "scripts": {
