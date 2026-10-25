@@ -1013,9 +1013,25 @@ function setWorkspaceVisible(visible, persist = true) {
   if (persist) { layout.filesHidden = !visible; save('cloudshell.layout', layout); }
   requestAnimationFrame(fitActive);
 }
+// A right-docked SFTP panel opens into new window space instead of squeezing
+// the terminal: the window grows to the right by panel width plus splitter,
+// anchored on its left edge, and shrinks back by the same amount on close.
+// Maximised windows skip this; the recorded delta keeps reopen/close symmetric.
+let rightPanelExpansion = 0;
 $('#toggle-sftp').onclick = () => {
-  if ($('#files-panel').hidden) { showPane('files'); setWorkspaceVisible(true); }
-  else setWorkspaceVisible(false);
+  if ($('#files-panel').hidden) {
+    showPane('files'); setWorkspaceVisible(true);
+    const adjust = native()?.ExpandWindowWidth;
+    if (adjust && appearance.filesPosition === 'right') {
+      const panelWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--files-width')) || 420;
+      adjust(Math.round((panelWidth + 8) * effectiveScale)).then(applied => { rightPanelExpansion = applied || 0; }).catch(() => { rightPanelExpansion = 0; });
+    }
+  } else {
+    setWorkspaceVisible(false);
+    const adjust = native()?.ExpandWindowWidth, applied = rightPanelExpansion;
+    rightPanelExpansion = 0;
+    if (adjust && applied && appearance.filesPosition === 'right') adjust(-applied).catch(() => {});
+  }
 };
 function showPane(pane, persist = true) { workspaceInitialized = true; setWorkspaceVisible(true, false); $$('.file-tab').forEach(tab => tab.classList.toggle('active', tab.dataset.pane === pane)); $('#files-view').hidden = pane !== 'files'; $('#transfers-view').hidden = pane !== 'transfers'; $('#commands-view').hidden = pane !== 'commands'; $('#common-apps-view').hidden = pane !== 'common-apps'; window.DengCommonApps?.render(); $('.follow-label').hidden = pane !== 'files'; $('.files-tip').hidden = pane !== 'files'; if (persist) save('dengshell.workspace', { ...readSaved('dengshell.workspace', {}), pane }); updateTransferNotice(); }
 $$('.file-tab').forEach(tab => { tab.onclick = () => showPane(tab.dataset.pane); });

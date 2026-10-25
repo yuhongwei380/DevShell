@@ -187,6 +187,45 @@ func (d *Desktop) WindowAction(action string) (DesktopWindowState, error) {
 	return d.WindowState(), nil
 }
 
+// ExpandWindowWidth resizes the main window horizontally by delta logical
+// pixels, keeping its left edge anchored so a right side panel grows into new
+// space instead of squeezing the terminal. Maximised or fullscreen windows are
+// left alone and expansion is clamped to the current monitor's work area;
+// shrinking is clamped by the window's minimum width. Returns the delta
+// actually applied (0 when the window was not touched).
+func (d *Desktop) ExpandWindowWidth(delta int) int {
+	if d.detachedNonce != "" || d.ctx == nil || delta == 0 || runtime.WindowIsMaximised(d.ctx) || runtime.WindowIsFullscreen(d.ctx) {
+		return 0
+	}
+	x, y := runtime.WindowGetPosition(d.ctx)
+	width, height := runtime.WindowGetSize(d.ctx)
+	target := width + delta
+	if delta > 0 {
+		for _, screen := range runtime.ScreenGetAll(d.ctx) {
+			if !screen.IsCurrent {
+				continue
+			}
+			if limit := screen.Position.X + screen.WorkArea.Width - x; target > limit {
+				target = limit
+			}
+		}
+	}
+	if target == width {
+		return 0
+	}
+	runtime.WindowSetSize(d.ctx, target, height)
+	applied, _ := runtime.WindowGetSize(d.ctx)
+	if applied == width {
+		return 0
+	}
+	// Some platforms re-centre while resizing; pin the left edge so the extra
+	// width always appears on the right, next to where the panel opens.
+	if nx, ny := runtime.WindowGetPosition(d.ctx); nx != x || ny != y {
+		runtime.WindowSetPosition(d.ctx, x, y)
+	}
+	return applied - width
+}
+
 func (d *Desktop) OpenTerminal(sessionID string) error {
 	nonce := ""
 	if remote, ok := d.app.(*remoteDesktopBackend); ok && remote.launch.SessionID == sessionID {
