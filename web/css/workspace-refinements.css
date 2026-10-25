@@ -84,6 +84,15 @@
 @container (max-width:410px) { .terminal-command-bar textarea:placeholder-shown { font-size:12px; } }
 @container (max-width:370px) { .terminal-command-bar textarea:placeholder-shown { font-size:11px; } }
 @container (max-width:330px) { .terminal-command-bar textarea:placeholder-shown { font-size:10px; } }
+/* Tab 补全候选框：贴着输入条上沿弹出，沿用终端区的深色配色；
+   左列命令名，中列参数格式，右侧一句用途说明。 */
+.command-completion-popup { position:absolute; left:0; right:0; bottom:calc(100% + 5px); z-index:24; display:flex; flex-direction:column; padding:5px; border:1px solid #2c4454; border-radius:10px; background:#10212df5; color:#d7e1e8; box-shadow:0 12px 28px #06101855; max-height:246px; overflow:auto; overscroll-behavior:contain; scrollbar-width:thin; font-size:12px; line-height:1.4; --wails-draggable:no-drag; }
+.command-completion-popup[hidden] { display:none; }
+.command-completion-option { display:flex; align-items:baseline; gap:9px; padding:5px 9px; border-radius:7px; cursor:pointer; user-select:none; }
+.command-completion-option:hover, .command-completion-option.is-active { background:#1d3546; }
+.command-completion-name { flex:none; min-width:88px; font-family:var(--terminal-family,monospace); font-size:12px; color:#edf5f9; }
+.command-completion-usage { font-family:var(--terminal-family,monospace); font-size:11px; color:#9fb8c8; }
+.command-completion-note { margin-left:auto; color:#809aa9; font-size:11px; white-space:nowrap; }
 .ping-chart { display:grid; grid-template-columns:max-content minmax(0,1fr); gap:7px; margin-top:13px; padding:5px 0; }
 .ping-axis { position:relative; min-width:24px; color:var(--muted); font-size:9px; line-height:1; font-variant-numeric:tabular-nums; }
 .ping-axis > span { position:absolute; right:0; transform:translateY(-50%); white-space:nowrap; }
