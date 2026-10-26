@@ -1,11 +1,11 @@
 package app
 
 import (
-	"devshell/internal/updateproxy"
-	"devshell/internal/updatetrust"
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
+	"devshell/internal/updateproxy"
+	"devshell/internal/updatetrust"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -35,7 +35,7 @@ const ApplicationVersion = "v26.10.3"
 // ApplicationDisplayVersion identifies this self-maintained branch in the user
 // interface. ApplicationVersion above stays the functional version that drives
 // update comparison and package metadata; never put branch text into it.
-const ApplicationDisplayVersion = "ver.Phoenix · v26.10.3-rc.2"
+const ApplicationDisplayVersion = "ver.Phoenix · v26.10.3-rc.4"
 
 // Package managers use ApplicationVersion without the leading v. It must stay
 // greater than the last upstream package version (0.3.0).
@@ -48,7 +48,7 @@ const ApplicationPackageVersion = "26.10.3"
 // sequence is numerically below the retired 11-digit high-water mark
 // (20261024156), so installs at any older build must manually install the
 // 2026102401 release once before built-in updates continue normally.
-const ApplicationBuild uint64 = 2026102601
+const ApplicationBuild uint64 = 2026102602
 
 // Updates are published as GitHub Release assets of the maintained repository.
 // Release assets must be named exactly: up.exe / up.exe.json,
@@ -121,24 +121,28 @@ type startupUpdate struct {
 }
 
 func updateAddress(platform string) (string, string) {
-	if platform == "windows-amd64" {
-		return updateReleaseDownload + "up.exe.json", updateReleaseDownload + "up.exe"
+	manifest, artifact := updateAssetNames(platform)
+	if manifest == "" {
+		return "", ""
 	}
-	if platform == ArchUpdatePlatform {
-		return updateReleaseDownload + "up.pkg.tar.zst.json", updateReleaseDownload + "up.pkg.tar.zst"
+	return updateReleaseDownload + manifest, updateReleaseDownload + artifact
+}
+
+func updateAssetNames(platform string) (string, string) {
+	switch platform {
+	case "windows-amd64":
+		return "up.exe.json", "up.exe"
+	case ArchUpdatePlatform:
+		return "up.pkg.tar.zst.json", "up.pkg.tar.zst"
+	case "linux-amd64":
+		return "up.deb.json", "up.deb"
+	case DarwinArmUpdatePlatform:
+		return "up-macos-arm64.json", macOSBundleAsset
+	case DarwinAmdUpdatePlatform:
+		return "up-macos-amd64.json", macOSBundleAsset
+	default:
+		return "", ""
 	}
-	if platform == "linux-amd64" {
-		return UpdateManifestURL, updateReleaseDownload + "up.deb"
-	}
-	// macOS ships one universal bundle archive; the per-architecture descriptor
-	// only differs in the platform field it must match.
-	if platform == DarwinArmUpdatePlatform {
-		return updateReleaseDownload + "up-macos-arm64.json", updateReleaseDownload + macOSBundleAsset
-	}
-	if platform == DarwinAmdUpdatePlatform {
-		return updateReleaseDownload + "up-macos-amd64.json", updateReleaseDownload + macOSBundleAsset
-	}
-	return "", ""
 }
 
 var updateTransport = func() *http.Transport {
@@ -152,7 +156,7 @@ func updateClient(timeout time.Duration) *http.Client {
 		// GitHub serves release assets from objects.githubusercontent.com and,
 		// since the 2025 asset migration, release-assets.githubusercontent.com.
 		// Both are official GitHub asset hosts; anything else is rejected.
-		if len(via) > 2 || req.URL.Scheme != "https" || (req.URL.Host != "github.com" && req.URL.Host != "objects.githubusercontent.com" && req.URL.Host != "release-assets.githubusercontent.com") || req.URL.User != nil {
+		if len(via) > 2 || req.URL.Scheme != "https" || (req.URL.Host != "api.github.com" && req.URL.Host != "github.com" && req.URL.Host != "objects.githubusercontent.com" && req.URL.Host != "release-assets.githubusercontent.com") || req.URL.User != nil {
 			return errors.New("更新地址跳转无效")
 		}
 		return nil
@@ -161,6 +165,9 @@ func updateClient(timeout time.Duration) *http.Client {
 func noUpdate(reason string) UpdateStatus {
 	platform := currentUpdatePlatform()
 	source, _ := updateAddress(platform)
+	if isReleaseCandidateBuild() {
+		source = updateReleaseListURL
+	}
 	return UpdateStatus{Status: "none", CurrentVersion: ApplicationVersion, CurrentBuild: ApplicationBuild, Source: source, Platform: platform, Reason: reason}
 }
 func FileSHA256(path string) (string, error) {
@@ -218,8 +225,18 @@ func (a *App) updateProbe(ctx context.Context, timeout time.Duration) UpdateStat
 		return noUpdate("invalid-receipt")
 	}
 	platform := currentUpdatePlatform()
-	address, _ := updateAddress(platform)
-	result := checkUpdate(ctx, updateClient(timeout), address, platform, hash, receipt)
+	address, artifact := updateAddress(platform)
+	client := updateClient(timeout)
+	if isReleaseCandidateBuild() {
+		source, reason := latestReleaseUpdateSource(ctx, client, platform)
+		if reason != "" {
+			result := noUpdate(reason)
+			result.Source = updateReleaseListURL
+			return result
+		}
+		address, artifact = source.manifestURL, source.artifactURL
+	}
+	result := checkUpdateTrustedAt(ctx, client, address, artifact, platform, hash, receipt, updatetrust.PublisherKeys(), time.Now())
 	if result.Status == "available" && !NativePackageUpdateSupported() {
 		result.InstallerReady = false
 		result.Reason = "当前发行版不支持内置安装或缺少安装工具，请从 GitHub Releases 下载对应安装包升级，保留原数据目录。"
@@ -248,10 +265,14 @@ func checkUpdate(ctx context.Context, client *http.Client, address, platform, cu
 // The application always supplies its compiled publisher keys. Tests use an
 // independent key through this helper, never a production signing private key.
 func checkUpdateTrusted(ctx context.Context, client *http.Client, address, platform, currentHash string, receipt UpdateReceipt, trusted map[string]ed25519.PublicKey, now time.Time) UpdateStatus {
+	_, artifact := updateAddress(platform)
+	return checkUpdateTrustedAt(ctx, client, address, artifact, platform, currentHash, receipt, trusted, now)
+}
+
+func checkUpdateTrustedAt(ctx context.Context, client *http.Client, address, artifact, platform, currentHash string, receipt UpdateReceipt, trusted map[string]ed25519.PublicKey, now time.Time) UpdateStatus {
 	result := noUpdate("unavailable")
 	result.Source = address
 	result.Platform = platform
-	_, artifact := updateAddress(platform)
 	if artifact == "" {
 		result.Reason = "platform-unavailable"
 		return result

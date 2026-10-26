@@ -1,5 +1,9 @@
 # DevShell 更新日志
 
+## 2026-10-26 RC 内置更新支持 · v26.10.3-rc.4 构建 2026102602
+
+- 修复：RC 版改为从 GitHub Releases 中选择更新，支持 RC→RC 和 RC→正式版内置升级。
+
 ## 2026-10-26 OpenWrt Dropbear 终端兼容 · v26.10.3-rc.2 构建 2026102601
 
 - 修复：Dropbear 服务器跳过可选 exec 启动脚本，直接请求 SSH shell，兼容 OpenWrt ash 终端启动。

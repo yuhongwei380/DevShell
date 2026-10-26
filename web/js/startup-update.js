@@ -28,7 +28,7 @@ async function checkNow(){
   if(result?.status==='available'){await showUpdate(result);return;}
   const label=(version,build)=>build?`${version}（构建 ${build}）`:version;
   if(result?.reason==='current'||result?.reason==='build-rollback'||result?.reason==='version-rollback')toast(`已是最新版本 ${label(result.currentVersion,result.currentBuild)}`);
-  else toast(`检查更新失败：${({unavailable:'网络不可用或无法访问更新源',timeout:'检查超时，请稍后再试','invalid-receipt':'本地更新记录损坏',invalid:'更新描述校验未通过','invalid-signature':'更新签名校验未通过','platform-unavailable':'当前平台未提供内置更新，请从 GitHub Releases 下载对应安装包升级，原数据目录会保留','linux-discontinued':'Linux 版已停止发布更新，当前版本可继续使用；如需升级请改用 Windows / macOS 版，旧版安装包仍可在 Releases 历史版本中获取'})[result?.reason]||'未知错误'}`);
+  else toast(`检查更新失败：${({unavailable:'网络不可用或无法访问更新源',timeout:'检查超时，请稍后再试','release-not-found':'更新源中未找到匹配的 Release 资产','invalid-receipt':'本地更新记录损坏',invalid:'更新描述校验未通过','invalid-signature':'更新签名校验未通过','platform-unavailable':'当前平台未提供内置更新，请从 GitHub Releases 下载对应安装包升级，原数据目录会保留','linux-discontinued':'Linux 版已停止发布更新，当前版本可继续使用；如需升级请改用 Windows / macOS 版，旧版安装包仍可在 Releases 历史版本中获取'})[result?.reason]||'未知错误'}`);
  }catch(error){toast(`检查更新失败：${error.message||String(error)}`)}
  finally{checking=false}
 }
