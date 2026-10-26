@@ -350,8 +350,15 @@ func (r *terminalRelay) run() {
 	if err != nil {
 		return
 	}
-	integration := s.prepareTerminalIntegration()
-	defer s.cleanupTerminalIntegration(integration)
+	var integration terminalIntegration
+	if s.usesDropbearServer() {
+		// OpenWrt ash has no prompt integration. A plain shell request avoids
+		// the optional exec bootstrap and starts the server-configured login shell.
+		s.noteTerminalStageKind("launch-exec", "dropbear-shell-request")
+	} else {
+		integration = s.prepareTerminalIntegration()
+		defer s.cleanupTerminalIntegration(integration)
+	}
 	if plan, reason := terminalLaunchPlan(integration); reason != "" {
 		// Sending it would cost the connection on limited servers, so open a
 		// normal login shell instead and say what was given up.

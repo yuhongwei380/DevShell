@@ -268,6 +268,13 @@ func (s *Session) prepareTerminalLaunch() terminalIntegration {
 	return terminalLaunchScript("/tmp", s.promptUsernameColor+"\n"+s.promptHostnameColor+"\n")
 }
 
+// Dropbear serves many embedded systems with limited or customized command
+// handling. Use the SSH shell request directly instead of the optional exec
+// bootstrap; this also preserves the configured login shell on OpenWrt ash.
+func (s *Session) usesDropbearServer() bool {
+	return s.client != nil && strings.Contains(strings.ToLower(string(s.client.ServerVersion())), "dropbear")
+}
+
 // Generate the same shell-specific startup hooks for batching and launching.
 func terminalBootstrap(integration terminalIntegration, shellPath, stylePath string) (terminalIntegration, map[string]string) {
 	shell := path.Base(shellPath)
