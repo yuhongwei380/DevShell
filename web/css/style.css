@@ -377,10 +377,27 @@ svg use { pointer-events: none; }
 .terminal-output { padding: 0; min-height: 0; overflow: hidden; white-space: normal; }
 .terminal-session { position: absolute; inset: 5px 20px 8px; }
 .terminal-session .xterm { height: 100%; }
-.xterm .xterm-viewport { background: transparent !important; scrollbar-width: thin; scrollbar-color: transparent transparent; }
-.terminal-session:hover .xterm-viewport { scrollbar-color: #9ab5c44d transparent; }
-.terminal-session:hover ::-webkit-scrollbar-thumb { background: #9ab5c44d; }
-.xterm .xterm-scrollable-element > .scrollbar > .slider { background: #9ab5c43d; border-radius: 8px; }
+.xterm .xterm-viewport {
+  background: transparent !important;
+  /* xterm supplies its own overlay scrollbar. Hiding the native viewport
+     scrollbar removes platform arrow buttons that can overlap its thumb. */
+  scrollbar-width: none;
+}
+.xterm .xterm-viewport::-webkit-scrollbar { width: 0; height: 0; }
+.xterm .xterm-viewport::-webkit-scrollbar-button { display: none; }
+.xterm .xterm-scrollable-element > .scrollbar.vertical {
+  width: 6px !important;
+}
+.xterm .xterm-scrollable-element > .scrollbar.vertical > .slider {
+  left: 0 !important;
+  width: 6px !important;
+  background: #9ab5c45d;
+  border-radius: 8px;
+}
+.xterm .xterm-scrollable-element > .scrollbar.vertical > .slider:hover,
+.xterm .xterm-scrollable-element > .scrollbar.vertical > .slider.active {
+  background: #b6ccd87a;
+}
 /* Local prompt scratchpad: ping results print here while no session is active.
    It must match the real terminal: <pre> would otherwise fall back to the UA
    monospace face and a fixed size. */
