@@ -206,3 +206,49 @@ func TestTerminalLaunchScriptTransportsCompressedBootstrap(t *testing.T) {
 		t.Fatalf("runner script missing from the cleanup plan: %v", integration.files)
 	}
 }
+
+type recordingChannelRequester struct {
+	mu      sync.Mutex
+	names   []string
+	replies []bool
+}
+
+func (c *recordingChannelRequester) SendRequest(name string, wantReply bool, payload []byte) (bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.names = append(c.names, name)
+	c.replies = append(c.replies, wantReply)
+	return false, nil // dropbear answers unknown channel requests with REQUEST_FAILURE
+}
+
+// dropbear -I disconnects despite transport-level keepalive requests, but a
+// channel-level request resets the idle timer (reproduced against dropbear
+// 2022.83 -I 5: global keepalives every 1s still died at 5.0s with
+// "Idle timeout", channel requests survived indefinitely).
+func TestDropbearChannelIdleGuardKeepsAskingUntilStopped(t *testing.T) {
+	var ch recordingChannelRequester
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() { dropbearChannelIdleGuard(&ch, ctx, 10*time.Millisecond); close(done) }()
+	time.Sleep(55 * time.Millisecond)
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("guard kept sending after cancellation")
+	}
+	ch.mu.Lock()
+	defer ch.mu.Unlock()
+	if len(ch.names) < 3 {
+		t.Fatalf("guard sent %d requests in 55ms at a 10ms interval", len(ch.names))
+	}
+	for i, name := range ch.names {
+		if name != "keepalive@openssh.com" || ch.replies[i] {
+			t.Fatalf("request %d = (%q, reply=%v), want (\"keepalive@openssh.com\", false)", i, name, ch.replies[i])
+		}
+	}
+	if dropbearIdleGuardInterval >= 5*time.Second {
+		t.Fatalf("interval %v would not stay under the measured -I 5 kill", dropbearIdleGuardInterval)
+	}
+}

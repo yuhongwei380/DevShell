@@ -398,6 +398,15 @@ func (r *terminalRelay) run() {
 	if write(active, websocket.TextMessage, ready) != nil {
 		return
 	}
+	// dropbear 的空闲超时（-I）不认传输层的全局 keepalive 请求，只把通道级
+	// 请求算作活动：实测 -I 5 的服务器上全局保活每 1s 发送仍在 5.0s 被
+	// "Idle timeout" 断开，而通道级请求（即便服务器回 REQUEST_FAILURE）可让
+	// 终端无限期存活。给 dropbear 终端通道加一条不请求应答的保活通道请求。
+	if s.usesDropbearServer() {
+		guardCtx, stopGuard := context.WithCancel(s.ctx)
+		defer stopGuard()
+		go dropbearChannelIdleGuard(sh, guardCtx, dropbearIdleGuardInterval)
+	}
 	if !stopStartup() || startupCtx.Err() != nil {
 		return
 	}

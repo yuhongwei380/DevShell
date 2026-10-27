@@ -275,6 +275,34 @@ func (s *Session) usesDropbearServer() bool {
 	return s.client != nil && strings.Contains(strings.ToLower(string(s.client.ServerVersion())), "dropbear")
 }
 
+// 间隔必须短于服务器配置的 IdleTimeout；实测 OpenWrt 常见 -I 5 配置，
+// 3 秒留出余量且不增加可观流量（单包 <100 字节）。
+const dropbearIdleGuardInterval = 3 * time.Second
+
+// channelRequestSender 是 *ssh.Session 的通道请求子集，便于测试注入。
+type channelRequestSender interface {
+	SendRequest(name string, wantReply bool, payload []byte) (bool, error)
+}
+
+// dropbearChannelIdleGuard 周期性向终端通道发送 keepalive@openssh.com 通道
+// 请求。dropbear 对未知通道请求回 REQUEST_FAILURE，但这已重置其空闲计时器；
+// wantReply=false 让服务器连应答都不发。通道或传输消亡时 SendRequest 报错，
+// 循环随之退出。
+func dropbearChannelIdleGuard(ch channelRequestSender, ctx context.Context, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if _, err := ch.SendRequest("keepalive@openssh.com", false, nil); err != nil {
+				return
+			}
+		}
+	}
+}
+
 // Generate the same shell-specific startup hooks for batching and launching.
 func terminalBootstrap(integration terminalIntegration, shellPath, stylePath string) (terminalIntegration, map[string]string) {
 	shell := path.Base(shellPath)
