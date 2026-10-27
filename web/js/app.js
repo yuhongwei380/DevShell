@@ -547,7 +547,7 @@ function dropSessionView(id, expected = null) {
   state.navAbort?.abort(); state.ws?.close(); state.term?.dispose(); state.host?.remove(); sessions.delete(id);
   if (activeID === id) activeID = sessions.keys().next().value || window.DengStartTabs?.first() || null;
   window.dispatchEvent(new CustomEvent('dengshell:session-context-change'));
-  if (activeID) activate(activeID, window.DengProcessView?.active() === activeID ? 'processes' : 'terminal'); else { renderTabs(); renderSessionInfo(); renderFiles(); }
+  if (activeID) activate(activeID, window.DengProcessView?.active() === activeID ? 'processes' : 'terminal'); else { renderTabs(); renderSessionInfo(); renderFiles(); updateTransferNotice(); }
 }
 async function closeSession(id) {
   if (window.DengStartTabs?.has(id)) return window.DengStartTabs.close(id);
@@ -584,7 +584,7 @@ function activate(id, view = 'terminal') {
   window.dispatchEvent(new CustomEvent('dengshell:session-context-change'));
   window.DengProcessView?.activate(id, view);
   for (const state of sessions.values()) state.host.hidden = state.id !== id;
-  renderTabs(); renderSessionInfo(); renderFiles();
+  renderTabs(); renderSessionInfo(); renderFiles(); updateTransferNotice();
   requestAnimationFrame(() => {
     if (activeID !== id) return;
     $('#session-tabs .session-tab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
@@ -1013,6 +1013,10 @@ function setWorkspaceVisible(visible, persist = true) {
   if (persist) { layout.filesHidden = !visible; save('cloudshell.layout', layout); }
   syncRightPanelWindow();
   requestAnimationFrame(applyUIScale);
+  // Re-evaluate the shell indicator immediately when the SFTP pane is hidden
+  // or restored; otherwise a completion viewed in the pane could stay hidden
+  // after the user returns to the terminal.
+  updateTransferNotice();
 }
 // Serialize native resize requests, including placement changes and rapid toggles.
 let rightPanelOpen = false, rightPanelResize = Promise.resolve();
@@ -1139,8 +1143,10 @@ function updateTransferNotice() {
   const viewing = !document.hidden && !window.DevShellWindowHidden && !window.DengSecurityLock?.isLocked()
     && !$('#files-panel').hidden && !$('#transfers-view').hidden && $('#transfers-view').getClientRects().length > 0
     && !document.querySelector('dialog[open]');
-  const results = [...localTasks.values()].filter(task => ['done', 'failed'].includes(task.status));
-  window.DevShellTransfers?.update([...localTasks.values()], viewing);
+  const sessionID = current()?.id || '';
+  const results = [...localTasks.values()].filter(task => ['done', 'failed'].includes(task.status)
+    && (!sessionID || !task.sessionId || task.sessionId === sessionID));
+  window.DevShellTransfers?.update([...localTasks.values()], viewing, sessionID);
   if (viewing) for (const task of results) { task.resultSeen = true; delete task.historicalResult; }
   const unread = results.filter(task => !task.resultSeen), failed = unread.filter(task => task.status === 'failed').length;
   const badge = $('#transfer-count'), tab = $('.file-tab[data-pane="transfers"]');
