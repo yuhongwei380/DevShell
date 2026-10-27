@@ -51,7 +51,13 @@ jobs:
       - name: Build installer
         run: python scripts/build/package-windows.py --stage build/out/stage --output build/out/DevShell-Setup-x64.exe
       - name: Build update artifacts
-        run: python scripts/build/make-windows-update.py --binary build/out/DevShell-prepared.exe --output-dir build/out/update
+        shell: pwsh
+        run: |
+          $tag = "${{ github.event.inputs.tag || github.ref_name }}"
+          $version = (Select-String -Path internal/app/updates.go -Pattern 'const ApplicationVersion = "([^"]+)"').Matches[0].Groups[1].Value
+          $notes = "docs/release/RELEASE-$tag.md"
+          if (-not (Test-Path $notes)) { $notes = "docs/release/RELEASE-$version.md" }
+          python scripts/build/make-windows-update.py --binary build/out/DevShell-prepared.exe --output-dir build/out/update --notes-file $notes
       - name: Publish GitHub Release
         shell: pwsh
         run: |
@@ -82,7 +88,13 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: Build universal app, ZIP and DMG
-        run: python3 scripts/build/build-macos.py --arch universal --output build/macos-release
+        shell: bash
+        run: |
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          notes="docs/release/RELEASE-$tag.md"
+          version=$(sed -n 's/^const ApplicationVersion = "\([^\"]*\)".*/\1/p' internal/app/updates.go)
+          if [[ ! -f "$notes" ]]; then notes="docs/release/RELEASE-$version.md"; fi
+          python3 scripts/build/build-macos.py --arch universal --output build/macos-release --notes-file "$notes"
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}

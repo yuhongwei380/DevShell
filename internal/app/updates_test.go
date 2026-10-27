@@ -1,10 +1,10 @@
 package app
 
 import (
-	"devshell/internal/updatetrust"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"devshell/internal/updatetrust"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +14,13 @@ import (
 	"testing"
 	"time"
 )
+
+func TestNoUpdateUsesDisplayVersion(t *testing.T) {
+	got := noUpdate("current")
+	if got.CurrentVersion != ApplicationDisplayVersion {
+		t.Fatalf("manual update status lost RC display version: got %q want %q", got.CurrentVersion, ApplicationDisplayVersion)
+	}
+}
 
 func TestUpdatePackageMatchesLinuxDistribution(t *testing.T) {
 	for _, tc := range []struct {
@@ -108,7 +115,7 @@ func TestUpdateDescriptorIdentityAndValidation(t *testing.T) {
 	now := time.Now()
 	hash := strings.Repeat("a", 64)
 	old := strings.Repeat("b", 64)
-	base := UpdateDescriptor{SchemaVersion: 2, Build: ApplicationBuild + 1, Product: "DevShell", Platform: "linux-amd64", Version: ApplicationVersion, Notes: "中文更新说明", SHA256: hash, ExecutableSHA256: old, Size: 12345}
+	base := UpdateDescriptor{SchemaVersion: 2, Build: ApplicationBuild + 1, Product: "DevShell", Platform: "linux-amd64", Version: ApplicationVersion, DisplayVersion: ApplicationDisplayVersion, Notes: "中文更新说明", SHA256: hash, ExecutableSHA256: old, Size: 12345}
 	for _, tc := range []struct {
 		name, current, want string
 		receipt             UpdateReceipt
@@ -154,6 +161,9 @@ func TestUpdateDescriptorIdentityAndValidation(t *testing.T) {
 			}
 			if got.Status == "available" && (got.CurrentBuild != ApplicationBuild || got.LatestBuild != d.Build) {
 				t.Fatalf("same-version update is missing its distinguishable builds: %+v", got)
+			}
+			if got.Status == "available" && got.LatestVersion != ApplicationDisplayVersion {
+				t.Fatalf("update status lost display version: %+v", got)
 			}
 		})
 	}

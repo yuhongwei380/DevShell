@@ -25,7 +25,7 @@ def run(*args, **kwargs):
     return subprocess.run([str(arg) for arg in args], check=True, **kwargs)
 
 
-def write_update_manifests(output: Path, zip_path: Path, bundle: Path, archs, build_number: int, app_version: str) -> list:
+def write_update_manifests(output: Path, zip_path: Path, bundle: Path, archs, build_number: int, app_version: str, display_version: str, notes_file: Path | None = None) -> list:
     """Write one update descriptor per architecture for the built bundle ZIP.
 
     The built-in updater reads up-macos-<arch>.json and installs the same
@@ -33,8 +33,8 @@ def write_update_manifests(output: Path, zip_path: Path, bundle: Path, archs, bu
     descriptor and vice versa. Field names must match UpdateDescriptor in
     internal/app/updates.go.
     """
-    notes_file = ROOT / "docs/release" / f"RELEASE-{app_version}.md"
-    notes = notes_file.read_text(encoding="utf-8").strip() if notes_file.is_file() else f"{app_version} 更新：详情见 GitHub Releases。"
+    notes_path = notes_file or (ROOT / "docs/release" / f"RELEASE-{app_version}.md")
+    notes = notes_path.read_text(encoding="utf-8").strip() if notes_path.is_file() else f"{app_version} 更新：详情见 GitHub Releases。"
     if len(notes) > 16000:
         raise SystemExit(f"Release notes are {len(notes)} characters; the update descriptor accepts at most 16000.")
     zip_digest = hashlib.sha256(zip_path.read_bytes()).hexdigest()
@@ -44,7 +44,7 @@ def write_update_manifests(output: Path, zip_path: Path, bundle: Path, archs, bu
         manifest = output / f"up-macos-{machine}.json"
         manifest.write_text(json.dumps({
             "schemaVersion": 2, "build": build_number, "product": "DevShell",
-            "platform": f"darwin-{machine}", "version": app_version, "notes": notes,
+            "platform": f"darwin-{machine}", "version": app_version, "displayVersion": display_version, "notes": notes,
             "sha256": zip_digest, "size": zip_path.stat().st_size,
             "executableSHA256": executable_digest,
         }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -74,6 +74,7 @@ def build(args):
     build_number = int(re.search(r"const ApplicationBuild uint64 = (\d+)", source)[1])
     package_version = re.search(r'const ApplicationPackageVersion = "([^"]+)"', source)[1]
     app_version = re.search(r'const ApplicationVersion = "([^"]+)"', source)[1]
+    display_version = re.search(r'const ApplicationDisplayVersion = "([^"]+)"', source)[1]
     archs = ["arm64", "amd64"] if args.arch == "universal" else [args.arch]
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -153,7 +154,7 @@ def build(args):
         dmg_path = output / f"DevShell-macos-{args.arch}.dmg"
         run("hdiutil", "create", "-volname", "DevShell", "-srcfolder", disk, "-format", "UDZO", dmg_path)
         run("hdiutil", "verify", dmg_path)
-        manifests = write_update_manifests(output, zip_path, bundle, archs, build_number, app_version) if args.arch == "universal" else []
+        manifests = write_update_manifests(output, zip_path, bundle, archs, build_number, app_version, display_version, args.notes_file) if args.arch == "universal" else []
         files = [zip_path, dmg_path] + manifests
         checksums = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in files}
         (output / "SHA256SUMS.txt").write_text("".join(f"{digest}  {name}\n" for name, digest in checksums.items()))
@@ -172,6 +173,7 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=Path, default=ROOT / "build/macos")
     parser.add_argument("--sign-identity", default="-", help="Developer ID identity; default: local ad-hoc signature")
     parser.add_argument("--jobs", type=int, default=4, help="Maximum build parallelism (default: 4, capped by CPU count)")
+    parser.add_argument("--notes-file", type=Path, help="UTF-8 release notes shown by update clients")
     args = parser.parse_args()
     if args.jobs < 1:
         parser.error("--jobs must be at least 1")

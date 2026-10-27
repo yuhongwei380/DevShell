@@ -19,6 +19,7 @@ type Descriptor struct {
 	Product          string `json:"product"`
 	Platform         string `json:"platform"`
 	Version          string `json:"version"`
+	DisplayVersion   string `json:"displayVersion,omitempty"`
 	Notes            string `json:"notes"`
 	SHA256           string `json:"sha256"`
 	Size             int64  `json:"size"`

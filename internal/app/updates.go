@@ -168,7 +168,7 @@ func noUpdate(reason string) UpdateStatus {
 	if isReleaseCandidateBuild() {
 		source = updateReleaseListURL
 	}
-	return UpdateStatus{Status: "none", CurrentVersion: ApplicationVersion, CurrentBuild: ApplicationBuild, Source: source, Platform: platform, Reason: reason}
+	return UpdateStatus{Status: "none", CurrentVersion: ApplicationDisplayVersion, CurrentBuild: ApplicationBuild, Source: source, Platform: platform, Reason: reason}
 }
 func FileSHA256(path string) (string, error) {
 	f, e := os.Open(path)
@@ -307,7 +307,7 @@ func checkUpdateTrustedAt(ctx context.Context, client *http.Client, address, art
 		return result
 	}
 	var descriptor UpdateDescriptor
-	if json.Unmarshal(data, &descriptor) != nil || descriptor.SchemaVersion != 2 || descriptor.Build == 0 || descriptor.Product != "DevShell" || descriptor.Platform != platform || len(descriptor.Notes) > 16000 || len(descriptor.Version) > 64 || strings.TrimSpace(descriptor.Version) == "" || !updateHashPattern.MatchString(descriptor.SHA256) || !updateHashPattern.MatchString(descriptor.ExecutableSHA256) || descriptor.Size <= 0 || descriptor.Size > maximumUpdateSize {
+	if json.Unmarshal(data, &descriptor) != nil || descriptor.SchemaVersion != 2 || descriptor.Build == 0 || descriptor.Product != "DevShell" || descriptor.Platform != platform || len(descriptor.Notes) > 16000 || len(descriptor.Version) > 64 || strings.TrimSpace(descriptor.Version) == "" || len(descriptor.DisplayVersion) > 128 || !updateHashPattern.MatchString(descriptor.SHA256) || !updateHashPattern.MatchString(descriptor.ExecutableSHA256) || descriptor.Size <= 0 || descriptor.Size > maximumUpdateSize {
 		result.Reason = "invalid"
 		return result
 	}
@@ -356,7 +356,10 @@ func checkUpdateTrustedAt(ctx context.Context, client *http.Client, address, art
 	result.Status = "available"
 	result.Reason = ""
 	result.InstallerReady = true
-	result.LatestVersion = descriptor.Version
+	result.LatestVersion = descriptor.DisplayVersion
+	if strings.TrimSpace(result.LatestVersion) == "" {
+		result.LatestVersion = descriptor.Version
+	}
 	result.LatestBuild = descriptor.Build
 	result.Notes = descriptor.Notes
 	result.Package = &UpdatePackage{Format: updatePackageFormat(platform), Build: descriptor.Build, Version: descriptor.Version, URL: artifact, SHA256: descriptor.SHA256, Size: descriptor.Size, ExecutableSHA256: descriptor.ExecutableSHA256, expiresAt: descriptor.ExpiresAt}
