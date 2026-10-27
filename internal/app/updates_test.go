@@ -75,6 +75,23 @@ func TestUpdateReceiptHighWaterAndMalformedReceiptFailClosed(t *testing.T) {
 	}
 }
 
+func TestLegacyFormatReceiptDoesNotGateNewBuilds(t *testing.T) {
+	dir := t.TempDir()
+	receipt, err := json.Marshal(UpdateReceipt{Build: 20261024156, Version: "v26.10.1", SHA256: strings.Repeat("c", 64), ExecutableSHA256: strings.Repeat("c", 64)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = WriteUpdateReceipt(dir, receipt); err != nil {
+		t.Fatal(err)
+	}
+	if err = ValidateUpdateBuild(dir, ApplicationBuild+1, ApplicationVersion); err != nil {
+		t.Fatalf("legacy 11-digit receipt pinned the install: %v", err)
+	}
+	if err = ValidateUpdateBuild(dir, ApplicationBuild, ApplicationVersion); err == nil {
+		t.Fatal("current build floor ignored")
+	}
+}
+
 func TestUpdateInstallAfterManualNewerBuild(t *testing.T) {
 	for _, tc := range []struct {
 		name         string
@@ -126,6 +143,7 @@ func TestUpdateDescriptorIdentityAndValidation(t *testing.T) {
 		{"same installed receipt", old, "none", UpdateReceipt{Build: ApplicationBuild + 1, Version: ApplicationVersion, SHA256: hash, ExecutableSHA256: old}, nil},
 		{"packaging-only change", old, "available", UpdateReceipt{SHA256: old, ExecutableSHA256: old}, nil},
 		{"stale receipt high water blocks rollback", old, "none", UpdateReceipt{Build: ApplicationBuild + 2, SHA256: old, ExecutableSHA256: hash}, nil},
+		{"legacy 11-digit receipt cannot block new-format build", old, "available", UpdateReceipt{Build: 20261024156, Version: "v26.10.1", SHA256: old, ExecutableSHA256: old}, nil},
 		{"legacy schema cannot establish freshness", hash, "none", UpdateReceipt{}, func(d *UpdateDescriptor) { d.SchemaVersion = 1 }},
 		{"missing build", hash, "none", UpdateReceipt{}, func(d *UpdateDescriptor) { d.Build = 0 }},
 		{"same build different bytes", hash, "none", UpdateReceipt{}, func(d *UpdateDescriptor) { d.Build = ApplicationBuild }},

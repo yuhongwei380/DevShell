@@ -100,6 +100,25 @@ type UpdateReceipt struct {
 	ExecutableSHA256 string `json:"executableSHA256"`
 	InstalledAt      string `json:"installedAt"`
 }
+
+// updateLegacyBuildFloor marks the build-number format rebase (2026-10-24):
+// new builds use YYYYMMDD plus a two-digit daily sequence (10 digits), while
+// the historical full format carried a three-digit sequence (11 digits, for
+// example 20261024156). A persisted high-water mark must never cross the
+// rebase: an 11-digit receipt out-ranks every 10-digit build and would pin
+// the client into a permanent build-rollback rejection ("already current").
+const updateLegacyBuildFloor = 10_000_000_000
+
+// receiptAppliesToCurrentBuild reports whether the receipt's build high-water
+// is comparable with the compiled ApplicationBuild. A receipt written under
+// the other build-number format is stale and no longer gates updates.
+func receiptAppliesToCurrentBuild(receiptBuild uint64) bool {
+	if receiptBuild == 0 {
+		return true
+	}
+	return (receiptBuild >= updateLegacyBuildFloor) == (ApplicationBuild >= updateLegacyBuildFloor)
+}
+
 type UpdateDownload struct {
 	ID           string        `json:"id"`
 	Status       string        `json:"status"`
@@ -329,7 +348,7 @@ func checkUpdateTrustedAt(ctx context.Context, client *http.Client, address, art
 		return result
 	}
 	minimumBuild := ApplicationBuild
-	if receipt.Build > minimumBuild {
+	if receipt.Build > minimumBuild && receiptAppliesToCurrentBuild(receipt.Build) {
 		minimumBuild = receipt.Build
 	}
 	versionOrder, validVersion := compareUpdateVersions(descriptor.Version, ApplicationVersion)
@@ -339,7 +358,7 @@ func checkUpdateTrustedAt(ctx context.Context, client *http.Client, address, art
 	}
 	// A manually installed newer build supersedes the older receipt's display
 	// version. Its build high-water mark above still prevents replay/rollback.
-	if receipt.Version != "" && (receipt.Build == 0 || receipt.Build >= ApplicationBuild) {
+	if receipt.Version != "" && receiptAppliesToCurrentBuild(receipt.Build) && (receipt.Build == 0 || receipt.Build >= ApplicationBuild) {
 		order, valid := compareUpdateVersions(descriptor.Version, receipt.Version)
 		if !valid || order < 0 {
 			result.Reason = "version-rollback"
@@ -426,14 +445,16 @@ func ValidateUpdateBuild(configDir string, build uint64, version string) error {
 	if err != nil {
 		return err
 	}
-	minimum = max(minimum, receipt.Build)
+	if receiptAppliesToCurrentBuild(receipt.Build) {
+		minimum = max(minimum, receipt.Build)
+	}
 	if build <= minimum {
 		return errors.New("更新构建必须高于当前及已安装构建")
 	}
 	if order, ok := compareUpdateVersions(version, ApplicationVersion); !ok || order < 0 {
 		return errors.New("更新版本不能低于当前版本")
 	}
-	if receipt.Version != "" && (receipt.Build == 0 || receipt.Build >= ApplicationBuild) {
+	if receipt.Version != "" && receiptAppliesToCurrentBuild(receipt.Build) && (receipt.Build == 0 || receipt.Build >= ApplicationBuild) {
 		if order, ok := compareUpdateVersions(version, receipt.Version); !ok || order < 0 {
 			return errors.New("更新版本不能低于已安装版本")
 		}
