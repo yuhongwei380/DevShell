@@ -21,6 +21,7 @@ type quickProfile struct {
 
 // Parse a connection description, never an executable shell command. OpenSSH
 // options with local side effects (-o, -F, -L, -R, ProxyCommand...) are rejected.
+// -v/-vv/-vvv only raises local connection diagnostics; it has no side effects.
 func parseQuickSSH(command string) (Profile, error) {
 	p := Profile{Port: 22, User: "root", Auth: "password", Proxy: ProxyConfig{Type: "direct"}, Temporary: true}
 	if len(command) > 2048 || strings.ContainsAny(command, "\r\n\x00") {
@@ -47,8 +48,15 @@ func parseQuickSSH(command string) (Profile, error) {
 			} else {
 				p.User = args[i]
 			}
+		} else if len(arg) > 1 && strings.TrimLeft(arg, "-v") == "" {
+			// -v, -vv, -vvv (and combinations) only request verbose connection
+			// diagnostics; OpenSSH caps the debug level at 3, and so do we.
+			p.Verbose += len(arg) - 1
+			if p.Verbose > 3 {
+				p.Verbose = 3
+			}
 		} else if strings.HasPrefix(arg, "-") || target != "" {
-			return p, errors.New("支持 ssh [-p 端口] [-l 用户名] 用户@主机；私钥请在下方选择")
+			return p, errors.New("支持 ssh [-vvv] [-p 端口] [-l 用户名] 用户@主机；私钥请在下方选择")
 		} else {
 			target = arg
 		}

@@ -140,6 +140,53 @@ func (l *sshDiagnosticLog) record(id string, event sshDiagnosticEvent) {
 	l.records[id] = previous
 }
 
+// recordImmediate writes an event to disk right away, bypassing the buffer
+// that defers writes until a session shows an abnormal close. -vvv verbose
+// tracing is explicitly requested by the user, so it must survive even a
+// normal close that would otherwise leave no log file behind.
+func (l *sshDiagnosticLog) recordImmediate(id string, event sshDiagnosticEvent) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.closed {
+		return
+	}
+	if l.records == nil {
+		l.records = make(map[string]SSHDisconnectDiagnostic)
+		l.pending = make(map[string][]sshDiagnosticEvent)
+		l.persisted = make(map[string]bool)
+	}
+	if _, found := l.records[id]; !found {
+		l.order = append(l.order, id)
+		if len(l.order) > 256 {
+			evicted := l.order[0]
+			l.order = l.order[1:]
+			delete(l.records, evicted)
+			delete(l.pending, evicted)
+			delete(l.persisted, evicted)
+		}
+	}
+	previous := l.records[id]
+	if !l.persisted[id] {
+		// Promotion flushes anything this session had already buffered.
+		l.persisted[id] = true
+		for _, buffered := range l.pending[id] {
+			if l.path != "" {
+				if err := l.append(buffered); err != nil {
+					previous.LogWriteFailed = true
+				}
+			}
+			delete(l.pending, id)
+		}
+	}
+	if l.path != "" {
+		if err := l.append(event); err != nil {
+			previous.LogWriteFailed = true
+		}
+		previous.LogPath = l.path
+	}
+	l.records[id] = previous
+}
+
 func (l *sshDiagnosticLog) append(event sshDiagnosticEvent) error {
 	if err := os.MkdirAll(filepath.Dir(l.path), 0700); err != nil {
 		return err
@@ -237,6 +284,27 @@ func (s *Session) noteTerminalStageKind(stage, kind string) {
 	}
 }
 
+// noteVerbose records one -vvv diagnostics event at the given level. These
+// events go straight to disk: the user asked for them.
+func (s *Session) noteVerbose(level int, kind, detail string) {
+	if s.diagnosticLog == nil || s.verboseLevel < level {
+		return
+	}
+	s.diagnosticLog.recordImmediate(s.ID, s.diagnosticEvent(kind, "", detail))
+}
+
+// noteVerboseHandshakeFailure keeps the authentication-method trace from a
+// failed -vvv attempt. The library tears the transport down on failure, so the
+// server version string is unreachable; the offered/tried/partial methods are
+// exactly what -vvv debugging on embedded servers is after.
+func (a *App) noteVerboseHandshakeFailure(profileID, detail string) {
+	trace := profileID
+	if len(trace) > 12 {
+		trace = trace[:12]
+	}
+	a.sshDiagnostics.recordImmediate("handshake-"+trace, sshDiagnosticEvent{SSHDisconnectDiagnostic: SSHDisconnectDiagnostic{TraceID: trace, Detail: detail, At: time.Now()}, Kind: "verbose-handshake-failed"})
+}
+
 func (s *Session) startConnectionDiagnostics() {
 	if s.diagnosticLog == nil {
 		return
@@ -250,7 +318,12 @@ func (s *Session) startConnectionDiagnostics() {
 			case <-s.ctx.Done():
 				return
 			case <-ticker.C:
-				s.diagnosticLog.record(s.ID, s.diagnosticEvent("sample", "", ""))
+				event := s.diagnosticEvent("sample", "", "")
+				if s.verboseLevel > 0 {
+					s.diagnosticLog.recordImmediate(s.ID, event)
+				} else {
+					s.diagnosticLog.record(s.ID, event)
+				}
 			}
 		}
 	}()

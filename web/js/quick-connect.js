@@ -19,6 +19,7 @@ window.DengQuickConnect = (() => {
     }
     const profile = await post('/api/quick-connect', { command, auth, keyId });
     temporaryProfiles.set(profile.id, profile); dialog.close();
+    if (profile.verbose) toast(`已开启 -${'v'.repeat(profile.verbose)} 连接诊断：握手与传输细节实时写入 data/logs/ssh-disconnect.jsonl`);
     return connect(profile.id);
   }
   function reflect() {

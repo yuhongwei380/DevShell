@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -26,13 +27,15 @@ func issueRequest(t *testing.T, a *App, method, path string, body any) *httptest
 func TestQuickSSHParsing(t *testing.T) {
 	for _, tc := range []struct {
 		input, host, user string
-		port              int
+		port, verbose     int
 	}{
-		{"alice@example.com", "example.com", "alice", 22}, {"ssh -p 2222 alice@example.com", "example.com", "alice", 2222},
-		{"ssh -l admin localhost -p 2022", "localhost", "admin", 2022}, {"root@[2001:db8::1]:2200", "2001:db8::1", "root", 2200}, {"ssh root@2001:db8::1", "2001:db8::1", "root", 22},
+		{"alice@example.com", "example.com", "alice", 22, 0}, {"ssh -p 2222 alice@example.com", "example.com", "alice", 2222, 0},
+		{"ssh -l admin localhost -p 2022", "localhost", "admin", 2022, 0}, {"root@[2001:db8::1]:2200", "2001:db8::1", "root", 2200, 0}, {"ssh root@2001:db8::1", "2001:db8::1", "root", 22, 0},
+		{"ssh -vvv alice@example.com", "example.com", "alice", 22, 3}, {"ssh -v -vv -p 2222 alice@example.com", "example.com", "alice", 2222, 3},
+		{"ssh -vvvvvvv alice@example.com", "example.com", "alice", 22, 3}, {"alice@example.com -vv", "example.com", "alice", 22, 2},
 	} {
 		p, err := parseQuickSSH(tc.input)
-		if err != nil || p.Host != tc.host || p.User != tc.user || p.Port != tc.port {
+		if err != nil || p.Host != tc.host || p.User != tc.user || p.Port != tc.port || p.Verbose != tc.verbose {
 			t.Fatalf("%q: %+v %v", tc.input, p, err)
 		}
 	}
@@ -114,6 +117,34 @@ func TestQuickConnectionSaveRemembersCredentialsWhenAsked(t *testing.T) {
 	}
 	if p, err := reopened.Get(saved.ID); err != nil || p.Secret != "hunter2" {
 		t.Fatal("remembered credential missing after restart")
+	}
+}
+func TestVerboseQuickConnectWritesDiagnosticsImmediately(t *testing.T) {
+	a, host, port := authenticationFixture(t, &ssh.ServerConfig{PasswordCallback: func(_ ssh.ConnMetadata, p []byte) (*ssh.Permissions, error) { return nil, nil }})
+	response := issueRequest(t, a, "POST", "/api/quick-connect", map[string]any{"command": "ssh -vvv -p " + strconvI(port) + " demo@" + host})
+	if response.Code != 200 {
+		t.Fatal(response.Body.String())
+	}
+	var p Profile
+	json.Unmarshal(response.Body.Bytes(), &p)
+	if p.Verbose != 3 {
+		t.Fatalf("verbose level lost in quick-connect response: %s", response.Body.String())
+	}
+	if _, err := a.Connect(context.Background(), p.ID, "synthetic-only"); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(a.sshDiagnostics.path)
+	if err != nil {
+		t.Fatalf("verbose diagnostics did not create the log file: %v", err)
+	}
+	if !strings.Contains(string(data), `"kind":"verbose-handshake"`) || !strings.Contains(string(data), "SSH-2.0-Go") {
+		t.Fatalf("verbose handshake diagnostics missing server identity: %s", data)
+	}
+	if issueRequest(t, a, "POST", "/api/quick-connect/"+p.ID+"/save", map[string]any{"name": "Verbose kept?", "group": "Quick", "remember": false}).Code != 200 {
+		t.Fatal("quick save failed")
+	}
+	if saved, err := a.store.Get(p.ID); err != nil || saved.Verbose != 0 {
+		t.Fatalf("verbose diagnostics persisted with the saved profile: %+v %v", saved, err)
 	}
 }
 func strconvI(n int) string { data, _ := json.Marshal(n); return string(data) }

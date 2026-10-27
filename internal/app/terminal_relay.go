@@ -405,7 +405,9 @@ func (r *terminalRelay) run() {
 	if s.usesDropbearServer() {
 		guardCtx, stopGuard := context.WithCancel(s.ctx)
 		defer stopGuard()
-		go dropbearChannelIdleGuard(sh, guardCtx, dropbearIdleGuardInterval)
+		go dropbearChannelIdleGuard(sh, guardCtx, dropbearIdleGuardInterval, func(sent int) {
+			s.noteVerbose(2, "verbose-keepalive", "sent="+strconv.Itoa(sent))
+		})
 	}
 	if !stopStartup() || startupCtx.Err() != nil {
 		return

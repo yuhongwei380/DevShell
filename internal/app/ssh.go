@@ -42,6 +42,7 @@ type Session struct {
 	filesHome           string
 	preparedIntegration *terminalIntegration // immutable before session publication
 	fileOwners          fileOwnerCache
+	verboseLevel        int // -v..-vvv quick-connect diagnostics; immutable after publication
 	cancel              context.CancelFunc
 	ctx                 context.Context
 	closeOnce           sync.Once
@@ -244,31 +245,38 @@ func (a *App) ConnectWithHostKeyApproval(ctx context.Context, profileID, secret 
 		return nil, errors.New("认证方式无效")
 	}
 	address := net.JoinHostPort(p.Host, strconv.Itoa(p.Port))
+	dialStart := time.Now()
 	conn, err := dialSSH(dialCtx, address, p.Proxy)
 	if err != nil {
 		return nil, fmt.Errorf("连接 %s：%w", address, err)
 	}
+	dialElapsed := time.Since(dialStart)
 	activity := newSSHActivityConn(conn)
 	conn = activity
 	stop := context.AfterFunc(dialCtx, func() { conn.Close() })
 	defer stop()
 	deadline, _ := dialCtx.Deadline()
 	_ = conn.SetDeadline(deadline)
-	fingerprint := ""
+	fingerprint, hostKeyAlgorithm := "", ""
 	trace := authenticationTrace{}
 	config := &ssh.ClientConfig{User: p.User, Auth: auth, AuthCallback: trace.observe, HostKeyCallback: func(host string, remote net.Addr, key ssh.PublicKey) error {
-		fingerprint = ssh.FingerprintSHA256(key)
+		fingerprint, hostKeyAlgorithm = ssh.FingerprintSHA256(key), key.Type()
 		return a.store.hostKeyWithApproval(host, key, approval)
 	}}
+	handshakeStart := time.Now()
 	sshConn, chans, reqs, err := ssh.NewClientConn(conn, address, config)
 	if err != nil {
 		conn.Close()
+		if p.Verbose > 0 {
+			a.noteVerboseHandshakeFailure(profileID, fmt.Sprintf("dial=%.2fs handshake=%.2fs auth=%s allowed=%s tried=%s partial=%s error=%s", dialElapsed.Seconds(), time.Since(handshakeStart).Seconds(), p.Auth, strings.Join(trace.allowed, ","), strings.Join(trace.tried, ","), strings.Join(trace.partial, ","), sshDiagnosticErrorKind(err)))
+		}
 		return nil, explainSSHAuthentication(err, p.Auth, trace)
 	}
+	handshakeElapsed := time.Since(handshakeStart)
 	client := ssh.NewClient(sshConn, chans, reqs)
 	sessionCtx, sessionCancel := context.WithCancel(a.ctx)
 	writeIdentity := strings.Join([]string{address, fingerprint, p.User, p.Proxy.Type, p.Proxy.Host, strconv.Itoa(p.Proxy.Port), p.Proxy.User}, "\x00")
-	s := &Session{ID: randomID(), ProfileID: p.ID, Fingerprint: fingerprint, connectionHost: p.Host, connectionPeer: directSSHServerPeer(client.RemoteAddr(), p.Proxy.Type), fileWriteIdentity: writeIdentity, client: client, activity: activity, ctx: sessionCtx, cancel: sessionCancel}
+	s := &Session{ID: randomID(), ProfileID: p.ID, Fingerprint: fingerprint, connectionHost: p.Host, connectionPeer: directSSHServerPeer(client.RemoteAddr(), p.Proxy.Type), fileWriteIdentity: writeIdentity, client: client, activity: activity, ctx: sessionCtx, cancel: sessionCancel, verboseLevel: p.Verbose}
 	appearance := a.store.List().Appearance
 	s.promptUsernameColor, s.promptHostnameColor = appearance.PromptUsernameColor, appearance.PromptHostnameColor
 	// Publish immediately after SSH authentication. The terminal stages its own
@@ -300,6 +308,15 @@ func (a *App) ConnectWithHostKeyApproval(ctx context.Context, profileID, secret 
 	connected = true
 	s.diagnosticLog = &a.sshDiagnostics
 	s.diagnosticStarted = time.Now()
+	if s.verboseLevel > 0 {
+		// Same facts ssh -vvv prints for the handshake: dial, version exchange,
+		// KEX and authentication timing, the server identification and the host
+		// key. They go to disk immediately because the user asked for them.
+		s.noteVerbose(1, "verbose-handshake", fmt.Sprintf("level=%d dial=%.2fs handshake=%.2fs auth=%s server=%q hostKey=%s %s", s.verboseLevel, dialElapsed.Seconds(), handshakeElapsed.Seconds(), p.Auth, string(client.ServerVersion()), hostKeyAlgorithm, fingerprint))
+		if s.verboseLevel >= 3 {
+			activity.enableVerbose(s)
+		}
+	}
 	a.sessions[s.ID] = s
 	a.mu.Unlock()
 	s.startConnectionDiagnostics()

@@ -526,7 +526,7 @@ async function sessionLocalCommand(state, raw) {
   if (/^reconnect$/i.test(command)) { echo(); await connect(state.profileId, true, { sessionId: state.id }); return; }
   if (/^help$/i.test(command)) {
     echo();
-    for (const hint of ['ssh 用户@主机 —— 在本标签连接新地址（支持 ssh -p 端口 用户@主机、IPv6）', 'reconnect —— 用原地址重新连接本标签', 'ping 主机 [-t] —— 本机探测，Ctrl+C 停止', 'traceroute 主机 —— 本机路由追踪，逐跳实时输出', 'nslookup / dig 主机 —— 本机 DNS 解析与查询', 'curl [-I] 网址 —— 本机 http/https 请求', '运行中的本机命令随时按 Ctrl+C 停止', 'exit —— 关闭本标签']) state.term.writeln(`\x1b[38;5;245m  ${hint}\x1b[0m`);
+    for (const hint of ['ssh 用户@主机 —— 在本标签连接新地址（支持 ssh -p 端口 用户@主机、ssh -vvv 连接诊断、IPv6）', 'reconnect —— 用原地址重新连接本标签', 'ping 主机 [-t] —— 本机探测，Ctrl+C 停止', 'traceroute 主机 —— 本机路由追踪，逐跳实时输出', 'nslookup / dig 主机 —— 本机 DNS 解析与查询', 'curl [-I] 网址 —— 本机 http/https 请求', '运行中的本机命令随时按 Ctrl+C 停止', 'exit —— 关闭本标签']) state.term.writeln(`\x1b[38;5;245m  ${hint}\x1b[0m`);
     return;
   }
   if (window.DengLocalPrompt.commands.test(command)) { await window.DengLocalPrompt.run(command, window.DengLocalPrompt.termSink(state.term)); return; }

@@ -36,6 +36,10 @@ type Profile struct {
 	HasSecret    bool        `json:"hasSecret,omitempty"`
 	Proxy        ProxyConfig `json:"proxy"`
 	ProxyID      string      `json:"proxyId,omitempty"`
+	// Verbose carries the -v/-vv/-vvv level typed in quick connect for this
+	// connection attempt only. It enables immediate diagnostic logging and is
+	// stripped whenever a profile is persisted.
+	Verbose int `json:"verbose,omitempty"`
 	// Serial profile fields; only meaningful when Protocol == "serial".
 	SerialPort  string `json:"serialPort,omitempty"`
 	BaudRate    int    `json:"baudRate,omitempty"`
@@ -163,6 +167,8 @@ func (s *Store) saveProfile(p Profile, clearSecret, allowNewID bool) (Profile, e
 		}
 		p.Proxy = ProxyConfig{Type: "direct"}
 	}
+	// -vvv diagnostics belong to one connection attempt, never to a saved profile.
+	p.Verbose = 0
 	if p.Protocol == "serial" {
 		// Serial profiles carry a device path instead of a network address;
 		// normalizeSerialProfile has already copied SerialPort into Host.

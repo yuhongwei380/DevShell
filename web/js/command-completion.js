@@ -9,7 +9,7 @@ window.DengCommandCompletion = (() => {
   // start pages have no tab to reconnect or close, so help / reconnect / exit
   // only appear while a session object exists.
   const sessionCommands = [
-    { name: 'ssh', usage: '用户@主机', note: '在本标签连接新地址' },
+    { name: 'ssh', usage: '[-vvv] 用户@主机', note: '在本标签连接新地址' },
     { name: 'reconnect', note: '用原地址重新连接本标签' },
     { name: 'ping', usage: '主机 [-t]', note: '本机探测' },
     { name: 'traceroute', usage: '主机', note: '本机路由追踪' },

@@ -287,15 +287,20 @@ type channelRequestSender interface {
 // dropbearChannelIdleGuard 周期性向终端通道发送 keepalive@openssh.com 通道
 // 请求。dropbear 对未知通道请求回 REQUEST_FAILURE，但这已重置其空闲计时器；
 // wantReply=false 让服务器连应答都不发。通道或传输消亡时 SendRequest 报错，
-// 循环随之退出。
-func dropbearChannelIdleGuard(ch channelRequestSender, ctx context.Context, interval time.Duration) {
+// 循环随之退出。note 在每次发送前汇报累计次数（-vvv 诊断用，可为 nil）。
+func dropbearChannelIdleGuard(ch channelRequestSender, ctx context.Context, interval time.Duration, note func(sent int)) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
+	sent := 0
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			sent++
+			if note != nil {
+				note(sent)
+			}
 			if _, err := ch.SendRequest("keepalive@openssh.com", false, nil); err != nil {
 				return
 			}

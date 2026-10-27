@@ -230,13 +230,30 @@ func TestDropbearChannelIdleGuardKeepsAskingUntilStopped(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	done := make(chan struct{})
-	go func() { dropbearChannelIdleGuard(&ch, ctx, 10*time.Millisecond); close(done) }()
+	notes := make(chan int, 16) // -vvv hook: the guard reports each send before sending
+	go func() {
+		dropbearChannelIdleGuard(&ch, ctx, 10*time.Millisecond, func(sent int) {
+			select {
+			case notes <- sent:
+			default:
+			}
+		})
+		close(done)
+	}()
 	time.Sleep(55 * time.Millisecond)
 	cancel()
 	select {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Fatal("guard kept sending after cancellation")
+	}
+	close(notes)
+	reported := []int{}
+	for n := range notes {
+		reported = append(reported, n)
+	}
+	if len(reported) < 3 || reported[0] != 1 {
+		t.Fatalf("guard verbose hook reported %v, want cumulative counts starting at 1", reported)
 	}
 	ch.mu.Lock()
 	defer ch.mu.Unlock()
