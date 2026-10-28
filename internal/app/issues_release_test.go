@@ -140,6 +140,9 @@ func TestVerboseQuickConnectWritesDiagnosticsImmediately(t *testing.T) {
 	if !strings.Contains(string(data), `"kind":"verbose-handshake"`) || !strings.Contains(string(data), "SSH-2.0-Go") {
 		t.Fatalf("verbose handshake diagnostics missing server identity: %s", data)
 	}
+	if !strings.Contains(string(data), `"kind":"verbose-algorithms"`) || !strings.Contains(string(data), "read-cipher=") {
+		t.Fatalf("negotiated algorithms missing from diagnostics: %s", data)
+	}
 	if issueRequest(t, a, "POST", "/api/quick-connect/"+p.ID+"/save", map[string]any{"name": "Verbose kept?", "group": "Quick", "remember": false}).Code != 200 {
 		t.Fatal("quick save failed")
 	}

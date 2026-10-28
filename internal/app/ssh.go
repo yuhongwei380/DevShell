@@ -36,6 +36,8 @@ type Session struct {
 	activity            *sshActivityConn
 	files               *sftp.Client
 	fileBridge          atomic.Pointer[sshSFTPBridge]
+	backgroundGateOnce  sync.Once
+	backgroundGate      chan struct{}
 	fileInitOnce        sync.Once
 	fileDone            chan struct{} // initialized before publication; closed after the sole file-state write
 	fileMu              sync.RWMutex
@@ -313,6 +315,10 @@ func (a *App) ConnectWithHostKeyApproval(ctx context.Context, profileID, secret 
 		// KEX and authentication timing, the server identification and the host
 		// key. They go to disk immediately because the user asked for them.
 		s.noteVerbose(1, "verbose-handshake", fmt.Sprintf("level=%d dial=%.2fs handshake=%.2fs auth=%s server=%q hostKey=%s %s", s.verboseLevel, dialElapsed.Seconds(), handshakeElapsed.Seconds(), p.Auth, string(client.ServerVersion()), hostKeyAlgorithm, fingerprint))
+		if algorithms, ok := sshConn.(ssh.AlgorithmsConnMetadata); ok {
+			alg := algorithms.Algorithms()
+			s.noteVerbose(1, "verbose-algorithms", fmt.Sprintf("kex=%s hostkey=%s read-cipher=%s read-mac=%s write-cipher=%s write-mac=%s", sshAlgorithmDiagnostic(alg.KeyExchange), sshAlgorithmDiagnostic(alg.HostKey), sshAlgorithmDiagnostic(alg.Read.Cipher), sshAlgorithmDiagnostic(alg.Read.MAC), sshAlgorithmDiagnostic(alg.Write.Cipher), sshAlgorithmDiagnostic(alg.Write.MAC)))
+		}
 		if s.verboseLevel >= 3 {
 			activity.enableVerbose(s)
 		}

@@ -58,6 +58,12 @@ func (r *monitorCommandRunner) runWithOutput(parent context.Context, s *Session,
 	r.mu.Unlock()
 	go func() {
 		defer close(job.done)
+		release, err := s.acquireDropbearBackground(ctx)
+		if err != nil {
+			job.err = err
+			return
+		}
+		defer release()
 		s.noteVerbose(2, "verbose-monitor", scope+":channel-open")
 		defer func() { s.noteVerbose(2, "verbose-monitor", scope+":"+sshDiagnosticErrorKind(job.err)) }()
 		transport := s.ctx

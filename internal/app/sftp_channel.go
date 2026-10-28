@@ -93,6 +93,15 @@ func (s *Session) initializeFileClient(ctx context.Context) (*sftp.Client, strin
 	}
 	done := make(chan result)
 	go func() {
+		release, err := s.acquireDropbearBackground(ctx)
+		if err != nil {
+			select {
+			case done <- result{err: err}:
+			case <-ctx.Done():
+			}
+			return
+		}
+		defer release()
 		files, err := s.openFileClientContext(ctx)
 		home := "/"
 		if err == nil {

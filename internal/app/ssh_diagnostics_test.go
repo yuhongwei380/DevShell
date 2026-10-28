@@ -191,3 +191,20 @@ func TestVerboseEventsAreBoundedAndRemainAvailableAfterDisconnect(t *testing.T) 
 		t.Fatal("trace is not bounded")
 	}
 }
+
+func TestSSHProtocolErrorsAreClassifiedWithoutLeakingText(t *testing.T) {
+	cases := map[string]string{
+		"ssh: invalid channel 7":                       "ssh-invalid-channel",
+		"ssh: invalid MaxPacketSize 0 from peer":       "ssh-invalid-channel-packet-size",
+		"ssh: invalid window update for 123 bytes":     "ssh-invalid-window-update",
+		"ssh: unexpected message type 97 on channel 4": "ssh-unexpected-channel-message",
+		"ssh: MAC failure":                             "ssh-packet-authentication-failed",
+		"ssh: wrong packet length":                     "ssh-invalid-packet",
+		"ssh: invalid channel 7 secret":                "transport-or-channel-error",
+	}
+	for input, want := range cases {
+		if got := sshDiagnosticErrorKind(fmt.Errorf("wrapped: %w", errors.New(input))); got != want {
+			t.Errorf("%q: got %q want %q", input, got, want)
+		}
+	}
+}

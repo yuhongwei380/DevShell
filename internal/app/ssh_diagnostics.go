@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strconv"
 	"sync"
 	"syscall"
@@ -378,6 +379,32 @@ func sshShellExitDiagnostic(err error) (string, string) {
 	return "DS-210", sshDiagnosticErrorKind(err)
 }
 
+// SSH algorithm names are peer-controlled identifiers; restrict the characters
+// and length recorded in local diagnostics.
+func sshAlgorithmDiagnostic(value string) string {
+	if len(value) > 128 {
+		return "invalid"
+	}
+	for _, c := range value {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_' || c == '.' || c == '@' || c == '+') {
+			return "invalid"
+		}
+	}
+	return value
+}
+
+var sshProtocolErrorPatterns = []struct {
+	pattern *regexp.Regexp
+	kind    string
+}{
+	{regexp.MustCompile(`^ssh: invalid channel [0-9]+$`), "ssh-invalid-channel"},
+	{regexp.MustCompile(`^ssh: invalid MaxPacketSize [0-9]+ from peer$`), "ssh-invalid-channel-packet-size"},
+	{regexp.MustCompile(`^ssh: invalid window update for [0-9]+ bytes$`), "ssh-invalid-window-update"},
+	{regexp.MustCompile(`^ssh: unexpected message type [0-9]+ on channel [0-9]+$`), "ssh-unexpected-channel-message"},
+	{regexp.MustCompile(`^ssh: illegal padding [0-9]+$`), "ssh-invalid-padding"},
+	{regexp.MustCompile(`^ssh: padding [0-9]+ too large$`), "ssh-invalid-padding"},
+}
+
 func sshDiagnosticErrorKind(err error) string {
 	if err == nil {
 		return "completed"
@@ -417,6 +444,20 @@ func sshDiagnosticErrorKind(err error) string {
 				}
 			}
 			return "server-disconnect"
+		}
+	}
+	for current := err; current != nil; current = errors.Unwrap(current) {
+		text := current.Error()
+		switch text {
+		case "ssh: MAC failure", "chacha20poly1305: message authentication failed", "cipher: message authentication failed":
+			return "ssh-packet-authentication-failed"
+		case "ssh: incoming packet exceeds maximum payload size", "ssh: wrong packet length", "ssh: remote side wrote too much", "ssh: max packet length exceeded", "ssh: invalid packet length, packet too large", "ssh: invalid packet length, packet too small", "ssh: empty packet":
+			return "ssh-invalid-packet"
+		}
+		for _, item := range sshProtocolErrorPatterns {
+			if item.pattern.MatchString(text) {
+				return item.kind
+			}
 		}
 	}
 	var network net.Error
