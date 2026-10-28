@@ -355,6 +355,7 @@ func (r *terminalRelay) run() {
 		// OpenWrt ash has no prompt integration. A plain shell request avoids
 		// the optional exec bootstrap and starts the server-configured login shell.
 		s.noteTerminalStageKind("launch-exec", "dropbear-shell-request")
+		s.noteVerbose(1, "verbose-terminal", "dropbear-shell-request")
 	} else {
 		integration = s.prepareTerminalIntegration()
 		defer s.cleanupTerminalIntegration(integration)

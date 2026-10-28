@@ -6,6 +6,8 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -49,4 +51,29 @@ func TestVerboseActivityConnPacketsReachDisk(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("verbose packet events never reached disk: %s", data)
+}
+
+func TestVerboseReadGapIncludesBlockedReadTime(t *testing.T) {
+	log := &sshDiagnosticLog{path: filepath.Join(t.TempDir(), "trace.jsonl")}
+	server, client := net.Pipe()
+	defer server.Close()
+	defer client.Close()
+	activity := newSSHActivityConn(client)
+	session := &Session{ID: "read-gap", diagnosticLog: log, verboseLevel: 3, diagnosticStarted: time.Now()}
+	activity.enableVerbose(session)
+	go func() { time.Sleep(120 * time.Millisecond); _, _ = server.Write([]byte("x")) }()
+	if _, err := activity.Read(make([]byte, 1)); err != nil {
+		t.Fatal(err)
+	}
+	log.mu.Lock()
+	defer log.mu.Unlock()
+	events := log.verboseEvents[session.ID]
+	if len(events) != 1 {
+		t.Fatalf("missing read event: %+v", events)
+	}
+	_, value, found := strings.Cut(events[0].Detail, "idle=")
+	seconds, err := strconv.ParseFloat(value, 64)
+	if !found || err != nil || seconds < 0.1 {
+		t.Fatalf("read wait missing from gap: %+v", events)
+	}
 }

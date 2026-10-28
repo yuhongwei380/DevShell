@@ -1,8 +1,8 @@
 package app
 
 import (
-	"devshell/docs/release"
 	"context"
+	"devshell/docs/release"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -227,6 +227,7 @@ func (a *App) Handler(assets fs.FS) http.Handler {
 		writeJSON(w, map[string]bool{"ok": true})
 	})
 	mux.HandleFunc("GET /api/sessions/{id}/disconnect-diagnostic", a.sshDisconnectDiagnosticHTTP)
+	mux.HandleFunc("GET /api/sessions/{id}/verbose", a.sshVerboseHTTP)
 	mux.HandleFunc("GET /api/sessions/{id}/terminal", a.terminal)
 	mux.HandleFunc("GET /api/sessions/{id}/file-status", a.fileStatus)
 	mux.HandleFunc("GET /api/sessions/{id}/files", a.listFiles)

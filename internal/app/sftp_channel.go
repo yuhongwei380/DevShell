@@ -169,7 +169,9 @@ func (s *Session) startFileInitialization() {
 		go func() {
 			ctx, cancel := context.WithTimeout(s.ctx, 5*time.Second)
 			defer cancel()
+			s.noteVerbose(2, "verbose-sftp", "initialization-start")
 			files, home, err := s.initializeFileClient(ctx)
+			s.noteVerbose(2, "verbose-sftp", "initialization-"+sshDiagnosticErrorKind(err))
 			s.fileMu.Lock()
 			if s.ctx.Err() != nil {
 				err = s.ctx.Err()

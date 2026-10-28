@@ -237,6 +237,7 @@ async function connectProfile(profileID, { background = false, refreshHistory = 
       if (profile.auth === 'password' && !secret) throw new Error('请输入 SSH 密码');
     }
     showConnectionProgress(state, '🔗  连接主机...');
+    if (profile.verbose) state.term.writeln(`\r\n[debug] 已开启 -${'v'.repeat(profile.verbose)} 诊断，正在建立 SSH 连接。`);
     const requestConnection = async () => {
       let hostKeyApproval;
       for (let confirmations = 0; ; confirmations++) {
@@ -281,6 +282,7 @@ async function connectProfile(profileID, { background = false, refreshHistory = 
     const pendingID = state.id, selected = activeID === pendingID;
     sessions.delete(pendingID);
     Object.assign(state, info, { cwd: info.home, connected: true, localOnly: false, pendingConnection: false });
+    if (profile.verbose) startVerboseDiagnostics(state, profile.verbose);
     sessions.set(state.id, state); state.host.dataset.session = state.id;
     state.openTerminalSocket();
     // Each tab becomes usable independently, preserving order and the user's current focus.
@@ -303,7 +305,7 @@ async function connectProfile(profileID, { background = false, refreshHistory = 
     return state;
   } catch (error) {
     if (alive()) {
-      showConnectionProgress(state, '❌  连接主机失败：' + (error.message || String(error)), true); toast(`❌  ${profile.name}：${error.message || error}`);
+      showConnectionProgress(state, '❌  连接主机失败：' + (error.message || String(error)), true); if (profile.verbose) startVerboseDiagnostics(state, profile.verbose, `handshake-${profileID}`); toast(`❌  ${profile.name}：${error.message || error}`);
       if (!background && ['ssh_key_missing', 'ssh_key_unavailable', 'ssh_private_key_invalid', 'ssh_proxy_missing'].includes(error.code)) showConnectionForm(profile);
     }
     return null;
@@ -353,6 +355,25 @@ function showConnectionProgress(state, message, failed = false) {
   // errors readable without allowing control bytes to erase earlier output.
   if (changed) state.term.writeln(String(message).replace(/\r\n?/g, '\n').replace(/[\x00-\x09\x0b-\x1f\x7f-\x9f]/g, '').replace(/\n/g, '\r\n'));
   if (current() === state) renderSessionInfo();
+}
+function startVerboseDiagnostics(state, level, traceID = state.id) {
+  let cursor = 0, stopped = false, finalPolls = 0;
+  const clean = value => String(value || '').replace(/[\x00-\x1f\x7f-\x9f]/g, ' ');
+  state.term.writeln(`\r\n[debug] 显示 DevShell 诊断（级别 ${level}）；与系统 OpenSSH 的 debug 输出不同。`);
+  const poll = async () => {
+    if (stopped || state.closed) return;
+    try {
+      const result = await api(`/api/sessions/${encodeURIComponent(traceID)}/verbose?after=${cursor}`);
+      if (state.closed) return;
+      for (const event of result.events || []) {
+        cursor = Math.max(cursor, event.sequence || 0);
+        state.term.writeln(`\r\n[debug +${Number(event.ageSeconds || 0).toFixed(2)}s] ${clean(event.kind)}${event.detail ? ': ' + clean(event.detail) : ''}`);
+      }
+    } catch { /* A transient local request failure must not affect SSH. */ }
+    if (!state.connected && ++finalPolls >= 3) { stopped = true; return; }
+    setTimeout(poll, state.connected ? 1000 : 200);
+  };
+  void poll();
 }
 function makeSessionState(info) { return { ...info, connected: true, ready: false, cwd: info.home, entries: [], folders: new Map(), expanded: new Set(), history: getCommandHistory(info.profileId), historyIndex: getCommandHistory(info.profileId).length, navGeneration: 0, stats: null, chart: [], latency: null, follow: false, ws: null }; }
 // Desktop IPC keeps WebKit independent of system proxy and loopback policies.

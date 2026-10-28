@@ -163,3 +163,31 @@ func TestSSHDiagnosticClosePreventsLateLogWrites(t *testing.T) {
 		t.Fatal("closed diagnostic logger recreated its directory", err)
 	}
 }
+
+func TestVerboseEventsAreBoundedAndRemainAvailableAfterDisconnect(t *testing.T) {
+	a := &App{}
+	a.sshDiagnostics.path = filepath.Join(t.TempDir(), "trace.jsonl")
+	s := &Session{ID: "trace-session", diagnosticLog: &a.sshDiagnostics, diagnosticStarted: time.Now(), verboseLevel: 3}
+	for i := 0; i < 520; i++ {
+		s.noteVerbose(2, "verbose-monitor", "system:exec-start")
+	}
+	s.noteDisconnect("DS-210", "remote-channel-ended-without-status")
+	r := httptest.NewRequest("GET", "/?after=518", nil)
+	r.SetPathValue("id", s.ID)
+	w := httptest.NewRecorder()
+	a.sshVerboseHTTP(w, r)
+	var result struct {
+		Events []sshVerboseEvent `json:"events"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Events) != 3 || result.Events[0].Sequence != 519 || result.Events[2].Kind != "verbose-disconnect" {
+		t.Fatalf("unexpected trace: %+v", result.Events)
+	}
+	a.sshDiagnostics.mu.Lock()
+	defer a.sshDiagnostics.mu.Unlock()
+	if len(a.sshDiagnostics.verboseEvents[s.ID]) != 512 {
+		t.Fatal("trace is not bounded")
+	}
+}

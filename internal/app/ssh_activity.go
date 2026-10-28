@@ -32,8 +32,8 @@ func newSSHActivityConn(conn net.Conn) *sshActivityConn {
 func (c *sshActivityConn) enableVerbose(s *Session) { c.verbose.Store(s) }
 
 func (c *sshActivityConn) Read(data []byte) (int, error) {
-	idle := c.idleFor()
 	n, err := c.Conn.Read(data)
+	idle := c.idleFor()
 	if n > 0 {
 		c.receivedAt.Store(time.Since(sshActivityEpoch).Nanoseconds())
 		if s := c.verbose.Load(); s != nil {

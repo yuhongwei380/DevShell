@@ -58,6 +58,8 @@ func (r *monitorCommandRunner) runWithOutput(parent context.Context, s *Session,
 	r.mu.Unlock()
 	go func() {
 		defer close(job.done)
+		s.noteVerbose(2, "verbose-monitor", scope+":channel-open")
+		defer func() { s.noteVerbose(2, "verbose-monitor", scope+":"+sshDiagnosticErrorKind(job.err)) }()
 		transport := s.ctx
 		if transport == nil {
 			transport = context.Background()
@@ -83,6 +85,7 @@ func (r *monitorCommandRunner) runWithOutput(parent context.Context, s *Session,
 			_ = channel.Close()
 		})
 		if err = ctx.Err(); err == nil {
+			s.noteVerbose(2, "verbose-monitor", scope+":exec-start")
 			err = channel.Run("exec " + posixShellCommand(command))
 		}
 		if stopCleanup() {

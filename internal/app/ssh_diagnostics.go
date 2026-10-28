@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -58,13 +60,24 @@ type sshDiagnosticEvent struct {
 }
 
 type sshDiagnosticLog struct {
-	mu        sync.Mutex
-	path      string
-	closed    bool
-	records   map[string]SSHDisconnectDiagnostic
-	order     []string
-	pending   map[string][]sshDiagnosticEvent
-	persisted map[string]bool
+	mu            sync.Mutex
+	path          string
+	closed        bool
+	records       map[string]SSHDisconnectDiagnostic
+	order         []string
+	pending       map[string][]sshDiagnosticEvent
+	persisted     map[string]bool
+	verboseEvents map[string][]sshVerboseEvent
+	verboseNext   map[string]uint64
+}
+
+// sshVerboseEvent contains only existing, bounded diagnostic categories and
+// timing. It never carries terminal data or arbitrary server-provided text.
+type sshVerboseEvent struct {
+	Sequence   uint64  `json:"sequence"`
+	Kind       string  `json:"kind"`
+	Detail     string  `json:"detail,omitempty"`
+	AgeSeconds float64 `json:"ageSeconds"`
 }
 
 // normalSSHDiagnosticCodes mark closes that need no on-disk trace: user exit,
@@ -99,6 +112,8 @@ func (l *sshDiagnosticLog) record(id string, event sshDiagnosticEvent) {
 			delete(l.records, evicted)
 			delete(l.pending, evicted)
 			delete(l.persisted, evicted)
+			delete(l.verboseEvents, evicted)
+			delete(l.verboseNext, evicted)
 		}
 	}
 	previous := l.records[id]
@@ -163,9 +178,21 @@ func (l *sshDiagnosticLog) recordImmediate(id string, event sshDiagnosticEvent) 
 			delete(l.records, evicted)
 			delete(l.pending, evicted)
 			delete(l.persisted, evicted)
+			delete(l.verboseEvents, evicted)
+			delete(l.verboseNext, evicted)
 		}
 	}
 	previous := l.records[id]
+	if l.verboseEvents == nil {
+		l.verboseEvents = make(map[string][]sshVerboseEvent)
+		l.verboseNext = make(map[string]uint64)
+	}
+	l.verboseNext[id]++
+	events := append(l.verboseEvents[id], sshVerboseEvent{Sequence: l.verboseNext[id], Kind: event.Kind, Detail: event.Detail, AgeSeconds: event.AgeSeconds})
+	if len(events) > 512 {
+		events = append([]sshVerboseEvent(nil), events[len(events)-512:]...)
+	}
+	l.verboseEvents[id] = events
 	if !l.persisted[id] {
 		// Promotion flushes anything this session had already buffered.
 		l.persisted[id] = true
@@ -256,6 +283,9 @@ func (s *Session) noteDisconnect(code, detail string) {
 		return
 	}
 	s.diagnosticCode = code
+	if s.verboseLevel > 0 {
+		s.diagnosticLog.recordImmediate(s.ID, s.diagnosticEvent("verbose-disconnect", code, code+":"+detail))
+	}
 	s.diagnosticLog.record(s.ID, s.diagnosticEvent("disconnect", code, detail))
 }
 func (s *Session) closeDiagnostic(code, detail string) { s.noteDisconnect(code, detail); s.Close() }
@@ -330,6 +360,7 @@ func (s *Session) startConnectionDiagnostics() {
 	go func() {
 		err := s.client.Wait()
 		kind := sshDiagnosticErrorKind(err)
+		s.noteVerbose(1, "verbose-transport-end", kind)
 		s.noteDisconnect("DS-202", kind)
 		s.diagnosticLog.record(s.ID, s.diagnosticEvent("transport-end", "", kind))
 		s.Close()
@@ -372,6 +403,22 @@ func sshDiagnosticErrorKind(err error) string {
 	if errors.Is(err, net.ErrClosed) {
 		return "local-socket-closed"
 	}
+	// The SSH package keeps disconnectMsg private. Identify the actual type,
+	// then match only fixed server messages; never persist arbitrary peer text.
+	for current := err; current != nil; current = errors.Unwrap(current) {
+		typ := reflect.TypeOf(current)
+		if typ.Kind() == reflect.Pointer && typ.Elem().PkgPath() == "golang.org/x/crypto/ssh" && typ.Elem().Name() == "disconnectMsg" {
+			message := current.Error()
+			for _, reason := range []int{2, 3, 11} {
+				for _, known := range []struct{ message, kind string }{{"Idle timeout", "server-idle-timeout"}, {"Keepalive timeout", "server-keepalive-timeout"}, {"String too long", "server-request-too-long"}} {
+					if message == "ssh: disconnect, reason "+strconv.Itoa(reason)+": "+strconv.Quote(known.message) {
+						return known.kind
+					}
+				}
+			}
+			return "server-disconnect"
+		}
+	}
 	var network net.Error
 	if errors.As(err, &network) && network.Timeout() {
 		return "network-timeout"
@@ -396,4 +443,19 @@ func (a *App) sshDisconnectDiagnosticHTTP(w http.ResponseWriter, r *http.Request
 		return
 	}
 	writeJSON(w, value)
+}
+
+// Verbose traces are session-scoped, bounded, and available after disconnect.
+func (a *App) sshVerboseHTTP(w http.ResponseWriter, r *http.Request) {
+	after, _ := strconv.ParseUint(r.URL.Query().Get("after"), 10, 64)
+	id := r.PathValue("id")
+	a.sshDiagnostics.mu.Lock()
+	events := make([]sshVerboseEvent, 0)
+	for _, e := range a.sshDiagnostics.verboseEvents[id] {
+		if e.Sequence > after {
+			events = append(events, e)
+		}
+	}
+	a.sshDiagnostics.mu.Unlock()
+	writeJSON(w, map[string]any{"events": events})
 }
