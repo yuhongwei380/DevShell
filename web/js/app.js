@@ -449,7 +449,7 @@ function createTerminal(state) {
     if (message.type === 'ready') {
       // The relay sends ready only after the remote shell starts, before its
       // first output. Window handoffs must not add text to a running shell.
-      if (state.announceConnectionReady) { state.announceConnectionReady = false; showConnectionProgress(state, state.serial ? '✅  串口已打开！' : '✅  连接主机成功！'); if (!state.serial && state.sftpAvailable === false && !state.sftpPending) showConnectionProgress(state, 'ℹ️  SFTP 文件服务不可用，SSH 终端可正常使用。'); }
+      if (state.announceConnectionReady) { state.announceConnectionReady = false; showConnectionProgress(state, state.serial ? '✅  串口已打开！' : '✅  连接主机成功！'); if (!state.serial && state.sftpAvailable === false && !state.sftpPending) showConnectionProgress(state, state.sftpDisabled ? 'ℹ️  Dropbear 连接默认关闭 SFTP，SSH 终端可正常使用。' : 'ℹ️  SFTP 文件服务不可用，SSH 终端可正常使用。'); }
       if (state.sftpPending) void refreshFileStatus(state);
       acceptShellIntegration(state, message.integration); state.ready = true; applyPendingFollow(state); state.handoffProvisional = false; state.ownershipUncertain = false; terminal.options.disableStdin = !!state.detaching || !state.connected; state.restoring = false; state.restoration = null;
       if (!state.terminalOutputStarted && !state.terminalBackgroundTimer) state.terminalBackgroundTimer = setTimeout(() => { state.terminalBackgroundTimer = null; if (!state.closed && state.connected && sessions.get(state.id) === state) { state.terminalBackgroundReady = true; if (current() === state) { pollStats(); pollLatency(); } } }, 1000);
@@ -707,7 +707,7 @@ function renderFiles() {
   $('#file-status-count').textContent = state ? `${entries.length} 个项目${filter ? ' · 已筛选' : ''}` : '尚未连接'; $('#file-empty').hidden = !!entries.length; $('#file-empty').textContent = state ? '此目录暂无匹配文件' : '连接后浏览远程文件';
   for (const id of ['parent-directory', 'refresh-files', 'mkdir', 'choose-files']) $(`#${id}`).disabled = !filesUsable(state);
   if (state?.sftpPending) { $('#file-status-count').textContent = '正在连接文件服务…'; $('#file-empty').textContent = '正在加载远程文件，终端可正常使用。'; }
-  else if (state?.sftpAvailable === false) { $('#file-status-count').textContent = 'SFTP 不可用'; $('#file-empty').textContent = '当前服务器的 SFTP 文件服务不可用，SSH 终端可正常使用。'; }
+  else if (state?.sftpAvailable === false) { $('#file-status-count').textContent = state.sftpDisabled ? 'SFTP 已关闭' : 'SFTP 不可用'; $('#file-empty').textContent = state.sftpDisabled ? 'Dropbear 连接默认关闭 SFTP 文件功能，SSH 终端可正常使用。' : '当前服务器的 SFTP 文件服务不可用，SSH 终端可正常使用。'; }
   $('#parent-directory').disabled ||= state?.cwd === '/';
   const selection = fileSelection(state), visibleNames = new Set(entries.map(entry => entry.name));
   for (const name of selection.names) if (!visibleNames.has(name)) selection.names.delete(name);

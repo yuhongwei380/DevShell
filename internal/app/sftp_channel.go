@@ -143,6 +143,7 @@ func (s *Session) initializeFileClient(ctx context.Context) (*sftp.Client, strin
 }
 
 var errSFTPUnavailable = errors.New("当前连接的 SFTP 文件服务不可用，SSH 终端仍可正常使用")
+var errSFTPDisabled = errors.New("Dropbear 连接默认关闭 SFTP 文件服务，SSH 终端仍可正常使用")
 
 func (a *App) fileSession(id string) (*Session, error) {
 	s, err := a.session(id)
@@ -155,6 +156,9 @@ func (a *App) fileSession(id string) (*Session, error) {
 		return nil, err
 	}
 	if files, _ := s.fileClientSnapshot(); files == nil {
+		if s.SFTPDisabled {
+			return nil, errSFTPDisabled
+		}
 		return nil, errSFTPUnavailable
 	}
 	return s, nil
@@ -168,6 +172,11 @@ func (s *Session) prepareFileInitialization() {
 	s.SFTPAvailable = false
 	s.SFTPPending = true
 	s.fileDone = make(chan struct{})
+	if s.usesDropbearServer() {
+		s.SFTPDisabled = true
+		s.SFTPPending = false
+		s.fileInitOnce.Do(func() { close(s.fileDone) })
+	}
 }
 
 func (s *Session) startFileInitialization() {
@@ -244,5 +253,5 @@ func (a *App) fileStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	files, home := s.fileClientSnapshot()
-	writeJSON(w, map[string]any{"sftpPending": false, "sftpAvailable": files != nil, "home": home})
+	writeJSON(w, map[string]any{"sftpPending": false, "sftpAvailable": files != nil, "sftpDisabled": s.SFTPDisabled, "home": home})
 }

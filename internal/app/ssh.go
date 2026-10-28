@@ -29,6 +29,7 @@ type Session struct {
 	Fingerprint         string `json:"fingerprint"`
 	SFTPAvailable       bool   `json:"sftpAvailable"`
 	SFTPPending         bool   `json:"sftpPending,omitempty"`
+	SFTPDisabled        bool   `json:"sftpDisabled,omitempty"`
 	connectionHost      string // immutable successful connection target; never resolved again
 	connectionPeer      string // public direct TCP peer; empty for explicit proxies
 	fileWriteIdentity   string // immutable verified server identity for text-save locks

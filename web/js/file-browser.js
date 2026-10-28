@@ -75,7 +75,7 @@ window.DengFileBrowser = (() => {
       return;
     }
     if (state.sftpPending) { container.replaceChildren(node('div', 'tree-placeholder', '正在加载服务器目录…')); delete container.dataset.session; return; }
-    if (state.sftpAvailable === false) { container.replaceChildren(node('div', 'tree-placeholder', 'SFTP 文件服务不可用')); delete container.dataset.session; return; }
+    if (state.sftpAvailable === false) { container.replaceChildren(node('div', 'tree-placeholder', state.sftpDisabled ? 'SFTP 已默认关闭' : 'SFTP 文件服务不可用')); delete container.dataset.session; return; }
     const tree = treeFor(state);
     loadVisible(state);
     const sameSession = container.dataset.session === state.id;
