@@ -35,7 +35,7 @@ const ApplicationVersion = "v26.10.4"
 // ApplicationDisplayVersion identifies this self-maintained branch in the user
 // interface. ApplicationVersion above stays the functional version that drives
 // update comparison and package metadata; never put branch text into it.
-const ApplicationDisplayVersion = "ver.Phoenix · v26.10.4-rc.1"
+const ApplicationDisplayVersion = "ver.Phoenix · v26.10.4-rc.2"
 
 // Package managers use ApplicationVersion without the leading v. It must stay
 // greater than the last upstream package version (0.3.0).
@@ -48,7 +48,7 @@ const ApplicationPackageVersion = "26.10.4"
 // sequence is numerically below the retired 11-digit high-water mark
 // (20261024156), so installs at any older build must manually install the
 // 2026102401 release once before built-in updates continue normally.
-const ApplicationBuild uint64 = 2026102704
+const ApplicationBuild uint64 = 2026102801
 
 // Updates are published as GitHub Release assets of the maintained repository.
 // Release assets must be named exactly: up.exe / up.exe.json,
