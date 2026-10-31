@@ -627,7 +627,6 @@ function renderSessionInfo() {
   $('#terminal-state').hidden = currentConnected; $('#terminal-current-badge').hidden = !currentConnected;
   const localPrompt = !!state && !state.connected && !state.pendingConnection && !state.disconnecting && !state.detaching && !state.handoffProvisional && !state.ownershipUncertain;
   $('#command-history').disabled = false; $('#command-input').disabled = !!state && !(state.connected || localPrompt); $('#command-input').placeholder = state ? (state.connected ? '输入命令并回车发送 · ↑↓ 历史' : localPrompt ? '本机提示符：ssh · reconnect · ping/traceroute/nslookup/dig/curl · exit · ↑↓ 本机历史' : '输入命令并回车发送 · ↑↓ 历史') : '本机：输入 ssh 用户@主机 或 ping/traceroute/nslookup/dig/curl · ↑↓ 本机历史'; window.DengQuickConnect?.reflect(); $('#command-input').value = ''; resizeCommandInput(); $('#reconnect').disabled = !state || !!(state.pendingConnection || state.disconnecting || state.detaching || state.handoffProvisional || state.ownershipUncertain); $('#disconnect').disabled = !state?.connected || !!(state.disconnecting || state.detaching || state.handoffProvisional || state.ownershipUncertain);
-  $('#follow-terminal').checked = state ? !!state.follow : pendingFollow; $('#follow-terminal').disabled = !!state && (!state.ready || !filesUsable(state));
   renderMonitor(state?.connected ? state.stats : null); renderLatency(); renderCommands(); window.DengCommonApps?.render(); window.DengProcessView?.reflect(); window.DengPinnedNav?.reflect(); updateStatus();
 }
 $('#command-form').onsubmit = event => { event.preventDefault(); const state = current(); const input = $('#command-input'); if (!state && input.value.trim()) { const command = input.value; input.value = ''; window.DengCommandHistory.recordLocal(command); if (window.DengLocalPrompt.commands.test(command.trim())) safe(() => window.DengLocalPrompt.run(command))(); else safe(() => window.DengQuickConnect.run(command))(); return; } if (state && !state.connected && !state.pendingConnection && !state.detaching && !state.handoffProvisional && !state.ownershipUncertain && input.value.trim()) { const command = input.value; input.value = ''; window.DengCommandHistory.recordLocal(command); safe(() => sessionLocalCommand(state, command))(); return; } if (!state?.ready || !input.value) return; if (!pasteTerminalText(state, input.value, { execute: true })) return; input.value = ''; resizeCommandInput(); };
@@ -638,26 +637,21 @@ $('#clear-terminal').onclick = () => { if (window.DengLocalPrompt?.handleClear()
 let terminalFont = normalizeTerminalFontSize(appearance.terminalFontSize);
 function changeFont(amount) { terminalFont = normalizeTerminalFontSize(terminalFont + amount); document.documentElement.style.setProperty('--terminal-font-size', `${terminalFont}px`); for (const state of sessions.values()) state.term.options.fontSize = terminalFont; persistAppearance({ terminalFontSize: terminalFont }).catch(error => toast(error.message)); renderAppearanceControls(); fitActive(); }
 $('#font-up').onclick = () => changeFont(.5); $('#font-down').onclick = () => changeFont(-.5);
-// 默认开启：连接后一旦 Bash / Zsh / Fish 提示符集成就绪就自动跟随；未连接时
-// 取消勾选只是记录意图，连接后就绪时不再生效；不持久化，重启后恢复默认开启。
-let pendingFollow = true;
+// 跟随终端目录：开关在设置的外观页（默认开启）。开启后连接一旦 Bash / Zsh /
+// Fish 提示符集成就绪就自动跟随；关闭立即停止全部会话的跟随，重新开启会对已
+// 就绪的会话重新生效。设置持久化，重启后保持。
+function followTerminalEnabled() { return appearance.followTerminal !== false; }
 function applyPendingFollow(state) {
-  if (!pendingFollow || !state?.connected || state.follow || !state.shellIntegration?.ready) return;
+  if (!followTerminalEnabled() || !state?.connected || state.follow || !state.shellIntegration?.ready) return;
   state.follow = true; renderSessionInfo();
   if (filesUsable(state) && state.terminalDirectory && state.terminalDirectory !== state.cwd) navigate(state.terminalDirectory, state).catch(error => toast(error?.message || String(error)));
 }
-$('#follow-terminal').onchange = safe(async event => {
-  const state = current();
-  if (!state?.connected) { pendingFollow = event.target.checked; return; }
-  if (!event.target.checked) { state.follow = false; pendingFollow = false; return; }
-  if (!state.shellIntegration?.ready) {
-    event.target.checked = false;
-    toast('目录跟随需要 Bash / Zsh / Fish 提示符集成，请等待终端就绪或重新连接。');
-    return;
+function reflectTerminalFollow() {
+  for (const state of sessions.values()) {
+    if (followTerminalEnabled()) applyPendingFollow(state);
+    else state.follow = false;
   }
-  state.follow = true;
-  if (state.terminalDirectory && state.terminalDirectory !== state.cwd) await navigate(state.terminalDirectory, state);
-});
+}
 
 function filesUsable(state = current()) { return !!state?.connected && !state.sftpPending && state.sftpAvailable !== false; }
 
@@ -1058,7 +1052,9 @@ $('#toggle-sftp').onclick = () => {
   if ($('#files-panel').hidden) { showPane('files'); setWorkspaceVisible(true); }
   else setWorkspaceVisible(false);
 };
-function showPane(pane, persist = true) { workspaceInitialized = true; setWorkspaceVisible(true, false); $$('.file-tab').forEach(tab => tab.classList.toggle('active', tab.dataset.pane === pane)); $('#files-view').hidden = pane !== 'files'; $('#transfers-view').hidden = pane !== 'transfers'; $('#commands-view').hidden = pane !== 'commands'; $('#common-apps-view').hidden = pane !== 'common-apps'; window.DengCommonApps?.render(); $('.follow-label').hidden = pane !== 'files'; $('.files-tip').hidden = pane !== 'files'; if (persist) save('dengshell.workspace', { ...readSaved('dengshell.workspace', {}), pane }); updateTransferNotice(); }
+// The panel's own button only closes the SFTP panel; placement lives in settings.
+$('#close-files-panel').onclick = () => setWorkspaceVisible(false);
+function showPane(pane, persist = true) { workspaceInitialized = true; setWorkspaceVisible(true, false); $$('.file-tab').forEach(tab => tab.classList.toggle('active', tab.dataset.pane === pane)); $('#files-view').hidden = pane !== 'files'; $('#transfers-view').hidden = pane !== 'transfers'; $('#commands-view').hidden = pane !== 'commands'; $('#common-apps-view').hidden = pane !== 'common-apps'; window.DengCommonApps?.render(); $('.files-tip').hidden = pane !== 'files'; if (persist) save('dengshell.workspace', { ...readSaved('dengshell.workspace', {}), pane }); updateTransferNotice(); }
 $$('.file-tab').forEach(tab => { tab.onclick = () => showPane(tab.dataset.pane); });
 $('#choose-files').onclick = event => { const menu = $('#upload-menu'), rect = event.currentTarget.getBoundingClientRect(); menu.hidden = !menu.hidden; menu.style.left = `${Math.min(rect.left / effectiveScale, logicalWidth() - 155)}px`; menu.style.top = `${Math.min(rect.bottom / effectiveScale + 5, logicalHeight() - 90)}px`; };
 document.addEventListener('click', event => { if (!event.target.closest('#upload-menu, #choose-files')) $('#upload-menu').hidden = true; });

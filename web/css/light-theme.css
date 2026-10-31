@@ -20,7 +20,7 @@
   .disk-summary strong, .disk-row, .disk-row > span:last-child, .disk-io b,
   .path-form input, .file-search input, .connection-search input,
   .tree-shortcut, .tree-row, .file-table td, .process-table td, .transfer-info strong,
-  .file-tab, .follow-label, .session-tab, .new-connection, .transfer-retry,
+  .file-tab, .session-tab, .new-connection, .transfer-retry,
   .connection-actions button, .group-tool, dialog .checkbox-label) {
   color: var(--text-secondary);
 }

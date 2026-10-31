@@ -52,6 +52,7 @@ body { transform-origin:0 0; }
 .settings-submenu-heading strong { font-size:12px; font-weight:600; }
 .scale-setting { display:flex; align-items:center; justify-content:space-between; gap:15px; font-size:12px; margin:8px 10px; padding-top:12px; border-top:1px solid var(--border); }
 .scale-setting select { border:0; background:var(--surface-inset,#f0f4f7); border-radius:8px; color:inherit; padding:6px 9px; font:inherit; }
+.placement-setting input[type=checkbox] { width:15px; height:15px; margin:0; flex:none; accent-color:var(--accent,#658daf); }
 dialog { max-width:calc(var(--view-width) - 24px); max-height:calc(var(--view-height) - 24px); }
 .connections-drawer { max-width:calc(var(--view-width) - 24px); bottom:12px; }
 .manager-dialog { width:810px; }
@@ -105,7 +106,6 @@ dialog { max-width:calc(var(--view-width) - 24px); max-height:calc(var(--view-he
 [data-narrow="true"] .directory-tree { display:none; }
 [data-narrow="true"] .file-content { grid-template-columns:minmax(0,1fr); }
 [data-narrow="true"] .terminal-meta > span:last-child { display:none; }
-[data-narrow="true"] .follow-label { font-size:9px; }
 [data-narrow="true"] .file-tabs { padding-inline:8px; gap:1px; }
 [data-narrow="true"] .file-tab { padding-inline:9px; }
 [data-narrow="true"] .asset-list { grid-template-columns:repeat(2,minmax(0,1fr)); }

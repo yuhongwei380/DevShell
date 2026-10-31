@@ -179,7 +179,7 @@
  function installSnapshot(saved,id,initial=false){
   const existing=sessions.get(saved.session.id);if(existing?.connected)throw new Error('当前窗口已经包含此 SSH 标签');if(existing)dropSessionView(existing.id);
   const state=makeSessionState(saved.session);Object.assign(state,saved.clientState||{});state.interfaceCharts=new Map(saved.clientState?.interfaceCharts||[]);state.tabOrder=nextSessionOrder++;
-  state.cwd=saved.cwd;state.follow=saved.follow;state.restoration=saved;state.restoring=true;state.handoffNonce=id;state.initialWindowRestore=initial;state.handoffProvisional=true;
+  state.cwd=saved.cwd;state.follow=saved.follow&&followTerminalEnabled();state.restoration=saved;state.restoring=true;state.handoffNonce=id;state.initialWindowRestore=initial;state.handoffProvisional=true;
   sessions.set(state.id,state);try{createTerminal(state);activate(state.id);setDrawer(false);}catch(error){dropSessionView(state.id,state);throw error;}
   navigate(state.cwd,state).catch(error=>{if(!state.closed)toast('窗口已接手，目录读取失败：'+error.message)});pollStats();pollLatency();window.DengWindowTransfers.changed();return state;
  }

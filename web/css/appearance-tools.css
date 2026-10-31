@@ -25,9 +25,9 @@ button,input,select,textarea { font-family:inherit; }
 /* Hidden panes release every reserved track, in every supported position. */
 .workspace.files-hidden { grid-template-rows:minmax(0,1fr); grid-template-columns:minmax(0,1fr); }
 .workspace.files-hidden > .terminal-panel { grid-row:1; grid-column:1; }
-.files-panel .files-position-button { flex:0 0 28px; width:28px; height:28px; margin-left:auto; border-radius:7px; color:var(--accent,#7198b1); }
-.files-position-button svg { width:18px; height:18px; }
-.files-position-button:hover,.files-position-button[aria-pressed="true"] { background:var(--surface-selected,#edf3f7); }
+.files-panel .files-close-button { flex:0 0 28px; width:28px; height:28px; margin-left:auto; border-radius:7px; }
+.files-close-button svg { width:18px; height:18px; }
+.files-close-button:hover { background:var(--surface-selected,#edf3f7); }
 .files-panel .files-tip { margin-left:2px; white-space:nowrap; }
 /* A right-hand pane is narrow even on a wide monitor. Keep its controls
    reachable according to the pane's width, rather than the window's width. */
@@ -37,7 +37,7 @@ button,input,select,textarea { font-family:inherit; }
   [data-files-position="right"] .file-toolbar .path-form { flex-basis:calc(100% - 100px); }
   [data-files-position="right"] .file-content { grid-template-columns:104px minmax(0,1fr); padding-inline:4px; }
   [data-files-position="right"] .file-table { min-width:360px; }
-  [data-files-position="right"] .follow-label { margin-left:0; }
+
 }
 @container (max-width:480px) {
   .files-panel .file-tabs { flex-wrap:wrap; overflow:visible; height:auto; flex:none; }

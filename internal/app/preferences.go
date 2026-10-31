@@ -31,6 +31,7 @@ type Appearance struct {
 	OnboardingCompleted bool                       `json:"onboardingCompleted"`
 	MonitorVisible      bool                       `json:"monitorVisible"`
 	FilesPosition       string                     `json:"filesPosition"`
+	FollowTerminal      bool                       `json:"followTerminal"`
 	PromptUsernameColor string                     `json:"promptUsernameColor"`
 	PromptHostnameColor string                     `json:"promptHostnameColor"`
 	MinimizeAction      string                     `json:"minimizeAction"`
@@ -39,7 +40,7 @@ type Appearance struct {
 }
 
 func defaultAppearance() Appearance {
-	return Appearance{UIFontID: defaultUIFontID, UITextColors: map[string]string{}, FontID: "builtin:jetbrains-mono", FontColors: map[string]string{}, FontBold: map[string]bool{}, ChartStyles: map[string]ChartLineStyle{}, BackgroundID: "builtin:none", BackgroundOpacity: .42, BackgroundVersion: 2, UIScale: 1, TerminalFontSize: 14, Theme: "system", MonitorVisible: true, FilesPosition: "right", MinimizeAction: "ask", Layout: map[string]json.RawMessage{}}
+	return Appearance{UIFontID: defaultUIFontID, UITextColors: map[string]string{}, FontID: "builtin:jetbrains-mono", FontColors: map[string]string{}, FontBold: map[string]bool{}, ChartStyles: map[string]ChartLineStyle{}, BackgroundID: "builtin:none", BackgroundOpacity: .42, BackgroundVersion: 2, UIScale: 1, TerminalFontSize: 14, Theme: "system", MonitorVisible: true, FilesPosition: "right", FollowTerminal: true, MinimizeAction: "ask", Layout: map[string]json.RawMessage{}}
 }
 
 // Old releases combined 18% image opacity with a dark multiply tint. Keep

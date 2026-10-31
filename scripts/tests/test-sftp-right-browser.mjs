@@ -20,7 +20,7 @@ const key=await api('/api/keys',{name:'SFTP right isolated key',sourcePath:fixtu
 const profile=await api('/api/profiles',{name:'SFTP right isolated SSH',host:'127.0.0.1',port:fixture.port,user:'bitsflow',auth:'key',keyId:key.id});
 const trust=await api('/api/sessions',{profileId:profile.id,hostKeyApproval:{host:'127.0.0.1:'+fixture.port,fingerprint:fixture.fingerprint}});
 await api('/api/sessions/'+trust.id,undefined,'DELETE');
-const browser=await puppeteer.launch({executablePath:chrome,headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
+const browser=await puppeteer.launch({executablePath:chrome,headless:true,protocolTimeout:300000,args:['--no-sandbox','--disable-dev-shm-usage']});
 const checks=[],failures=[],errors=[],measurements=[];
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 let page,sequence=0,completed=false;
@@ -53,19 +53,19 @@ async function geometry(label,hidden=false){
   else{eq(s.terminal.y,s.workspace.y,'bottom terminal start');eq(s.files.bottom,s.workspace.bottom,'bottom files end');assert(s.files.y>=s.terminal.bottom-1);}
   assert.equal(s.orientation,'horizontal');assert.equal(s.cursor,'row-resize');
  }
- if(s.rows){const available=s.hostHeight-s.padding;assert(s.rows*s.cellHeight<=available+2,'xterm too tall');assert(available-s.rows*s.cellHeight<s.cellHeight+2,'xterm leaves unused rows');}
+ if(s.rows){const available=s.hostHeight-s.padding;assert(s.rows*s.cellHeight<=available+2,'xterm too tall');assert(available-s.rows*s.cellHeight<s.cellHeight+2,`xterm leaves unused rows (gap=${(available-s.rows*s.cellHeight).toFixed(2)},cell=${s.cellHeight?.toFixed?.(2)},rows=${s.rows},avail=${available.toFixed(2)})`);}
  return s;
 }
 async function button(label){
  const b=await page.evaluate(()=>{
-  const e=$('#toggle-files-position'),tip=$('.files-tip'),panel=$('#files-panel'),r=e.getBoundingClientRect(),t=tip.getBoundingClientRect(),p=panel.getBoundingClientRect();
+  const e=$('#close-files-panel'),tip=$('.files-tip'),panel=$('#files-panel'),r=e.getBoundingClientRect(),t=tip.getBoundingClientRect(),p=panel.getBoundingClientRect();
   return {tag:e.tagName,type:e.type,disabled:e.disabled,tabIndex:e.tabIndex,label:e.getAttribute('aria-label')||e.textContent||e.title,
    before:!!(e.compareDocumentPosition(tip)&Node.DOCUMENT_POSITION_FOLLOWING),visible:!!e.getClientRects().length,
    inside:r.left>=p.left-1&&r.right<=p.right+1&&r.top>=p.top-1&&r.bottom<=p.bottom+1,
    hit:e.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)),tipVisible:!!tip.getClientRects().length,
-   leftOfTip:r.right<=t.left+2||r.top<t.top-2,width:r.width,height:r.height};
+   leftOfTip:r.right<=t.left+2||r.top<t.top-2,width:r.width,height:r.height,scale:effectiveScale};
  });
- measurements.push({label,button:b});assert.equal(b.tag,'BUTTON');assert.equal(b.type,'button');assert(!b.disabled&&b.tabIndex>=0&&b.label.trim());assert(b.before,'toggle must precede upload hint');assert(b.visible&&b.inside&&b.hit,'toggle must be visible and reachable');assert(b.width>=20&&b.height>=20,'toggle target too small');if(b.tipVisible)assert(b.leftOfTip,'toggle must be left of upload hint');
+ measurements.push({label,button:b});assert.equal(b.tag,'BUTTON');assert.equal(b.type,'button');assert(!b.disabled&&b.tabIndex>=0&&b.label.trim());assert.equal(b.label,'关闭 SFTP 面板');assert(b.before,'close button must precede upload hint');assert(b.visible&&b.inside&&b.hit,'close button must be visible and reachable');assert(b.width/b.scale>=20&&b.height/b.scale>=20,'close button target too small');if(b.tipVisible)assert(b.leftOfTip,'close button must be left of upload hint');
 }
 async function toolbar(label){
  const controls=await page.evaluate(()=>{
@@ -86,17 +86,38 @@ async function realPTY(label){
 async function connect(){const id=await page.evaluate(async id=>(await connect(id)).id,profile.id);await page.waitForFunction(id=>sessions.get(id)?.ready&&sessions.get(id)?.shellIntegration?.atPrompt&&filesUsable(sessions.get(id)),{timeout:30000},id);await settle();return id;}
 async function show(){if(await page.$eval('#files-panel',e=>e.hidden))await page.click('#toggle-sftp');await settle();}
 async function hide(){if(!await page.$eval('#files-panel',e=>e.hidden))await page.click('#toggle-sftp');await settle();}
-async function position(wanted){await show();const old=await page.evaluate(()=>appearance.filesPosition);if(old!==wanted){await page.click('#toggle-files-position');await page.waitForFunction(wanted=>appearance.filesPosition===wanted,{},wanted);await settle();}assert.equal(await page.evaluate(()=>appearance.filesPosition),wanted);}
+async function position(wanted){await show();const old=await page.evaluate(()=>appearance.filesPosition);if(old!==wanted){await page.evaluate(async wanted=>{await chooseAppearance({filesPosition:wanted});},wanted);await page.waitForFunction(wanted=>appearance.filesPosition===wanted,{},wanted);await settle();}assert.equal(await page.evaluate(()=>appearance.filesPosition),wanted);}
 async function drag(axis,delta){const s=(await snapshot()).splitter;const x=s.x+s.width/2,y=s.y+s.height/2;await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(x+(axis==='x'?delta:0),y+(axis==='y'?delta:0),{steps:6});await page.mouse.up();await settle();}
 async function reload(){await page.evaluate(async()=>{await DengPortablePreferences.flush();for(const id of [...sessions.keys()])await closeSession(id);});await page.reload({waitUntil:'networkidle0'});await page.evaluate(()=>{document.querySelectorAll('dialog[open]').forEach(d=>d.close());setDrawer(false);});await settle();}
 try{
- page=await browser.newPage();page.on('pageerror',e=>errors.push(e.message));await page.setViewport({width:1600,height:1000,deviceScaleFactor:1});await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:'reduce'}]);
+ page=await browser.newPage();page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.dismiss().catch(()=>{}));await page.setViewport({width:1600,height:1000,deviceScaleFactor:1});await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:'reduce'}]);
  await page.setRequestInterception(true);page.on('request',req=>{const u=new URL(req.url());if(/^https?:/.test(u.protocol)&&u.origin!==origin)req.abort();else req.continue();});
  await page.goto(fixture.url,{waitUntil:'networkidle0'});await page.evaluate(()=>{document.querySelectorAll('dialog[open]').forEach(d=>d.close());setDrawer(false);});let first=await connect();
- await check('Actual placement button is immediately before upload hint and reachable',async()=>{await show();await button('initial bottom button');assert.equal(await page.$eval('#toggle-files-position',e=>e.nextElementSibling?.classList.contains('files-tip')),true);});
- await check('Click switches bottom to right; keyboard switches back',async()=>{
-  const old=await geometry('initial bottom');await page.click('#toggle-files-position');await page.waitForFunction(()=>appearance.filesPosition==='right');await settle();const right=await geometry('clicked right');await button('right button');assert(right.cols<old.cols&&right.rows>old.rows,'right position should trade columns for rows');await realPTY('clicked right');
-  await page.focus('#toggle-files-position');await page.keyboard.press('Enter');await page.waitForFunction(()=>appearance.filesPosition==='bottom');await settle();await geometry('keyboard bottom');await realPTY('keyboard bottom');
+ await check('Actual close button is immediately before upload hint and reachable',async()=>{await show();await button('initial bottom button');assert.equal(await page.$eval('#close-files-panel',e=>e.nextElementSibling?.classList.contains('files-tip')),true);});
+ await check('Panel close button hides the panel; keyboard and settings placement still work',async()=>{
+  const old=await geometry('initial bottom');
+  await page.click('#close-files-panel');await settle();await geometry('closed by button',true);
+  await show();await page.focus('#close-files-panel');await page.keyboard.press('Enter');await settle();await geometry('closed by keyboard',true);await show();
+  await position('right');const right=await geometry('settings right');await button('right button');assert(right.cols<old.cols&&right.rows>old.rows,'right position should trade columns for rows');await realPTY('settings right');
+  await position('bottom');await geometry('settings bottom');await realPTY('settings bottom');
+ });
+ await check('Follow terminal directory is a settings switch, default on, controls live sessions',async()=>{
+  assert.equal(await page.evaluate(()=>appearance.followTerminal),true,'default should be on');
+  assert.equal(await page.$eval('#follow-terminal-setting',e=>e.checked),true,'settings checkbox should reflect default');
+  assert.equal(await page.evaluate(()=>current().follow),true,'connected session should follow by default');
+  await page.evaluate(()=>pasteTerminalText(current(),'cd /var/tmp',{execute:true}));
+  await page.waitForFunction(()=>current().terminalDirectory==='/var/tmp',{timeout:8000});await settle();
+  assert.equal(await page.evaluate(()=>current().cwd),'/var/tmp','default follow should navigate the files panel');
+  await page.evaluate(()=>$('#follow-terminal-setting').click());await settle();
+  assert.equal(await page.evaluate(()=>appearance.followTerminal),false,'click should persist off');
+  assert.equal(await page.evaluate(()=>current().follow),false,'settings off should stop following');
+  await page.evaluate(()=>pasteTerminalText(current(),'cd /etc',{execute:true}));
+  await page.waitForFunction(()=>current().terminalDirectory==='/etc',{timeout:8000});await settle();
+  assert.equal(await page.evaluate(()=>current().cwd),'/var/tmp','following must stay off while disabled');
+  await page.evaluate(()=>$('#follow-terminal-setting').click());await settle();
+  assert.equal(await page.evaluate(()=>current().follow),true,'settings on should resume following');
+  assert.equal(await page.evaluate(()=>current().cwd),'/etc','enabling should jump to the terminal directory');
+  assert.equal(await page.evaluate(()=>appearance.followTerminal),true,'checkbox click should persist on');
  });
  await check('Bottom height remains resizable while right width stays fixed across drag, keyboard and toggles',async()=>{
   await position('bottom');await drag('y',-48);const bottom=await geometry('resized bottom');
@@ -119,9 +140,9 @@ try{
   }
   await page.evaluate(()=>{appearance.uiScale=1;applyUIScale();});await settle();
   await check(`${place}: terminal font change refits PTY`,async()=>{const old=await snapshot();for(let i=0;i<6;i++)await page.click('#font-up');await settle();const large=await geometry(place+' font enlarged');assert(large.cols<old.cols&&large.rows<old.rows);await realPTY(place+' large font');for(let i=0;i<6;i++)await page.click('#font-down');await settle();});
-  for(const pane of ['files','transfers','commands','common-apps'])await check(`${place}: ${pane} tab keeps placement toggle reachable`,async()=>{
+  for(const pane of ['files','transfers','commands','common-apps'])await check(`${place}: ${pane} tab keeps close button reachable across placement changes`,async()=>{
    await show();await page.click(`.file-tab[data-pane="${pane}"]`);await settle();assert.equal(await page.$eval('.file-tab.active',e=>e.dataset.pane),pane);await geometry(place+' pane '+pane);await button(place+' pane button '+pane);
-   await page.click('#toggle-files-position');await settle();assert.equal(await page.$eval('.file-tab.active',e=>e.dataset.pane),pane);await geometry(place+' switched pane '+pane);await page.click('#toggle-files-position');await settle();await hide();await geometry(place+' hidden pane '+pane,true);await show();
+   const other=place==='bottom'?'right':'bottom';await position(other);assert.equal(await page.$eval('.file-tab.active',e=>e.dataset.pane),pane);await geometry(other+' switched pane '+pane);await position(place);await hide();await geometry(place+' hidden pane '+pane,true);await show();
   });
  }
  await position('right');await page.click('.file-tab[data-pane="files"]');await settle();
@@ -134,8 +155,8 @@ try{
  for(const place of ['bottom','right'])await check(`${place}: persisted shown and hidden placement after full refresh`,async()=>{
   await position(place);const original=await snapshot();await page.evaluate(()=>DengPortablePreferences.flush());await reload();assert.equal(await page.evaluate(()=>appearance.filesPosition),place);first=await connect();const shown=await geometry(place+' refresh shown');assert(Math.abs(shown.files[place==='right'?'width':'height']-original.files[place==='right'?'width':'height'])<2);await realPTY(place+' refresh shown');await hide();await reload();assert.equal(await page.evaluate(()=>appearance.filesPosition),place);await geometry(place+' refresh hidden before SSH',true);first=await connect();await geometry(place+' refresh hidden SSH',true);await realPTY(place+' refresh hidden');await show();
  });
- await check('Legacy top preference survives reload; hide and button transition remain compatible',async()=>{
-  await api('/api/appearance/patch',{filesPosition:'top'});await reload();assert.equal(await page.evaluate(()=>appearance.filesPosition),'top');first=await connect();await geometry('legacy top shown');await button('legacy top button');await hide();await geometry('legacy top hidden',true);await realPTY('legacy top hidden');await show();await page.click('#toggle-files-position');await settle();assert(['bottom','right'].includes(await page.evaluate(()=>appearance.filesPosition)));await geometry('legacy top switched by button');await realPTY('legacy top switched');
+ await check('Legacy top preference survives reload; close button and settings transition remain compatible',async()=>{
+  await api('/api/appearance/patch',{filesPosition:'top'});await reload();assert.equal(await page.evaluate(()=>appearance.filesPosition),'top');first=await connect();await geometry('legacy top shown');await button('legacy top button');await hide();await geometry('legacy top hidden',true);await realPTY('legacy top hidden');await show();await position('bottom');assert(['bottom','right'].includes(await page.evaluate(()=>appearance.filesPosition)));await geometry('legacy top switched via settings');await realPTY('legacy top switched');
  });
  await position('right');await page.click('.file-tab[data-pane="files"]');await settle();await page.screenshot({path:path.join(stage,'sftp-right-final.png')});await position('bottom');await page.screenshot({path:path.join(stage,'sftp-bottom-final.png')});
  assert.deepEqual(failures,[]);assert.deepEqual(errors,[]);completed=true;

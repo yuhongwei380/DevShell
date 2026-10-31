@@ -86,7 +86,7 @@ dialog :is(input, select):focus { background-color: var(--focus-input); }
 [data-theme="dark"] .terminal-command-bar { background: #0e192366; }
 [data-theme="dark"] :is(.terminal-tool, #welcome-connect):is(:hover, :focus-visible) { background-color: #769bb357; color: #d4e5ee; }
 [data-theme="dark"] :is(.theme-toggle, .connection-button, .add-session, .session-tab.active) { color: var(--accent); }
-[data-theme="dark"] :is(.session-tab, .tab-close, .file-tab, .follow-label, .file-toolbar .icon-button, .upload-button, .connection-search, .drawer-heading .icon-button, .connection-group h3, .connection-actions button, .group-tool, dialog .checkbox-label, .server-icon) { color: var(--muted); }
+[data-theme="dark"] :is(.session-tab, .tab-close, .file-tab, .file-toolbar .icon-button, .upload-button, .connection-search, .drawer-heading .icon-button, .connection-group h3, .connection-actions button, .group-tool, dialog .checkbox-label, .server-icon) { color: var(--muted); }
 [data-theme="dark"] :is(.files-tip, .count-badge, .tree-heading, .tree-chevron, .file-table th, .file-table th button span, .file-table td:nth-child(4), .file-status, .statusbar, .statusbar-end, .status-divider, .eyebrow, .drawer-note, .group-empty, .connection-card-text small, .empty-state, dialog p) { color: var(--text-faint); }
 [data-theme="dark"] :is(.path-form > svg, .file-search svg, .file-name svg, .connection-group h3 svg) { color: var(--muted); stroke: currentColor; }
 [data-theme="dark"] .file-table tbody tr:nth-child(even) { background: #1f2c38; }

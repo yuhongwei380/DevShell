@@ -11,7 +11,7 @@ func TestAppearanceWorkspacePromptDefaultsAndPersistence(t *testing.T) {
 	if err := json.Unmarshal([]byte(`{"fontId":"builtin:fira-code","fontColors":{"builtin:fira-code":"#aabbcc"}}`), &legacy); err != nil {
 		t.Fatal(err)
 	}
-	if legacy.MonitorVisible != true || legacy.FilesPosition != "right" || legacy.MinimizeAction != "ask" || legacy.PromptUsernameColor != "" || legacy.ExternalEditor != "" {
+	if legacy.MonitorVisible != true || legacy.FilesPosition != "right" || legacy.FollowTerminal != true || legacy.MinimizeAction != "ask" || legacy.PromptUsernameColor != "" || legacy.ExternalEditor != "" {
 		t.Fatalf("legacy defaults changed: %+v", legacy)
 	}
 	store, err := OpenStore(t.TempDir())
@@ -20,6 +20,7 @@ func TestAppearanceWorkspacePromptDefaultsAndPersistence(t *testing.T) {
 	}
 	legacy.MonitorVisible = false
 	legacy.FilesPosition = "top"
+	legacy.FollowTerminal = false
 	legacy.MinimizeAction = "tray"
 	legacy.PromptUsernameColor = "#ABCDEF"
 	legacy.PromptHostnameColor = "#0123EF"
@@ -32,7 +33,7 @@ func TestAppearanceWorkspacePromptDefaultsAndPersistence(t *testing.T) {
 		t.Fatal(err)
 	}
 	saved := reopened.List().Appearance
-	if saved.MonitorVisible != false || saved.FilesPosition != "top" || saved.MinimizeAction != "tray" || saved.PromptUsernameColor != "#abcdef" || saved.PromptHostnameColor != "#0123ef" || saved.ExternalEditor != legacy.ExternalEditor || saved.FontColors["builtin:fira-code"] != "#aabbcc" {
+	if saved.MonitorVisible != false || saved.FilesPosition != "top" || saved.FollowTerminal != false || saved.MinimizeAction != "tray" || saved.PromptUsernameColor != "#abcdef" || saved.PromptHostnameColor != "#0123ef" || saved.ExternalEditor != legacy.ExternalEditor || saved.FontColors["builtin:fira-code"] != "#aabbcc" {
 		t.Fatalf("appearance did not persist: %+v", saved)
 	}
 	saved.PromptUsernameColor = ""

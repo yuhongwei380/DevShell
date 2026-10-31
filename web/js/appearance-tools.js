@@ -67,13 +67,7 @@ function applyWorkspacePlacement() {
   const root = document.documentElement;
   root.dataset.monitorVisible = appearance.monitorVisible === false ? 'false' : 'true';
   root.dataset.filesPosition = ['top', 'right'].includes(appearance.filesPosition) ? appearance.filesPosition : 'bottom';
-  const right = root.dataset.filesPosition === 'right', toggle = $('#toggle-files-position');
-  if (toggle) {
-    toggle.title = right ? '将 SFTP 放在终端下方' : '将 SFTP 放在终端右侧';
-    toggle.setAttribute('aria-label', toggle.title);
-    toggle.setAttribute('aria-pressed', String(right));
-    toggle.querySelector('path').setAttribute('d', right ? 'M3 14h18' : 'M15 4v16');
-  }
+  const right = root.dataset.filesPosition === 'right';
   const splitter = $('#files-splitter');
   splitter.classList.toggle('vertical', right); splitter.classList.toggle('horizontal', !right);
   splitter.setAttribute('aria-orientation', right ? 'vertical' : 'horizontal');
@@ -87,6 +81,8 @@ function applyWorkspacePlacement() {
   } else splitter.removeAttribute('aria-hidden');
   if ($('#monitor-visible')) $('#monitor-visible').value = root.dataset.monitorVisible;
   if ($('#files-position')) $('#files-position').value = root.dataset.filesPosition;
+  if ($('#follow-terminal-setting')) $('#follow-terminal-setting').checked = appearance.followTerminal !== false;
+  reflectTerminalFollow?.();
   syncRightPanelWindow();
   for (const dialog of movableColorDialogs) clampColorDialog(dialog);
 }
@@ -173,7 +169,9 @@ function initializeAppearanceTools() {
     for (const [value, text] of options) { const option = node('option', '', text); option.value = value; select.append(option); }
     select.onchange = safe(() => chooseAppearance({ [key]: key === 'monitorVisible' ? select.value === 'true' : select.value })); row.append(label, select); settingsAnchor.before(row);
   }
-  $('#toggle-files-position').onclick = safe(() => chooseAppearance({ filesPosition: appearance.filesPosition === 'right' ? 'bottom' : 'right' }));
+  const followRow = node('div', 'scale-setting placement-setting'), followLabel = node('label', '', '跟随终端目录'), followInput = node('input');
+  followLabel.htmlFor = followInput.id = 'follow-terminal-setting'; followInput.type = 'checkbox'; followInput.title = 'SFTP 面板随终端当前目录切换，需要 Bash / Zsh / Fish 提示符集成';
+  followInput.onchange = safe(() => chooseAppearance({ followTerminal: followInput.checked })); followRow.append(followLabel, followInput); settingsAnchor.before(followRow);
   applyWorkspacePlacement();
   window.addEventListener('resize', () => { for (const dialog of movableColorDialogs) clampColorDialog(dialog); });
   document.addEventListener('visibilitychange', () => { if (document.hidden) flushPromptColors().catch(() => {}); });

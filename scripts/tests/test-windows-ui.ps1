@@ -1,4 +1,4 @@
-﻿param([int]$DengProcessID,[string]$Output)
+param([int]$DengProcessID,[string]$Output)
 $ErrorActionPreference='Stop'
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
@@ -55,6 +55,82 @@ function Find-Region([string]$Name){
 }
 function Bounds-Record($r){@{x=$r.X;y=$r.Y;width=$r.Width;height=$r.Height;right=$r.Right;bottom=$r.Bottom}}
 function Require-Layout([bool]$Condition,[string]$Message){if(!$Condition){throw "Native SFTP layout: $Message"}}
+function Find-RegionQuiet([string]$Name){
+ $condition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty,$Name)
+ for($n=0;$n -lt 10;$n++){
+  foreach($element in $root.FindAll([System.Windows.Automation.TreeScope]::Descendants,$condition)){
+   $r=$element.Current.BoundingRectangle
+   if(!$element.Current.IsOffscreen -and $r.Width -gt 150 -and $r.Height -gt 100){return $element}
+  }
+  Start-Sleep -Milliseconds 100
+ }
+ return $null
+}
+function Find-ByNameType([string]$Name,[System.Windows.Automation.ControlType]$ControlType){
+ $condition=New-Object System.Windows.Automation.AndCondition(
+  (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty,$Name)),
+  (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty,$ControlType)))
+ for($n=0;$n -lt 60;$n++){
+  foreach($element in $root.FindAll([System.Windows.Automation.TreeScope]::Descendants,$condition)){
+   $r=$element.Current.BoundingRectangle
+   if(!$element.Current.IsOffscreen -and $r.Width -gt 0 -and $r.Height -gt 0){return $element}
+  }
+  Start-Sleep -Milliseconds 100
+ }
+ return $null
+}
+# 文件面板位置只在设置的外观配置里调整：点击主题化下拉框（role=combobox）打开弹出列表，再真实点击选项。
+function Select-Files-Position([string]$Option){
+ $combo=Find-ByNameType '文件面板' ([System.Windows.Automation.ControlType]::ComboBox)
+ if(!$combo){throw 'Native files placement combo unavailable'}
+ $r=$combo.Current.BoundingRectangle
+ if($r.Width -le 0 -or $r.Height -le 0 -or $combo.Current.IsOffscreen){throw 'Files placement combo is not visible'}
+ [DengMouse]::SetCursorPos([int]($r.X+$r.Width/2),[int]($r.Y+$r.Height/2))|Out-Null
+ [DengMouse]::mouse_event(2,0,0,0,[UIntPtr]::Zero);[DengMouse]::mouse_event(4,0,0,0,[UIntPtr]::Zero)
+ $option=Find-ByNameType $Option ([System.Windows.Automation.ControlType]::ListItem)
+ if(!$option){throw "Native placement option unavailable: $Option"}
+ $o=$option.Current.BoundingRectangle
+ [DengMouse]::SetCursorPos([int]($o.X+$o.Width/2),[int]($o.Y+$o.Height/2))|Out-Null
+ [DengMouse]::mouse_event(2,0,0,0,[UIntPtr]::Zero);[DengMouse]::mouse_event(4,0,0,0,[UIntPtr]::Zero)
+ Start-Sleep -Milliseconds 500
+}
+function Capture-Native([string]$Name){
+ $r=$root.Current.BoundingRectangle;$bitmap=New-Object System.Drawing.Bitmap([int]$r.Width,[int]$r.Height);$g=[System.Drawing.Graphics]::FromImage($bitmap)
+ try{$g.CopyFromScreen([int]$r.X,[int]$r.Y,0,0,$bitmap.Size);$bitmap.Save((Join-Path $Output $Name),[System.Drawing.Imaging.ImageFormat]::Png)}finally{$g.Dispose();$bitmap.Dispose()}
+}
+function Test-SFTP-Layout {
+ $bottomTerminal=(Find-Region 'SSH 终端').Current.BoundingRectangle
+ $bottomFiles=(Find-Region '远程文件').Current.BoundingRectangle
+ Require-Layout ($bottomTerminal.Bottom -le $bottomFiles.Y+4 -and [Math]::Abs($bottomTerminal.X-$bottomFiles.X) -lt 4 -and [Math]::Abs($bottomTerminal.Right-$bottomFiles.Right) -lt 4) 'default panels are not stacked'
+ Invoke-Button '关闭 SFTP 面板'
+ Require-Layout ($null -eq (Find-RegionQuiet '远程文件')) 'the panel close button did not hide the files region'
+ $closedTerminal=(Find-Region 'SSH 终端').Current.BoundingRectangle
+ Require-Layout ([Math]::Abs($closedTerminal.Right-$bottomFiles.Right) -lt 4 -and [Math]::Abs($closedTerminal.Bottom-$bottomFiles.Bottom) -lt 4) 'closing the bottom panel leaves unused workspace'
+ Invoke-Button 'SFTP'
+ $restoredBottomFiles=(Find-Region '远程文件').Current.BoundingRectangle
+ Require-Layout ([Math]::Abs($restoredBottomFiles.Width-$bottomFiles.Width) -lt 4 -and [Math]::Abs($restoredBottomFiles.X-$bottomFiles.X) -lt 4) 'reopening from the terminal kept a different panel size'
+ Invoke-Button '设置'
+ Select-Files-Position '终端右侧'
+ Invoke-Button '设置'
+ $rightTerminal=(Find-Region 'SSH 终端').Current.BoundingRectangle
+ $rightFiles=(Find-Region '远程文件').Current.BoundingRectangle
+ Require-Layout ($rightTerminal.Right -le $rightFiles.X+4 -and $rightFiles.X-$rightTerminal.Right -lt 24 -and [Math]::Abs($rightTerminal.Y-$rightFiles.Y) -lt 4 -and [Math]::Abs($rightTerminal.Bottom-$rightFiles.Bottom) -lt 4) 'settings placement did not create side-by-side panels'
+ Capture-Native 'windows-native-sftp-right.png'
+ Invoke-Button '关闭 SFTP 面板'
+ $hiddenTerminal=(Find-Region 'SSH 终端').Current.BoundingRectangle
+ Require-Layout ([Math]::Abs($hiddenTerminal.X-$rightTerminal.X) -lt 4 -and [Math]::Abs($hiddenTerminal.Y-$rightTerminal.Y) -lt 4 -and [Math]::Abs($hiddenTerminal.Right-$rightFiles.Right) -lt 4 -and [Math]::Abs($hiddenTerminal.Bottom-$rightFiles.Bottom) -lt 4) 'hidden right panel leaves unused workspace'
+ Capture-Native 'windows-native-sftp-hidden.png'
+ Invoke-Button 'SFTP'
+ $restoredFiles=(Find-Region '远程文件').Current.BoundingRectangle
+ Require-Layout ([Math]::Abs($restoredFiles.Width-$rightFiles.Width) -lt 4 -and [Math]::Abs($restoredFiles.X-$rightFiles.X) -lt 4) 'showing the right panel changed its size'
+ Invoke-Button '设置'
+ Select-Files-Position '终端下方'
+ Invoke-Button '设置'
+ $restoredTerminal=(Find-Region 'SSH 终端').Current.BoundingRectangle
+ $restoredBottom=(Find-Region '远程文件').Current.BoundingRectangle
+ Require-Layout ($restoredTerminal.Bottom -le $restoredBottom.Y+4 -and [Math]::Abs($restoredBottom.Height-$bottomFiles.Height) -lt 4 -and [Math]::Abs($restoredTerminal.Right-$bottomTerminal.Right) -lt 4) 'switching back in settings did not restore the remembered bottom layout'
+ @{passed=$true;nativeWebView2=$true;method='UI Automation region geometry and real pointer clicks';closePanelButton=$true;placementViaSettings=$true;bottom=@{terminal=(Bounds-Record $bottomTerminal);files=(Bounds-Record $bottomFiles)};right=@{terminal=(Bounds-Record $rightTerminal);files=(Bounds-Record $rightFiles)};hiddenTerminal=(Bounds-Record $hiddenTerminal);restoredRightFiles=(Bounds-Record $restoredFiles);restoredBottomFiles=(Bounds-Record $restoredBottom)}|ConvertTo-Json -Depth 8|Set-Content -Encoding UTF8 (Join-Path $Output 'windows-sftp-layout.json')
+}
 function Capture-Native([string]$Name){
  $r=$root.Current.BoundingRectangle;$bitmap=New-Object System.Drawing.Bitmap([int]$r.Width,[int]$r.Height);$g=[System.Drawing.Graphics]::FromImage($bitmap)
  try{$g.CopyFromScreen([int]$r.X,[int]$r.Y,0,0,$bitmap.Size);$bitmap.Save((Join-Path $Output $Name),[System.Drawing.Imaging.ImageFormat]::Png)}finally{$g.Dispose();$bitmap.Dispose()}
