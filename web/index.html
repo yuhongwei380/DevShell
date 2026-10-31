@@ -20,7 +20,7 @@
   <link rel="stylesheet" href="css/themed-select.css?v=20260920-v002-b70">
   <link rel="stylesheet" href="css/config-document.css?v=20260920-v002-b70">
   <link rel="stylesheet" href="css/startup-update.css?v=20261023-tags2">
-  <link rel="stylesheet" href="css/desktop-polish.css?v=20261024-monitor-visible">
+  <link rel="stylesheet" href="css/desktop-polish.css?v=20261031-no-reconnect-btn">
   <link rel="stylesheet" href="css/server-manager.css?v=20261023-move145">
   <link rel="stylesheet" href="css/connection-extras.css?v=20260920-v002-b70">
   <link rel="stylesheet" href="css/help-guide.css?v=20260920-v002-b70">
@@ -55,7 +55,6 @@
     <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol>
     <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.4 6.7M20 4v7h-7"/></symbol>
-    <symbol id="i-reconnect" viewBox="0 0 24 24"><path d="M8 3v4m8-4v4M6 7h12v4a6 6 0 0 1-12 0V7Zm6 10v4"/></symbol>
     <symbol id="i-disconnect" viewBox="0 0 24 24"><path d="m13 7 4 4m-9 2 3 3M7 13l-3 3a3 3 0 0 0 4 4l3-3M13 7l3-3a3 3 0 0 1 4 4l-3 3M4 4l16 16"/></symbol>
     <symbol id="i-erase" viewBox="0 0 24 24"><path d="m15 3 6 6-11 11H5l-3-3L15 3ZM8 11l6 6M10 20h11"/></symbol>
     <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M6 4h12v17l-6-4-6 4z"/></symbol><symbol id="i-up" viewBox="0 0 24 24"><path d="m6 11 6-6 6 6M12 5v15"/></symbol>
@@ -142,7 +141,7 @@
 
       <div class="workspace files-hidden" id="workspace">
         <section class="terminal-panel" aria-label="SSH 终端">
-          <div class="terminal-meta"><span><span class="status-dot green"></span><span id="terminal-meta-host">SSH 终端</span><span class="terminal-protocol" id="terminal-state">待连接</span><span class="session-current-badge" id="terminal-current-badge" hidden>当前连接</span></span><span class="terminal-encoding">UTF-8 <span class="meta-divider">│</span> xterm-256color</span><button class="terminal-popout" id="disconnect" type="button" title="断开连接，保留终端内容" aria-label="断开连接" disabled><svg><use href="#i-disconnect"/></svg></button><button class="terminal-popout" id="reconnect" type="button" title="重新连接" aria-label="重新连接"><svg><use href="#i-reconnect"/></svg></button><button class="terminal-popout" id="clear-terminal" type="button" title="清除终端滚屏" aria-label="清空终端"><svg><use href="#i-erase"/></svg></button><button id="toggle-sftp" class="terminal-popout" type="button" aria-expanded="false" aria-controls="files-panel" title="显示或隐藏 SFTP 面板"><svg><use href="#i-folder"/></svg><span>SFTP</span></button><button id="detach-terminal" class="terminal-popout" title="将当前 SSH 拆分为独立窗口" aria-label="拆分为独立窗口" hidden disabled><svg><use href="#i-popout"/></svg><span>独立窗口</span></button></div>
+          <div class="terminal-meta"><span><span class="status-dot green"></span><span id="terminal-meta-host">SSH 终端</span><span class="terminal-protocol" id="terminal-state">待连接</span><span class="session-current-badge" id="terminal-current-badge" hidden>当前连接</span></span><span class="terminal-encoding">UTF-8 <span class="meta-divider">│</span> xterm-256color</span><button class="terminal-popout" id="disconnect" type="button" title="断开连接，保留终端内容" aria-label="断开连接" disabled><svg><use href="#i-disconnect"/></svg></button><button class="terminal-popout" id="clear-terminal" type="button" title="清除终端滚屏" aria-label="清空终端"><svg><use href="#i-erase"/></svg></button><button id="toggle-sftp" class="terminal-popout" type="button" aria-expanded="false" aria-controls="files-panel" title="显示或隐藏 SFTP 面板"><svg><use href="#i-folder"/></svg><span>SFTP</span></button><button id="detach-terminal" class="terminal-popout" title="将当前 SSH 拆分为独立窗口" aria-label="拆分为独立窗口" hidden disabled><svg><use href="#i-popout"/></svg><span>独立窗口</span></button></div>
           <button id="shell-transfer-status" class="shell-transfer-status" type="button" aria-live="polite" hidden></button>
           <div class="terminal-output" id="terminal-output"><div class="welcome-state" id="welcome-state"><span class="welcome-icon"><svg><use href="#i-terminal"/></svg></span><h1>你的服务器工作台</h1><p>连接服务器，终端、文件与运行状态尽在眼前。</p><button id="welcome-connect">添加或选择服务器 <svg><use href="#i-chevron"/></svg></button><small>支持密码、私钥和 SSH Agent 登录</small></div></div>
           <div class="terminal-command-bar"><svg><use href="#i-terminal"/></svg><form id="command-form"><textarea id="command-input" rows="1" aria-label="发送命令到服务器" placeholder="输入命令并回车发送 · ↑↓ 历史" autocomplete="off" spellcheck="false"></textarea></form><button class="terminal-tool" id="command-history" title="历史命令" aria-label="历史命令"><svg><use href="#i-history"/></svg></button><button class="terminal-tool" id="font-down" title="缩小终端字体 0.5 px" aria-label="缩小终端字体 0.5 px"><svg><use href="#i-font-decrease"/></svg></button><button class="terminal-tool" id="font-up" title="放大终端字体 0.5 px" aria-label="放大终端字体 0.5 px"><svg><use href="#i-font-increase"/></svg></button></div>
@@ -400,7 +399,7 @@
   <script src="js/serial.js?v=20261022-tabs1"></script>
   <script src="js/upload-confirmation.js?v=20260928-overwrite1"></script>
   <script src="js/shell-transfers.js?v=20261031-ring"></script>
-  <script src="js/app.js?v=20261031-tab-reconnect"></script>
+  <script src="js/app.js?v=20261031-no-reconnect-btn"></script>
   <script src="js/quick-connect.js?v=20261022-tabs1"></script>
   <script src="js/local-prompt.js?v=20261022-tabs1"></script>
   <script src="js/command-completion.js?v=20261025-cmdtab1"></script>

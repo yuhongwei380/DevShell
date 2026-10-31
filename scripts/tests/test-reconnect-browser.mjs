@@ -92,7 +92,8 @@ try {
       if(index===0&&mode==='manual') await page.screenshot({path:stage+'/after-disconnect.png'});
       if(index===0&&mode==='manual') {
         await api('/api/profiles',{...profile,port:9});await page.evaluate(()=>loadProfiles());
-        await page.click('#reconnect');
+        const failTab = await page.$('.session-tab.active');
+        await failTab.click({ clickCount: 2 });
         const deadline=Date.now()+25000;
         while(Date.now()<deadline&&!await page.evaluate(()=>!!current()?.connectionFailed)) {
           if(await page.$('#action-dialog[open]'))await page.click('#action-confirm');await delay(100);
@@ -102,7 +103,8 @@ try {
         await api('/api/profiles',profile);await page.evaluate(()=>loadProfiles());
         console.log('PASS: failed reconnect retained old terminal output, followed by a successful retry');
       }
-      await page.click('#reconnect');
+      const retryTab = await page.$('.session-tab.active');
+      await retryTab.click({ clickCount: 2 });
       await waitConnected(before.id);
       await page.evaluate(()=>DengCommandHistory.refresh(current().profileId));
       const reconnected=await snapshot(marker);

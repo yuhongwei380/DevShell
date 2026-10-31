@@ -39,8 +39,6 @@
 .terminal-panel .terminal-tool svg { width:16px; height:16px; stroke-width:1.7; }
 .terminal-panel #disconnect:enabled { color:#d4aaa6; }
 .terminal-panel #disconnect:enabled:hover { color:#f0bfba; background:#b77a7926; }
-.terminal-panel #reconnect:enabled { color:#a7cdbf; }
-.terminal-panel #reconnect:enabled:hover { color:#c6e7d8; background:#7fb59c26; }
 [data-narrow="true"] .terminal-panel .terminal-command-bar { gap:5px; padding-inline:8px; }
 [data-narrow="true"] .terminal-panel .terminal-tool { min-width:25px; }
 [data-theme="dark"] .terminal-panel .terminal-meta,

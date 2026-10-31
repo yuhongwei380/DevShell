@@ -537,7 +537,7 @@ async function disconnectSession(state = current()) {
     markSessionDisconnected(state); state.ws?.close();
   } finally {
     state.disconnecting = false;
-    if (activeID === state.id) { $('#disconnect').disabled = !state.connected; $('#reconnect').disabled = false; }
+    if (activeID === state.id) $('#disconnect').disabled = !state.connected;
   }
 }
 // Xshell-style fallback: after the remote shell exits, the tab stays and the
@@ -598,7 +598,7 @@ function renderTabs() {
     button.setAttribute('aria-busy', String(!!state.pendingConnection));
     if (state.localOnly) button.title += ` · ${state.connectionMessage}`;
     const close = node('button', 'tab-close'); close.append(icon('close')); close.title = state.pendingConnection ? '取消连接' : '关闭连接'; close.setAttribute('aria-label', `${state.pendingConnection ? '取消' : '关闭'} ${profile?.name || '会话'}`); close.onclick = safe(() => closeSession(state.id)); close.disabled = !!(state.detaching || state.handoffProvisional); tab.dataset.detaching = String(!!state.detaching); tab.append(button, close);
-    // 已断开的标签双击即用原地址在本标签重连，与 #reconnect 按钮语义一致；
+    // 已断开的标签双击即用原地址在本标签重连；
     // 连接中、交接中或已删除配置的标签不响应，关闭按钮上的双击不触发。
     tab.ondblclick = event => { if (event.target.closest('.tab-close')) return; if (profile && !state.connected && !state.pendingConnection && !state.disconnecting && !state.detaching && !state.handoffProvisional && !state.ownershipUncertain) safe(() => connect(state.profileId, true, { sessionId: state.id }))(); };
     window.DengSessionWindows.bindTab(tab, state); return [tab, ...(window.DengProcessView?.tabs(state) || [])];
@@ -630,12 +630,11 @@ function renderSessionInfo() {
   const currentConnected = !!state?.connected && !state?.handoffProvisional;
   $('#terminal-state').hidden = currentConnected; $('#terminal-current-badge').hidden = !currentConnected;
   const localPrompt = !!state && !state.connected && !state.pendingConnection && !state.disconnecting && !state.detaching && !state.handoffProvisional && !state.ownershipUncertain;
-  $('#command-history').disabled = false; $('#command-input').disabled = !!state && !(state.connected || localPrompt); $('#command-input').placeholder = state ? (state.connected ? '输入命令并回车发送 · ↑↓ 历史' : localPrompt ? '本机提示符：ssh · reconnect · ping/traceroute/nslookup/dig/curl · exit · ↑↓ 本机历史' : '输入命令并回车发送 · ↑↓ 历史') : '本机：输入 ssh 用户@主机 或 ping/traceroute/nslookup/dig/curl · ↑↓ 本机历史'; window.DengQuickConnect?.reflect(); $('#command-input').value = ''; resizeCommandInput(); $('#reconnect').disabled = !state || !!(state.pendingConnection || state.disconnecting || state.detaching || state.handoffProvisional || state.ownershipUncertain); $('#disconnect').disabled = !state?.connected || !!(state.disconnecting || state.detaching || state.handoffProvisional || state.ownershipUncertain);
+  $('#command-history').disabled = false; $('#command-input').disabled = !!state && !(state.connected || localPrompt); $('#command-input').placeholder = state ? (state.connected ? '输入命令并回车发送 · ↑↓ 历史' : localPrompt ? '本机提示符：ssh · reconnect · ping/traceroute/nslookup/dig/curl · exit · ↑↓ 本机历史' : '输入命令并回车发送 · ↑↓ 历史') : '本机：输入 ssh 用户@主机 或 ping/traceroute/nslookup/dig/curl · ↑↓ 本机历史'; window.DengQuickConnect?.reflect(); $('#command-input').value = ''; resizeCommandInput(); $('#disconnect').disabled = !state?.connected || !!(state.disconnecting || state.detaching || state.handoffProvisional || state.ownershipUncertain);
   renderMonitor(state?.connected ? state.stats : null); renderLatency(); renderCommands(); window.DengCommonApps?.render(); window.DengProcessView?.reflect(); window.DengPinnedNav?.reflect(); updateStatus();
 }
 $('#command-form').onsubmit = event => { event.preventDefault(); const state = current(); const input = $('#command-input'); if (!state && input.value.trim()) { const command = input.value; input.value = ''; window.DengCommandHistory.recordLocal(command); if (window.DengLocalPrompt.commands.test(command.trim())) safe(() => window.DengLocalPrompt.run(command))(); else safe(() => window.DengQuickConnect.run(command))(); return; } if (state && !state.connected && !state.pendingConnection && !state.detaching && !state.handoffProvisional && !state.ownershipUncertain && input.value.trim()) { const command = input.value; input.value = ''; window.DengCommandHistory.recordLocal(command); safe(() => sessionLocalCommand(state, command))(); return; } if (!state?.ready || !input.value) return; if (!pasteTerminalText(state, input.value, { execute: true })) return; input.value = ''; resizeCommandInput(); };
 $('#command-input').onkeydown = event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); $('#command-form').requestSubmit(); return; } if (!['ArrowUp', 'ArrowDown'].includes(event.key)) return; const state = current(); event.preventDefault(); const direction = event.key === 'ArrowUp' ? -1 : 1; if (state?.connected) { state.historyIndex = Math.max(0, Math.min(state.history.length, state.historyIndex + direction)); event.target.value = state.history[state.historyIndex] || ''; } else { event.target.value = window.DengCommandHistory.recallLocal(event.target.value, direction); } resizeCommandInput(); };
-$('#reconnect').onclick = safe(() => { const state = current(); return state && connect(state.profileId, true, { sessionId: state.id }); });
 $('#disconnect').onclick = safe(() => disconnectSession());
 $('#clear-terminal').onclick = () => { if (window.DengLocalPrompt?.handleClear()) return; current()?.term.clear(); current()?.term.focus(); };
 let terminalFont = normalizeTerminalFontSize(appearance.terminalFontSize);
