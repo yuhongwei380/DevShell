@@ -53,8 +53,10 @@ try {
     localTasks.set('qa', { id: 'qa', name: 'rz-upload.txt', total: 100, done: 35, status: 'uploading' });
     updateTransferNotice();
   });
-  assert.match(await page.locator('#shell-transfer-status').textContent(), /上传中 · 35%/);
-  assert(await page.locator('#shell-transfer-status').isVisible());
+  const status = page.locator('#shell-transfer-status');
+  assert.match(await status.locator('.transfer-percent').textContent(), /^35$/);
+  assert.match(await status.getAttribute('title'), /上传中 · 35%/);
+  assert(await status.isVisible());
   if (process.env.DENGSHELL_FEEDBACK_SCREENSHOT) await page.screenshot({ path: process.env.DENGSHELL_FEEDBACK_SCREENSHOT });
   await page.evaluate(() => { localTasks.get('qa').status = 'done'; updateTransferNotice(); });
   assert.equal(await page.locator('#toast').textContent(), '上传已完成');

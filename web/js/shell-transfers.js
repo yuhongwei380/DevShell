@@ -31,15 +31,18 @@ window.DevShellTransfers = (() => {
       const done = active.reduce((sum, task) => sum + (Number(task.done) || 0), 0);
       // Progress is remote-acknowledged bytes; a 100% byte count is not success.
       const value = total ? Math.min(100, Math.floor(done / total * 100)) : 0;
-      const percent = total ? ` · ${value}%` : '';
-      button.style?.setProperty?.('--transfer-progress', `${value}%`);
+      button.title = `${active.some(task => task.status === 'uploading') ? '上传中' : '等待上传'} · ${value}%`;
       button.setAttribute?.('aria-valuemin', '0');
       button.setAttribute?.('aria-valuemax', '100');
       button.setAttribute?.('aria-valuenow', String(value));
       button.setAttribute?.('aria-busy', 'true');
-      button.textContent = `${active.some(task => task.status === 'uploading') ? '上传中' : '等待上传'}${percent} · ${active.length} 项 · 查看传输任务`;
+      // Reuse the transfer-list ring: grey track, green arc, percent number inside the ring.
+      button.innerHTML = `<span class="transfer-progress mini" aria-hidden="true">` +
+        `<svg viewBox="0 0 48 48"><circle class="transfer-ring-track" cx="24" cy="24" r="20" pathLength="100"></circle>` +
+        `<circle class="transfer-ring-fill" cx="24" cy="24" r="20" pathLength="100" stroke-dasharray="${value} 100"></circle></svg>` +
+        `<span class="transfer-percent">${value}</span></span>` +
+        `<span class="shell-transfer-label">${active.length} 项 · 查看传输任务</span>`;
     } else {
-      button.style?.setProperty?.('--transfer-progress', '100%');
       button.removeAttribute?.('aria-valuenow');
       button.removeAttribute?.('aria-busy');
       const failed = unread.filter(task => task.status === 'failed').length;
