@@ -30,16 +30,16 @@ import (
 // and the notes heading (vX.Y.Z-rc.N-build<abbreviated build>). rc build
 // numbers keep ascending, and the eventual release build must exceed every
 // rc build of the same version so rc users can update into it.
-const ApplicationVersion = "v26.10.4"
+const ApplicationVersion = "v26.11.0"
 
 // ApplicationDisplayVersion identifies this self-maintained branch in the user
 // interface. ApplicationVersion above stays the functional version that drives
 // update comparison and package metadata; never put branch text into it.
-const ApplicationDisplayVersion = "ver.Phoenix · v26.10.4"
+const ApplicationDisplayVersion = "ver.Phoenix · v26.11.0-rc.1"
 
 // Package managers use ApplicationVersion without the leading v. It must stay
 // greater than the last upstream package version (0.3.0).
-const ApplicationPackageVersion = "26.10.4"
+const ApplicationPackageVersion = "26.11.0"
 
 // ApplicationBuild is the monotonic anti-rollback build: YYYYMMDD plus a
 // two-digit daily sequence (since 2026-10-24; the earlier format was a
@@ -48,7 +48,7 @@ const ApplicationPackageVersion = "26.10.4"
 // sequence is numerically below the retired 11-digit high-water mark
 // (20261024156), so installs at any older build must manually install the
 // 2026102401 release once before built-in updates continue normally.
-const ApplicationBuild uint64 = 2026103102
+const ApplicationBuild uint64 = 2026103103
 
 // currentReleaseNotesVersion uses the exact release artifact when available.
 func currentReleaseNotesVersion() string {
