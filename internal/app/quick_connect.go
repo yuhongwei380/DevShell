@@ -20,8 +20,11 @@ type quickProfile struct {
 }
 
 // Parse a connection description, never an executable shell command. OpenSSH
-// options with local side effects (-o, -F, -L, -R, ProxyCommand...) are rejected.
+// options with local side effects (-o, -F, -R, ProxyCommand...) are rejected.
 // -v/-vv/-vvv only raises local connection diagnostics; it has no side effects.
+// -L is accepted as a data-only local port forward: the rule is validated here
+// and only ever binds loopback listeners while the resulting session lives
+// (see port_forward.go); no other local side effect is implied.
 func parseQuickSSH(command string) (Profile, error) {
 	p := Profile{Port: 22, User: "root", Auth: "password", Proxy: ProxyConfig{Type: "direct"}, Temporary: true}
 	if len(command) > 2048 || strings.ContainsAny(command, "\r\n\x00") {
@@ -48,6 +51,24 @@ func parseQuickSSH(command string) (Profile, error) {
 			} else {
 				p.User = args[i]
 			}
+		} else if arg == "-L" || (strings.HasPrefix(arg, "-L") && len(arg) > 2 && !strings.HasPrefix(arg, "-L-")) {
+			// -L port:host:port (separate or attached form, like OpenSSH).
+			spec := arg[2:]
+			if spec == "" {
+				i++
+				if i == len(args) {
+					return p, errors.New("-L 后需要 本地端口:目标主机:目标端口")
+				}
+				spec = args[i]
+			}
+			forward, e := parsePortForward(spec)
+			if e != nil {
+				return p, e
+			}
+			if len(p.Forwards) >= maxProfileForwards {
+				return p, fmt.Errorf("端口转发最多 %d 条", maxProfileForwards)
+			}
+			p.Forwards = append(p.Forwards, forward)
 		} else if len(arg) > 1 && strings.TrimLeft(arg, "-v") == "" {
 			// -v, -vv, -vvv (and combinations) only request verbose connection
 			// diagnostics; OpenSSH caps the debug level at 3, and so do we.
@@ -56,7 +77,7 @@ func parseQuickSSH(command string) (Profile, error) {
 				p.Verbose = 3
 			}
 		} else if strings.HasPrefix(arg, "-") || target != "" {
-			return p, errors.New("支持 ssh [-vvv] [-p 端口] [-l 用户名] 用户@主机；私钥请在下方选择")
+			return p, errors.New("支持 ssh [-vvv] [-p 端口] [-l 用户名] [-L 本地端口:目标主机:目标端口] 用户@主机；私钥请在下方选择")
 		} else {
 			target = arg
 		}

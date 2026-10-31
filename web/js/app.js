@@ -285,6 +285,9 @@ async function connectProfile(profileID, { background = false, refreshHistory = 
     if (profile.verbose) startVerboseDiagnostics(state, profile.verbose);
     sessions.set(state.id, state); state.host.dataset.session = state.id;
     state.openTerminalSocket();
+    // Echo ssh -L outcomes the way OpenSSH reports them: a bound forward is
+    // announced, a failed bind warns without ever killing the session.
+    if (info.forwards?.length) for (const forward of info.forwards) state.term.writeln(forward.error ? `\r\n⚠️  端口转发未开启：${forward.listen} → ${forward.remote}（${forward.error}）` : `\r\n🔀 本地端口转发已开启：${forward.listen} → ${forward.remote}（经 ${profile.host}）`);
     // Each tab becomes usable independently, preserving order and the user's current focus.
     if (selected) activate(state.id); else renderTabs();
     if (secret) credentials.set(profileID, secret);

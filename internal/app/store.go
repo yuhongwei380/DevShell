@@ -40,6 +40,11 @@ type Profile struct {
 	// connection attempt only. It enables immediate diagnostic logging and is
 	// stripped whenever a profile is persisted.
 	Verbose int `json:"verbose,omitempty"`
+	// Forwards carries ssh -L local port forwards. They come from quick
+	// connect parsing and persist with a saved connection; listeners exist
+	// only while the session lives. An editing client that omits the field
+	// keeps the stored rules; an explicit empty list clears them.
+	Forwards []PortForward `json:"forwards,omitempty"`
 	// Serial profile fields; only meaningful when Protocol == "serial".
 	SerialPort  string `json:"serialPort,omitempty"`
 	BaudRate    int    `json:"baudRate,omitempty"`
@@ -154,6 +159,9 @@ func (s *Store) saveProfile(p Profile, clearSecret, allowNewID bool) (Profile, e
 	if err := p.Proxy.validate(); err != nil {
 		return Profile{}, err
 	}
+	if err := validateProfileForwards(p.Forwards); err != nil {
+		return Profile{}, err
+	}
 	if p.ProxyID != "" {
 		found := false
 		for _, proxy := range s.config.Proxies {
@@ -240,6 +248,11 @@ func (s *Store) saveProfile(p Profile, clearSecret, allowNewID bool) (Profile, e
 			}
 			if p.Proxy.Password == "" && !p.Proxy.ClearPassword && p.Proxy.Type == entry.Proxy.Type && p.Proxy.Host == entry.Proxy.Host && p.Proxy.Port == entry.Proxy.Port && p.Proxy.User == entry.Proxy.User {
 				p.Proxy.Password = entry.Proxy.Password
+			}
+			// The connection editor does not manage port forwards, so an
+			// incoming profile without the field keeps the stored rules.
+			if p.Forwards == nil {
+				p.Forwards = entry.Forwards
 			}
 			break
 		}

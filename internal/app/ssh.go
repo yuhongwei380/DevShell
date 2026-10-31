@@ -50,7 +50,11 @@ type Session struct {
 	ctx                 context.Context
 	closeOnce           sync.Once
 	transportCloseOnce  sync.Once
-	cleanupGrace        time.Duration // optional shorter interval for isolated fault fixtures
+	forwardsMu          sync.Mutex
+	forwarders          []*forwardListener // loopback listeners owned until forceClose
+	forwardersStopped   bool               // forceClose ran; startForwards must not bind more
+	Forwards            []forwardStatus    `json:"forwards,omitempty"` // reported once at connect time
+	cleanupGrace        time.Duration      // optional shorter interval for isolated fault fixtures
 	mu                  sync.Mutex
 	terminalRelay       *terminalRelay
 	terminalStarted     bool
@@ -113,6 +117,9 @@ func (s *Session) Close() {
 // SSH requests and SFTP calls even when the peer ignores channel-close messages.
 func (s *Session) forceClose() {
 	s.noteDisconnect("DS-299", "transport-close")
+	// Loopback forward listeners must die with the transport, or a dead
+	// session would keep answering local connections forever.
+	s.stopForwards()
 	if s.cancel != nil {
 		s.cancel()
 	}
@@ -326,6 +333,9 @@ func (a *App) ConnectWithHostKeyApproval(ctx context.Context, profileID, secret 
 	}
 	a.sessions[s.ID] = s
 	a.mu.Unlock()
+	// -L forwards bind synchronously right after authentication so the connect
+	// response already reports success or a per-forward local error.
+	s.startForwards(p.Forwards)
 	s.startConnectionDiagnostics()
 	go func() { <-sessionCtx.Done(); a.disconnect(s.ID) }()
 	// This is only the deadline for attaching a window. Once attached, the
