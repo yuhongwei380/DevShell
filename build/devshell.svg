@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="48 48 416 416" width="100%" height="100%" fill="none">
   <defs>
     <!-- 内部深空蓝黑渐变底色 -->
     <linearGradient id="bg-grad" x1="48" y1="48" x2="464" y2="464" gradientUnits="userSpaceOnUse">
@@ -14,7 +14,7 @@
     </linearGradient>
   </defs>
 
-  <!-- 连续曲率超椭圆外框 (Squircle)：描边中心 58~454，stroke-width=20，实际外缘精准落在 48~464 (留白 9.375%) -->
+  <!-- 连续曲率超椭圆外框 (Squircle)：描边中心 58~454，stroke-width=20，外缘 48~464；viewBox 即该外缘框，渲染时等比放大充满画布（无四周留白） -->
   <path d="M 190 58 
            H 322 
            C 398 58 454 114 454 190 
