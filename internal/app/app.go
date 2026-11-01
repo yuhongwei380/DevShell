@@ -141,9 +141,12 @@ func (a *App) Handler(assets fs.FS) http.Handler {
 		if lockState.Locked {
 			uiPreferences = map[string]json.RawMessage{}
 		}
-		notes, err := release.Read(currentReleaseNotesVersion())
-		if err != nil {
-			notes, _ = release.Read(ApplicationVersion)
+		var notes string
+		for _, candidate := range append(currentReleaseNotesVersions(), ApplicationVersion) {
+			if data, err := release.Read(candidate); err == nil {
+				notes = data
+				break
+			}
 		}
 		data, _ := json.Marshal(map[string]any{"securityLock": lockState, "base": a.baseURL, "token": a.token, "theme": preferences.Theme, "uiScale": preferences.UIScale, "uiPreferences": uiPreferences, "uiFontRuntime": a.uiFontRuntime(), "version": ApplicationVersion, "displayVersion": ApplicationDisplayVersion, "build": ApplicationBuild, "updateMirror": preferences.UpdateMirror, "releaseNotes": notes})
 		fmt.Fprintf(w, "window.DEVSHELL = %s;", data)

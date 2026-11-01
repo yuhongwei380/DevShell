@@ -50,17 +50,22 @@ const ApplicationPackageVersion = "26.11.0"
 // 2026102401 release once before built-in updates continue normally.
 const ApplicationBuild uint64 = 2026110107
 
-// currentReleaseNotesVersion uses the exact release artifact when available.
-func currentReleaseNotesVersion() string {
+// currentReleaseNotesVersions lists the exact notes artifacts shipped with
+// this build, newest naming first: the suffixless vX.Y.Z-rc.N file (since
+// the tag rule change) and the historical -build<abbreviated build> file.
+func currentReleaseNotesVersions() []string {
 	display := strings.TrimSpace(strings.TrimPrefix(ApplicationDisplayVersion, "ver.Phoenix ·"))
 	if display == ApplicationVersion || !strings.HasPrefix(display, ApplicationVersion+"-rc.") {
-		return ApplicationVersion
+		return []string{ApplicationVersion}
 	}
 	rc := strings.TrimPrefix(display, ApplicationVersion+"-rc.")
 	if _, err := strconv.ParseUint(rc, 10, 32); err != nil {
-		return ApplicationVersion
+		return []string{ApplicationVersion}
 	}
-	return ApplicationVersion + "-rc." + rc + "-build" + strconv.FormatUint(ApplicationBuild%100000000, 10)
+	return []string{
+		ApplicationVersion + "-rc." + rc,
+		ApplicationVersion + "-rc." + rc + "-build" + strconv.FormatUint(ApplicationBuild%100000000, 10),
+	}
 }
 
 // Updates are published as GitHub Release assets of the maintained repository.
