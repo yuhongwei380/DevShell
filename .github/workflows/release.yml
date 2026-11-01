@@ -66,13 +66,17 @@ jobs:
           $notes = "docs/release/RELEASE-$tag.md"
           if (-not (Test-Path $notes)) { $notes = "docs/release/RELEASE-$version.md" }
           $releaseOptions = @('--latest')
+          $title = $tag
           if ($tag -match '-(rc|alpha|beta)([0-9.-]|$)') {
             $releaseOptions = @('--prerelease', '--latest=false')
+          } else {
+            # 正式版 title 只体现版本号：去掉 tag 的 -build<构建号> 后缀；rc 保留完整 tag。
+            $title = $tag -replace '-build\d+$',''
           }
           if (gh release view $tag 2>$null) {
-            gh release edit $tag --title "DevShell $tag" --notes-file $notes @releaseOptions
+            gh release edit $tag --title "DevShell $title" --notes-file $notes @releaseOptions
           } else {
-            gh release create $tag --title "DevShell $tag" --notes-file $notes @releaseOptions
+            gh release create $tag --title "DevShell $title" --notes-file $notes @releaseOptions
           }
           gh release upload $tag build/out/DevShell-Setup-x64.exe build/out/update/up.exe build/out/update/up.exe.json --clobber
         env:
@@ -104,13 +108,17 @@ jobs:
           notes="docs/release/RELEASE-$tag.md"
           if [[ ! -f "$notes" ]]; then notes="docs/release/RELEASE-$version.md"; fi
           release_options=(--latest)
+          title="$tag"
           if [[ "$tag" =~ -(rc|alpha|beta)([0-9.-]|$) ]]; then
             release_options=(--prerelease --latest=false)
+          else
+            # 正式版 title 只体现版本号：去掉 tag 的 -build<构建号> 后缀；rc 保留完整 tag。
+            title="${tag%-build*}"
           fi
           if gh release view "$tag" >/dev/null 2>&1; then
-            gh release edit "$tag" --title "DevShell $tag" --notes-file "$notes" "${release_options[@]}"
+            gh release edit "$tag" --title "DevShell $title" --notes-file "$notes" "${release_options[@]}"
           else
-            gh release create "$tag" --title "DevShell $tag" --notes-file "$notes" "${release_options[@]}"
+            gh release create "$tag" --title "DevShell $title" --notes-file "$notes" "${release_options[@]}"
           fi
           gh release upload "$tag" \
             build/macos-release/DevShell-macos-universal.dmg \
