@@ -32,7 +32,7 @@ func TestAppearancePatchPreservesOtherWindowsAndDeletesOneMapKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, patch := range []string{
-		`{"theme":"dark","terminalFontSize":14.5,"fontColors":{"builtin:fira-code":"#ABCDEF"},"fontBold":{"builtin:fira-code":true},"layout":{"dengshell.nic.first":"eth0"}}`,
+		`{"theme":"dark","terminalFontSize":14.5,"ansiPalette":"vivid","fontColors":{"builtin:fira-code":"#ABCDEF"},"fontBold":{"builtin:fira-code":true},"layout":{"dengshell.nic.first":"eth0"}}`,
 		`{"backgroundOpacity":0.6,"fontColors":{"builtin:jetbrains-mono":"#123456"},"fontBold":{"builtin:jetbrains-mono":false},"layout":{"dengshell.nic.second":"eth1"}}`,
 		`{"fontColors":{"builtin:fira-code":null},"fontBold":{"builtin:fira-code":null},"layout":{"dengshell.nic.first":null}}`,
 	} {
@@ -45,7 +45,7 @@ func TestAppearancePatchPreservesOtherWindowsAndDeletesOneMapKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := s.List().Appearance
-	if got.Theme != "dark" || got.TerminalFontSize != 14.5 || got.BackgroundOpacity != .6 || got.WindowWidth != 1200 || got.WindowHeight != 800 || !got.WindowMaximised {
+	if got.Theme != "dark" || got.TerminalFontSize != 14.5 || got.AnsiPalette != "vivid" || got.BackgroundOpacity != .6 || got.WindowWidth != 1200 || got.WindowHeight != 800 || !got.WindowMaximised {
 		t.Fatalf("unrelated fields overwritten: %+v", got)
 	}
 	if len(got.FontColors) != 1 || got.FontColors["builtin:jetbrains-mono"] != "#123456" || len(got.FontBold) != 1 {
@@ -132,7 +132,7 @@ func TestAppearancePatchInvalidAndFailedWritesAreAtomic(t *testing.T) {
 		t.Fatal(err)
 	}
 	original := s.List().Appearance
-	for _, raw := range []string{`null`, `{"unknown":true}`, `{"theme":null}`, `{"windowWidth":300}`, `{"fontBold":null}`, `{"fontColors":[]}`, `{"fontBold":{"builtin:fira-code":"yes"}}`, `{"theme":"dark","fontColors":{"builtin:fira-code":"red"}}`, `{"layout":{"unexpected-key":[]}}`, `{"terminalFontSize":14.25}`} {
+	for _, raw := range []string{`null`, `{"unknown":true}`, `{"theme":null}`, `{"windowWidth":300}`, `{"fontBold":null}`, `{"fontColors":[]}`, `{"fontBold":{"builtin:fira-code":"yes"}}`, `{"theme":"dark","fontColors":{"builtin:fira-code":"red"}}`, `{"layout":{"unexpected-key":[]}}`, `{"terminalFontSize":14.25}`, `{"ansiPalette":"neon"}`, `{"ansiPalette":null}`} {
 		if _, err = s.PatchAppearance(preferencePatch(t, raw)); err == nil {
 			t.Fatalf("invalid patch accepted: %s", raw)
 		}

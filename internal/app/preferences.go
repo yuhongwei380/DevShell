@@ -25,6 +25,7 @@ type Appearance struct {
 	TerminalFontSize    float64                    `json:"terminalFontSize"`
 	TerminalBold        bool                       `json:"terminalBold,omitempty"` // Legacy input only; migrated to the selected font.
 	Theme               string                     `json:"theme"`
+	AnsiPalette         string                     `json:"ansiPalette,omitempty"` // soft (default) | vivid | bright
 	WindowWidth         int                        `json:"windowWidth"`
 	WindowHeight        int                        `json:"windowHeight"`
 	WindowMaximised     bool                       `json:"windowMaximised"`

@@ -1,6 +1,6 @@
 'use strict';
 
-let appearance = { uiFontId: 'builtin:ui-alibaba-puhuiti-3-55', uiTextColors: {}, fontId: 'builtin:jetbrains-mono', fontColors: {}, fontBold: {}, chartStyles: {}, backgroundId: 'builtin:none', backgroundOpacity: .42, backgroundVersion: 2, uiScale: Number(window.DEVSHELL?.uiScale) || 1, terminalFontSize: 14 };
+let appearance = { uiFontId: 'builtin:ui-alibaba-puhuiti-3-55', uiTextColors: {}, fontId: 'builtin:jetbrains-mono', fontColors: {}, fontBold: {}, chartStyles: {}, backgroundId: 'builtin:none', backgroundOpacity: .42, backgroundVersion: 2, uiScale: Number(window.DEVSHELL?.uiScale) || 1, terminalFontSize: 14, ansiPalette: '' };
 const appearanceMapFields = new Set(['fontColors', 'fontBold', 'chartStyles', 'uiTextColors']);
 const appearanceOwnedElsewhere = new Set(['layout', 'windowWidth', 'windowHeight', 'windowMaximised', 'terminalBold']);
 let appearanceSaved = appearanceSnapshot(appearance);
@@ -23,13 +23,22 @@ const validFontColor = color => typeof color === 'string' && /^#[\da-f]{6}$/i.te
 const colorForFont = (id = appearance.fontId) => validFontColor(appearance.fontColors?.[id]) ? appearance.fontColors[id].toLowerCase() : terminalDefaultColor;
 const boldForFont = (id = appearance.fontId) => appearance.fontBold?.[id] === true;
 function normalizeTerminalFontSize(value) { const number=Number(value); return Number.isFinite(number) ? Math.max(8,Math.min(40,Math.round(number*2)/2)) : 14; }
+const ansiPalettes = {
+  // ANSI 16 色本地渲染预设：ls / vim / htop 等程序发出的语义色在此调色，
+  // 色相保持一致，仅调整饱和度；真彩色与 256 色不受影响，minimumContrastRatio
+  // 仍为 1，字符画（含黑底黑字）保持原样。black/brightBlack 与面板底色协调，各预设共用。
+  soft: { black: '#233846', red: '#df9c96', green: '#a4c9b4', yellow: '#d7c29f', blue: '#8fb5d1', magenta: '#baafd0', cyan: '#96c8ce', white: '#d3e0e8', brightBlack: '#7d99ab', brightRed: '#efb5ae', brightGreen: '#b8dbbf', brightYellow: '#e8d7b5', brightBlue: '#b1d0e6', brightMagenta: '#d3c7e4', brightCyan: '#b7dfe2', brightWhite: '#edf5f9' },
+  vivid: { black: '#233846', red: '#d4726a', green: '#57b77f', yellow: '#d9b45e', blue: '#4e97d9', magenta: '#b183d4', cyan: '#4fb9c9', white: '#cfdce5', brightBlack: '#7d99ab', brightRed: '#ef8d7f', brightGreen: '#55d190', brightYellow: '#f0cb68', brightBlue: '#69b1f0', brightMagenta: '#cf95e8', brightCyan: '#66d2df', brightWhite: '#edf5f9' },
+  bright: { black: '#233846', red: '#e4614f', green: '#37c26e', yellow: '#e3c14d', blue: '#3d90e8', magenta: '#c56fe6', cyan: '#33c4d8', white: '#d3e0e8', brightBlack: '#86a2b4', brightRed: '#ff8f76', brightGreen: '#48dc85', brightYellow: '#ffd75e', brightBlue: '#54aef8', brightMagenta: '#e28dff', brightCyan: '#4adceb', brightWhite: '#f2f8fb' },
+};
 function terminalTheme() {
-  return { background: '#00000000', foreground: colorForFont(), cursor: colorForFont(), selectionBackground: '#7195aa66', black: '#233846', red: '#df9c96', green: '#a4c9b4', yellow: '#d7c29f', blue: '#8fb5d1', magenta: '#baafd0', cyan: '#96c8ce', white: '#d3e0e8', brightBlack: '#7d99ab', brightRed: '#efb5ae', brightGreen: '#b8dbbf', brightYellow: '#e8d7b5', brightBlue: '#b1d0e6', brightMagenta: '#d3c7e4', brightCyan: '#b7dfe2', brightWhite: '#edf5f9' };
+  const palette = ansiPalettes[appearance.ansiPalette] || ansiPalettes.soft;
+  return { background: '#00000000', foreground: colorForFont(), cursor: colorForFont(), selectionBackground: '#7195aa66', ...palette };
 }
 function applyTerminalAppearanceColors() {
   const color = colorForFont();
   document.documentElement.style.setProperty('--terminal-foreground', color);
-  for (const state of sessions.values()) state.term.options.theme = { ...state.term.options.theme, foreground: color, cursor: color, background: '#00000000' };
+  for (const state of sessions.values()) state.term.options.theme = terminalTheme();
   const preview = document.getElementById('font-preview-text');
   if (preview) preview.style.color = color;
 }
@@ -343,6 +352,7 @@ function renderAppearanceControls() {
   $('#background-opacity').value = Math.round(appearance.backgroundOpacity * 100);
   $('#background-opacity-value').value = `${Math.round(appearance.backgroundOpacity * 100)}%`;
   $('#terminal-size').value = appearance.terminalFontSize;
+  $('#ansi-palette').value = ansiPalettes[appearance.ansiPalette] ? appearance.ansiPalette : 'soft';
   $('#font-preview-text').style.fontFamily = terminalFontFamily;
   $('#font-preview-text').style.fontSize = `${appearance.terminalFontSize}px`;
   $('#font-preview-text').style.fontWeight = boldForFont() ? '700' : '400';
@@ -676,6 +686,7 @@ function initializeAppearance() {
   $('#background-opacity').onchange = safe(() => persistAppearance({}));
   $('#terminal-size').onchange = safe(event => chooseAppearance({ terminalFontSize: Number(event.target.value) }));
   $('#ui-scale').onchange = safe(event => chooseAppearance({ uiScale: Number(event.target.value) }));
+  $('#ansi-palette').onchange = safe(event => chooseAppearance({ ansiPalette: event.target.value }));
   $('#profile-proxy').onchange = updateProxyFields;
   $('#close-proxies').onclick = () => $('#proxies-dialog').close(); $('#new-proxy').onclick = () => editProxy();
   $('#close-proxy-editor').onclick = () => $('#proxy-editor-dialog').close();
