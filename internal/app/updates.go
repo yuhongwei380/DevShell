@@ -48,7 +48,7 @@ const ApplicationPackageVersion = "26.11.0"
 // sequence is numerically below the retired 11-digit high-water mark
 // (20261024156), so installs at any older build must manually install the
 // 2026102401 release once before built-in updates continue normally.
-const ApplicationBuild uint64 = 2026110105
+const ApplicationBuild uint64 = 2026110106
 
 // currentReleaseNotesVersion uses the exact release artifact when available.
 func currentReleaseNotesVersion() string {
