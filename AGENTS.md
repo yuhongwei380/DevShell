@@ -12,9 +12,10 @@
 ## 版本命名与升级规则
 
 - **后续构建号不再以 `build` 作为区分**：非正式 release 项目一律用 `rc` 命名，即版本号写作 `vX.Y.Z-rc.N`（N 从 1 起递增），不再使用 `vX.Y.Z-build<构建号>` 这类写法；正式版仍写作 `vX.Y.Z`。
-- tag 与发版说明文件命名跟随该约定，并保留构建号后缀；rc 序号**必须带点**（`rc.1`，不写 `rc1`）；命名中的构建号采用简写，**年份简写为后两位**（如 `2026` → `26`），**末尾序号简写为两位**（如 `146` → `46`），例如 `vX.Y.Z-rc.N-build<简写构建号>`、`RELEASE-vX.Y.Z-rc.N-build<简写构建号>.md`（`20261023146` 简写为 `26102346`）。
-- 构建号本身同样收紧：**`ApplicationBuild` = `YYYYMMDD` + 两位当日序号**（序号从 `01` 起，不再用三位；如 `2026102401`），每日序号上限 `99`；简写即 `YYMMDD` + 两位序号。历史完整格式构建号继续有效，仅约束新构建。
-- **GitHub Release title 只体现版本号**（正式版与 rc 规则一致）：正式版 title 写作 `DevShell vX.Y.Z`，rc 写作 `DevShell vX.Y.Z-rc.N`（workflow 自动去掉 tag 的 `-build<构建号>` 后缀）。构建号继续体现在 tag、发版说明正文与 CHANGELOG 中。
+- **tag 命名与 Release title 规则一致，只体现版本号**（正式版与 rc 规则相同）：正式版 tag 写作 `vX.Y.Z`，rc tag 写作 `vX.Y.Z-rc.N`，**不再携带 `-build<构建号>` 后缀**；rc 序号**必须带点**（`rc.1`，不写 `rc1`）；发版说明文件名跟随 tag，写作 `RELEASE-vX.Y.Z-rc.N.md`。构建号不再进入 tag/文件名，只体现在 `ApplicationBuild` 常量、更新清单、发版说明正文与 CHANGELOG 中（正文写完整构建号）。
+- **历史 tag 兼容与切换桥**：带 `-build<构建号>` 后缀的历史 tag 继续被内置更新解析（双格式长期有效）。内置更新对无后缀 tag 的构建号改从该 release 的清单读取；**已安装的旧客户端只认识带后缀 tag**，因此包含该解析的**桥接版本发版时 tag 仍保留 `-build` 后缀**，自桥接版本的下一次发版起才切换为无后缀 tag。
+- 构建号本身同样收紧：**`ApplicationBuild` = `YYYYMMDD` + 两位当日序号**（序号从 `01` 起，不再用三位；如 `2026102401`），每日序号上限 `99`。历史完整格式构建号继续有效，仅约束新构建。
+- **GitHub Release title 只体现版本号**（正式版与 rc 规则一致）：正式版 title 写作 `DevShell vX.Y.Z`，rc 写作 `DevShell vX.Y.Z-rc.N`；新式 tag 本身即版本号，workflow 直接以 tag 为 title（对历史 `-build` 后缀 tag 仍保留去后缀处理）。
 - 升级矩阵（内置更新按构建号严格递增校验）：
   - **rc → rc**：可以互相升级。
   - **rc → release**：可以升级到正式 release 版本。
