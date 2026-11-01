@@ -48,7 +48,9 @@
 
 /* Each SSH remains an independently selectable tab, including overflowing lists. */
 .session-tab{flex:0 0 auto;max-width:240px}
-.session-tab>button:first-child{min-width:0;overflow:hidden}
+/* 按钮本身不再 overflow:hidden：状态灯的 box-shadow 光环会被裁掉左半边；
+   省略号截断由 .session-tab-text(min-width:0) + .session-tab-label(overflow:hidden) 完成。 */
+.session-tab>button:first-child{min-width:0}
 .session-tab-text{display:flex;align-items:baseline;gap:8px;min-width:0;line-height:1.4}
 .session-tab-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .session-tab .status-dot,.session-tab .tab-close{flex-shrink:0}
@@ -132,3 +134,21 @@
 .session-tab.tab-being-dragged { opacity:.5; }
 .session-tab-insertion { position:fixed; z-index:100002; width:3px; margin-left:-1px; border-radius:3px; background:#3c819f; box-shadow:0 0 0 1px #ffffff88; pointer-events:none; }
 [data-theme="dark"] .session-tab-insertion { background:#9bd5ee; box-shadow:0 0 0 1px #14232daa; }
+
+/* 候选栏（命令输入条）：会话在线时收起为左侧一枚按钮，点按钮展开并聚焦输入条；
+   断开连接、新建窗口与欢迎页自动恢复完整输入条。栏体宽度与高度同步过渡，
+   右侧内容先行淡出；终端高度由 #terminal-output 的 ResizeObserver 自动重新 fit。 */
+.terminal-command-bar { align-self:flex-start; width:100%; overflow:hidden;
+  transition:width .24s cubic-bezier(.4,.1,.2,1),min-height .24s cubic-bezier(.4,.1,.2,1),gap .24s cubic-bezier(.4,.1,.2,1); }
+.command-bar-toggle { flex:none; display:grid; place-items:center; width:28px; height:28px; margin:0; padding:0; border:0; border-radius:8px;
+  background:transparent; color:inherit; cursor:pointer; transition:background .16s,color .16s,transform .16s; }
+.command-bar-toggle svg { width:16px; height:16px; }
+.command-bar-toggle:hover,.command-bar-toggle:focus-visible { background:#bdd8e51f; color:#f0f9fc; }
+.command-bar-toggle:active { transform:translateY(1px); }
+.terminal-command-bar form,.terminal-command-bar > .terminal-tool { min-width:0;
+  transition:background .16s,color .16s,transform .16s,opacity .12s ease; }
+.terminal-command-bar textarea { transition:min-height .24s cubic-bezier(.4,.1,.2,1),padding .24s cubic-bezier(.4,.1,.2,1); }
+.terminal-command-bar.command-bar-collapsed { width:47px; min-height:34px; gap:0; }
+.terminal-command-bar.command-bar-collapsed form,.terminal-command-bar.command-bar-collapsed > .terminal-tool { opacity:0; }
+.terminal-command-bar.command-bar-collapsed textarea { min-height:0!important; height:auto!important; padding-block:0!important; }
+@media(prefers-reduced-motion:reduce){.terminal-command-bar,.terminal-command-bar form,.terminal-command-bar textarea{transition:none}}

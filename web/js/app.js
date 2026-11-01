@@ -631,7 +631,7 @@ function renderSessionInfo() {
   $('#terminal-state').hidden = currentConnected; $('#terminal-current-badge').hidden = !currentConnected;
   const localPrompt = !!state && !state.connected && !state.pendingConnection && !state.disconnecting && !state.detaching && !state.handoffProvisional && !state.ownershipUncertain;
   $('#command-history').disabled = false; $('#command-input').disabled = !!state && !(state.connected || localPrompt); $('#command-input').placeholder = state ? (state.connected ? '输入命令并回车发送 · ↑↓ 历史' : localPrompt ? '本机提示符：ssh · reconnect · ping/traceroute/nslookup/dig/curl · exit · ↑↓ 本机历史' : '输入命令并回车发送 · ↑↓ 历史') : '本机：输入 ssh 用户@主机 或 ping/traceroute/nslookup/dig/curl · ↑↓ 本机历史'; $('#command-input').value = ''; resizeCommandInput(); $('#disconnect').disabled = !state?.connected || !!(state.disconnecting || state.detaching || state.handoffProvisional || state.ownershipUncertain);
-  renderMonitor(state?.connected ? state.stats : null); renderLatency(); renderCommands(); window.DengCommonApps?.render(); window.DengProcessView?.reflect(); window.DengPinnedNav?.reflect(); updateStatus();
+  renderMonitor(state?.connected ? state.stats : null); renderLatency(); renderCommands(); window.DengCommonApps?.render(); window.DengProcessView?.reflect(); window.DengPinnedNav?.reflect(); updateStatus(); reflectCommandBar();
 }
 $('#command-form').onsubmit = event => { event.preventDefault(); const state = current(); const input = $('#command-input'); if (!state && input.value.trim()) { const command = input.value; input.value = ''; window.DengCommandHistory.recordLocal(command); if (window.DengLocalPrompt.commands.test(command.trim())) safe(() => window.DengLocalPrompt.run(command))(); else safe(() => window.DengQuickConnect.run(command))(); return; } if (state && !state.connected && !state.pendingConnection && !state.detaching && !state.handoffProvisional && !state.ownershipUncertain && input.value.trim()) { const command = input.value; input.value = ''; window.DengCommandHistory.recordLocal(command); safe(() => sessionLocalCommand(state, command))(); return; } if (!state?.ready || !input.value) return; if (!pasteTerminalText(state, input.value, { execute: true })) return; input.value = ''; resizeCommandInput(); };
 $('#command-input').onkeydown = event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); $('#command-form').requestSubmit(); return; } if (!['ArrowUp', 'ArrowDown'].includes(event.key)) return; const state = current(); event.preventDefault(); const direction = event.key === 'ArrowUp' ? -1 : 1; if (state?.connected) { state.historyIndex = Math.max(0, Math.min(state.history.length, state.historyIndex + direction)); event.target.value = state.history[state.historyIndex] || ''; } else { event.target.value = window.DengCommandHistory.recallLocal(event.target.value, direction); } resizeCommandInput(); };
@@ -640,6 +640,37 @@ $('#clear-terminal').onclick = () => { if (window.DengLocalPrompt?.handleClear()
 let terminalFont = normalizeTerminalFontSize(appearance.terminalFontSize);
 function changeFont(amount) { terminalFont = normalizeTerminalFontSize(terminalFont + amount); document.documentElement.style.setProperty('--terminal-font-size', `${terminalFont}px`); for (const state of sessions.values()) state.term.options.fontSize = terminalFont; persistAppearance({ terminalFontSize: terminalFont }).catch(error => toast(error.message)); renderAppearanceControls(); fitActive(); }
 $('#font-up').onclick = () => changeFont(.5); $('#font-down').onclick = () => changeFont(-.5);
+// 会话在线时候选栏收起为左侧按钮（点按钮展开并聚焦输入条）；断开连接、
+// 新建窗口与欢迎页自动恢复完整输入条。在线时输入为空且焦点离开输入条后自动再收起；
+// 有草稿或输入条内仍有焦点（如历史按钮）时不打扰。
+const commandBar = $('#terminal-command-bar'), commandBarToggle = $('#command-bar-toggle');
+let commandBarPinned = false, commandBarKey = null;
+function setCommandBarCollapsed(collapsed) {
+  if (commandBar.classList.contains('command-bar-collapsed') === collapsed) return;
+  commandBar.classList.toggle('command-bar-collapsed', collapsed);
+  commandBarToggle.setAttribute('aria-expanded', String(!collapsed));
+  const label = collapsed ? '展开命令输入条' : '收起命令输入条';
+  commandBarToggle.title = label; commandBarToggle.setAttribute('aria-label', label);
+  $('#command-form').inert = collapsed;
+  for (const id of ['command-history','font-down','font-up']) $('#' + id).inert = collapsed;
+  if (collapsed) commandBarPinned = false;
+}
+function reflectCommandBar() {
+  const state = current(), key = `${state?.id || ''}:${state?.connected ? 1 : 0}`;
+  // 切换会话或连接状态变化都视为新的起点，撤销上一次的手动展开。
+  if (key !== commandBarKey) { commandBarKey = key; commandBarPinned = false; }
+  setCommandBarCollapsed(!!state?.connected && !commandBarPinned);
+}
+commandBarToggle.onclick = () => {
+  if (commandBar.classList.contains('command-bar-collapsed')) { commandBarPinned = true; setCommandBarCollapsed(false); $('#command-input').focus(); }
+  else setCommandBarCollapsed(true);
+};
+$('#command-input').addEventListener('blur', () => setTimeout(() => {
+  // 弹窗打开期间不动背景里的候选栏；离线状态保持完整输入条。
+  if (document.querySelector('dialog[open]') || commandBar.classList.contains('command-bar-collapsed') || !current()?.connected) return;
+  if (commandBar.contains(document.activeElement) || $('#command-input').value.trim()) return;
+  setCommandBarCollapsed(true);
+}, 150));
 // 跟随终端目录：开关在设置的外观页（默认开启）。开启后连接一旦 Bash / Zsh /
 // Fish 提示符集成就绪就自动跟随；关闭立即停止全部会话的跟随，重新开启会对已
 // 就绪的会话重新生效。设置持久化，重启后保持。
