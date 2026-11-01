@@ -1,8 +1,8 @@
-.titlebar .help-pill { color:#71969c; background:#e4f0ee; --wails-draggable:no-drag; }
-.titlebar .help-pill:hover { color:#497880; background:#d9eae7; }
-.titlebar .help-pill svg { width:16px; height:16px; }
-[data-theme="dark"] .titlebar .help-pill { color:#a6c6c8; background:#294143; }
-[data-theme="dark"] .titlebar .help-pill:hover { color:#d0e7e7; background:#355256; }
+.help-pill { color:#71969c; background:#e4f0ee; --wails-draggable:no-drag; }
+.help-pill:hover { color:#497880; background:#d9eae7; }
+.help-pill svg { width:16px; height:16px; }
+[data-theme="dark"] .help-pill { color:#a6c6c8; background:#294143; }
+[data-theme="dark"] .help-pill:hover { color:#d0e7e7; background:#355256; }
 .help-guide-dialog,.help-manual-dialog { padding:0; color:var(--text,#415d70); border:0; border-radius:22px; background:var(--surface,#fff); box-shadow:0 22px 90px #18304338; }
 .help-guide-dialog::backdrop { background:#15263242; backdrop-filter:none; -webkit-backdrop-filter:none; }
 .help-guide-dialog { width:610px; max-width:calc(var(--view-width,100vw) - 24px); max-height:calc(var(--view-height,100vh) - 24px); overflow:auto; }

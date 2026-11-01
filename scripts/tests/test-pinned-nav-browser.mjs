@@ -1,12 +1,12 @@
-// Opt-in browser regression for the pinned links bar: every chip and overflow
-// item exposes a close button, and unpinning must go through the shared
-// confirmation dialog before the layout is rewritten. Right-click renames the
-// connection in place: the saved profile name (the same field the server
-// manager edits) updates everywhere, while cancel changes nothing.
+// Opt-in browser regression for the pinned links dropdown: the session bar
+// carries an expand button right of the server manager (the header row is
+// gone, the shell reaches the top), and the button drops a vertical list of
+// the pinned connections. Unpinning goes through the shared confirmation
+// dialog; right-click renames in place; a real drag reorders vertically and
+// persists; choosing a connection closes the list like any menu.
 // Edge on Windows hands the browser process off from the launcher stub, so the
 // browser is spawned directly and driven over CDP instead of puppeteer.launch.
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -38,104 +38,124 @@ try {
   browser = await puppeteer.connect({ browserWSEndpoint: wsEndpoint });
   page = await browser.newPage(); page.on('pageerror', e => errors.push(e.message)); await page.setViewport({ width: 2800, height: 900 });
   await page.goto(fixture.url, { waitUntil: 'networkidle0' });
-  await page.waitForFunction(() => window.DengPinnedNav && document.querySelectorAll('.pinned-chip:not([hidden])').length === 8);
-  await page.evaluate(() => reflectWindowState({ frameless: true }));
-  assert.equal(await page.$eval('.pinned-more-wrap', el => el.hidden), true);
-  checks.push('A wide bar shows all 8 connections without an arbitrary 7-item limit');
-  const inspectLayout = async () => page.evaluate(() => {
-    const bar = document.querySelector('#pinned-bar'), rect = bar.getBoundingClientRect();
-    const chips = [...bar.querySelectorAll('.pinned-chip:not([hidden])')];
-    const wrap = bar.querySelector('.pinned-more-wrap');
-    const shown = [...chips, ...(!wrap.hidden ? [wrap] : [])];
+  await page.waitForFunction(() => window.DengPinnedNav && !document.querySelector('#pinned-toggle').hidden);
+  // There is no titlebar row any more: the app buttons live in the session
+  // row, the shell reaches the top of the window, and the pinned links float
+  // in a dropdown that never shifts the layout.
+  const collapsedState = await page.evaluate(() => {
+    const t = document.querySelector('#pinned-toggle').getBoundingClientRect();
+    const c = document.querySelector('#connection-button').getBoundingClientRect();
+    const row = document.querySelector('.session-row').getBoundingClientRect();
+    const ws = document.querySelector('#workspace').getBoundingClientRect();
     return {
-      visible: chips.length,
-      overflow: bar.querySelectorAll('.pinned-more-item').length,
-      more: !wrap.hidden,
-      clipped: shown.some(el => { const r = el.getBoundingClientRect(); return r.left < rect.left - 1 || r.right > rect.right + 1; }),
-      labels: chips.map(el => el.querySelector('.pinned-chip-open span').textContent),
+      besideManager: t.left >= c.right - 1 && t.top < c.bottom && t.bottom > c.top,
+      brandAligned: (() => {
+        const b = document.querySelector('.session-bar .brand').getBoundingClientRect();
+        return Math.abs((b.top + b.bottom) / 2 - (c.top + c.bottom) / 2) < 3;
+      })(),
+      rowTopLogical: row.top / effectiveScale,
+      barHidden: document.querySelector('#pinned-bar').hidden,
+      workspaceTop: ws.top, workspaceHeight: ws.height,
     };
   });
-  // A real resize must redistribute the same pins, not crop partial chips or
-  // lose entries. Exercise the narrow-header breakpoint and application zoom.
+  assert(collapsedState.besideManager, 'the expand button sits right of the server manager button');
+  assert(collapsedState.brandAligned, 'the app buttons share the session row center line');
+  assert(collapsedState.rowTopLogical < 14, 'the session row (and with it the shell) reaches the top of the window');
+  assert.equal(collapsedState.barHidden, true, 'the links dropdown starts collapsed');
+  checks.push('No titlebar row: the shell reaches the top and the links live behind an expand button next to the server manager');
+  if (process.env.DENGSHELL_PINNED_SCREENSHOT) await page.screenshot({ path: process.env.DENGSHELL_PINNED_SCREENSHOT.replace(/\.png$/, '-collapsed.png') });
+  await page.click('#pinned-toggle');
+  await page.waitForFunction(() => !document.querySelector('#pinned-bar').hidden && document.querySelectorAll('.pinned-item').length === 8);
+  const openState = await page.evaluate(() => ({
+    position: getComputedStyle(document.querySelector('#pinned-bar')).position,
+    width: document.querySelector('#pinned-bar').getBoundingClientRect().width,
+    top: document.querySelector('#workspace').getBoundingClientRect().top,
+    height: document.querySelector('#workspace').getBoundingClientRect().height,
+    anchored: (() => {
+      const t = document.querySelector('#pinned-toggle').getBoundingClientRect();
+      const b = document.querySelector('#pinned-bar').getBoundingClientRect();
+      const items = [...document.querySelectorAll('.pinned-item')];
+      const vertical = items.every((el, i) => i === 0 || (el.getBoundingClientRect().top > items[i - 1].getBoundingClientRect().bottom - 1 && Math.abs(el.getBoundingClientRect().left - items[0].getBoundingClientRect().left) < 1));
+      return b.top > t.bottom && b.left >= 0 && b.right <= innerWidth + 1 && b.bottom <= innerHeight + 1 && vertical;
+    })(),
+  }));
+  assert.equal(openState.position, 'fixed', 'the links dropdown floats instead of reserving layout');
+  assert(Math.abs(openState.top - collapsedState.workspaceTop) < 1 && Math.abs(openState.height - collapsedState.workspaceHeight) < 1, 'opening the dropdown keeps the shell at full size');
+  assert(openState.anchored, 'the dropdown anchors below the button as one vertical column inside the viewport');
+  await page.click('#pinned-toggle');
+  assert.equal(await page.$eval('#pinned-bar', el => el.hidden), true, 'a second click collapses the dropdown');
+  await page.click('#pinned-toggle');
+  await page.waitForFunction(() => !document.querySelector('#pinned-bar').hidden);
+  checks.push('The toggle drops a vertical list anchored under it; the shell never resizes');
+  if (process.env.DENGSHELL_PINNED_SCREENSHOT) await page.screenshot({ path: process.env.DENGSHELL_PINNED_SCREENSHOT.replace(/\.png$/, '-open.png') });
+  // Window buttons moved into the same session row; frameless mode shows them
+  // at the right end of that row.
+  await page.evaluate(() => reflectWindowState({ frameless: true }));
+  const controls = await page.evaluate(() => {
+    const wc = document.querySelector('#window-controls'), row = document.querySelector('.session-row');
+    const r = wc.getBoundingClientRect(), rr = row.getBoundingClientRect();
+    return { hidden: wc.hidden, sameRow: r.top >= rr.top - 1 && r.bottom <= rr.bottom + 1, right: r.right };
+  });
+  assert.equal(controls.hidden, false, 'frameless mode shows the window buttons');
+  assert(controls.sameRow && controls.right <= 2800 + 1, 'the window buttons live at the right end of the session row');
+  checks.push('Frameless window buttons share the session row at its right end');
+  const inspectDropdown = async () => page.evaluate(() => {
+    const bar = document.querySelector('#pinned-bar'), rect = bar.getBoundingClientRect();
+    const items = [...bar.querySelectorAll('.pinned-item')];
+    return {
+      visible: items.length,
+      inside: rect.left >= 0 && rect.right <= innerWidth + 1 && rect.bottom <= innerHeight + 1,
+      clipped: items.some(el => { const r = el.getBoundingClientRect(); return r.left < rect.left - 1 || r.right > rect.right + 1 || r.top < rect.top - 1 || r.bottom > Math.max(rect.bottom, rect.top + rect.height) + 1; }),
+      labels: items.map(el => el.querySelector('.pinned-item-open span').textContent),
+    };
+  });
+  const expandPanel = async () => {
+    await page.waitForFunction(() => !document.querySelector('#pinned-toggle').hidden);
+    await page.evaluate(() => { if (document.querySelector('#pinned-bar').hidden) document.querySelector('#pinned-toggle').click(); });
+    await page.waitForFunction(() => !document.querySelector('#pinned-bar').hidden);
+  };
+  // A real resize must keep the whole list reachable inside the viewport; the
+  // list scrolls, so no entry is ever cropped or hidden behind a menu.
   for (const width of [1440, 1100, 800, 700, 520]) {
     await page.setViewport({ width, height: 900 });
+    // headless setViewport does not always deliver a window resize; dispatch
+    // it so the app refreshes --view-width and the dropdown re-anchors.
+    await page.evaluate(() => window.dispatchEvent(new Event('resize')));
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-    const layout = await inspectLayout();
+    await expandPanel();
+    const layout = await inspectDropdown();
+    assert.equal(layout.inside, true, `the dropdown stays inside the viewport at width ${width}`);
     assert.equal(layout.clipped, false, `no clipped connection at width ${width}`);
-    assert.equal(layout.visible + (layout.more ? layout.overflow : 0), 8, `all pins accessible at width ${width}`);
+    assert.equal(layout.visible, 8, `all pins listed at width ${width}`);
   }
-  await page.setViewport({ width: 1440, height: 900 });
-  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-  await page.waitForFunction(() => !document.querySelector('.pinned-more-wrap').hidden);
-  const collapsed = await inspectLayout();
-  assert(collapsed.visible > 0 && collapsed.visible < 8);
-  assert.equal(await page.$eval('.pinned-more', el => el.textContent), '︙');
-  await page.click('.pinned-more');
-  await page.waitForFunction(() => !document.querySelector('.pinned-more-menu').hidden);
-  assert.equal(await page.$$eval('.pinned-more-item .pinned-chip-remove', els => els.length), collapsed.overflow);
-  const menuState = await page.$eval('.pinned-more-menu', el => {
-    const r = el.getBoundingClientRect(), hit = document.elementFromPoint(r.left + 20, r.top + 15);
-    return { visible: !!hit?.closest('.pinned-more-menu'), hidden: el.hidden, rect: r.toJSON(), hit: hit?.outerHTML.slice(0, 200) };
-  });
-  assert(menuState.visible, JSON.stringify(menuState));
-  if (process.env.DENGSHELL_PINNED_SCREENSHOT) await page.screenshot({ path: process.env.DENGSHELL_PINNED_SCREENSHOT });
-  await page.keyboard.press('Escape');
-  assert.equal(await page.$eval('.pinned-more', el => el.getAttribute('aria-expanded')), 'false');
-  await page.click('.pinned-more');
-  await page.click('.pinned-label');
-  assert.equal(await page.$eval('.pinned-more-menu', el => el.hidden), true);
-  checks.push('Resizing at 1440/1100/800/700/520px keeps every pin accessible; ellipsis opens the list, Escape/outside click close it');
-  // At very limited width all entries remain reachable from the one menu.
-  await page.$eval('#pinned-bar', el => { el.style.maxWidth = '115px'; });
-  await page.waitForFunction(() => document.querySelectorAll('.pinned-chip:not([hidden])').length === 0);
-  const compact = await inspectLayout();
-  assert.equal(compact.clipped, false); assert.equal(compact.overflow, 8);
-  await page.click('.pinned-more');
-  await page.evaluate(() => {
-    window.qaPinnedConnect = connect; window.qaPinnedCalls = [];
-    connect = id => { window.qaPinnedCalls.push(id); };
-  });
-  await page.click('.pinned-more-item-open');
-  const overflowClick = await page.evaluate(() => {
-    connect = window.qaPinnedConnect;
-    const calls = window.qaPinnedCalls;
-    delete window.qaPinnedConnect; delete window.qaPinnedCalls;
-    return calls;
-  });
-  assert.deepEqual(overflowClick, [created[0]]);
-  assert.equal(await page.$eval('.pinned-more-menu', el => el.hidden), true);
-  await page.$eval('#pinned-bar', el => { el.style.maxWidth = ''; });
-  await page.waitForFunction(() => document.querySelectorAll('.pinned-chip:not([hidden])').length > 0);
+  checks.push('Resizing at 1440/1100/800/700/520px keeps every pin listed and inside the viewport');
+  await page.setViewport({ width: 1000, height: 900 });
   await page.evaluate(() => { appearance.uiScale = 1.5; applyUIScale(); });
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-  assert.equal((await inspectLayout()).clipped, false);
-  await page.click('.pinned-more');
-  assert.equal(await page.$eval('.pinned-more-menu', el => { const r = el.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth + 1 && r.bottom <= innerHeight + 1; }), true);
-  await page.keyboard.press('Escape');
+  await expandPanel();
+  assert.equal((await inspectDropdown()).inside, true, '150% application zoom keeps the dropdown inside the viewport');
   await page.evaluate(() => { appearance.uiScale = 1; applyUIScale(); });
-  await page.waitForFunction(() => document.querySelectorAll('.pinned-chip:not([hidden])').length > 0);
-  checks.push('A menu-only bar opens the chosen connection; 150% application zoom keeps chips and menu in the viewport');
+  checks.push('150% application zoom keeps the dropdown anchored inside the viewport');
   // Use real pointer input: crossing the drag threshold must not also open a
-  // session. Exercise both axes, overflow transfers and persisted reloads.
+  // session. Vertical reordering persists through the layout API.
   const settle = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-  const chip = id => `.pinned-chip[data-pinned-id="${id}"]`;
-  const menuItem = id => `.pinned-more-item[data-pinned-id="${id}"]`;
+  const item = id => `.pinned-item[data-pinned-id="${id}"]`;
   const startDrag = async selector => {
-    const box = await (await page.$(`${selector} button`)).boundingBox();
+    const box = await (await page.$(`${selector} .pinned-item-open`)).boundingBox();
     assert(box, `visible drag source ${selector}`);
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
-    await page.mouse.move(box.x + box.width / 2 + 9, box.y + box.height / 2, { steps: 3 });
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + 9, { steps: 3 });
   };
-  const moveTo = async (selector, after = false, vertical = false) => {
+  const moveTo = async (selector, after = false) => {
     const box = await (await page.$(selector)).boundingBox();
     assert(box, `visible drop target ${selector}`);
-    await page.mouse.move(box.x + box.width * (vertical ? .5 : after ? .8 : .2), box.y + box.height * (vertical ? after ? .8 : .2 : .5), { steps: 12 });
+    await page.mouse.move(box.x + box.width * .5, box.y + box.height * (after ? .8 : .2), { steps: 12 });
   };
   const assertOrder = async expected => {
     await settle();
     assert.deepEqual(await page.evaluate(() => appearance.layout['dengshell.pinned.v1']), expected);
-    assert.deepEqual(await page.$$eval('.pinned-chip', els => els.map(el => el.dataset.pinnedId)), expected);
+    assert.deepEqual(await page.$$eval('.pinned-item', els => els.map(el => el.dataset.pinnedId)), expected);
     assert.deepEqual((await api('/api/config')).data.appearance.layout['dengshell.pinned.v1'], expected);
     assert.equal(await page.$('.pinned-sorting, .pinned-drag-source, .pinned-drop-before, .pinned-drop-after'), null);
   };
@@ -145,39 +165,27 @@ try {
     assert.equal((await saved).status(), 200);
     await assertOrder(expected);
   };
-  await page.setViewport({ width: 2800, height: 900 }); await settle();
+  await page.setViewport({ width: 2800, height: 900 }); await page.evaluate(() => window.dispatchEvent(new Event('resize'))); await settle();
+  await expandPanel();
   await page.evaluate(() => { window.qaSortConnect = connect; window.qaSortCalls = []; connect = id => window.qaSortCalls.push(id); });
-  await startDrag(chip(created[0]));
-  await moveTo(chip(created[2]), true);
-  assert.equal(await page.$eval(chip(created[2]), el => el.classList.contains('pinned-drop-after')), true);
+  await startDrag(item(created[0]));
+  await moveTo(item(created[2]), true);
+  assert.equal(await page.$eval(item(created[2]), el => el.classList.contains('pinned-drop-after')), true);
   await drop([created[1], created[2], created[0], ...created.slice(3)]);
-  await startDrag(chip(created[0])); await moveTo(chip(created[1])); await drop(created);
-  // Cancelled and out-of-bar drops leave both the DOM and saved layout alone.
-  await startDrag(chip(created[0])); await moveTo(chip(created[2]));
+  await startDrag(item(created[0])); await moveTo(item(created[1])); await drop(created);
+  // Escape and out-of-list drops leave both the DOM and the saved layout alone.
+  await startDrag(item(created[0])); await moveTo(item(created[2]));
   await page.keyboard.press('Escape'); await page.mouse.up(); await assertOrder(created);
-  await startDrag(chip(created[0])); await page.mouse.move(30, 600); await page.mouse.up(); await assertOrder(created);
-  assert.deepEqual(await page.evaluate(() => window.qaSortCalls), []);
-  await page.click(`${chip(created[0])} .pinned-chip-open`);
-  assert.deepEqual(await page.evaluate(() => window.qaSortCalls), [created[0]], 'ordinary clicks still connect after dragging');
-  checks.push('Real horizontal drags reorder in both directions; Escape/outside drops cancel and drags never connect');
-  await page.setViewport({ width: 1440, height: 900 }); await settle();
-  await page.click('.pinned-more');
-  const hidden = await page.$$eval('.pinned-more-item', els => els.map(el => el.dataset.pinnedId));
-  assert(hidden.length >= 2);
-  const last = created.at(-1), target = hidden[0];
-  await startDrag(menuItem(last)); await moveTo(menuItem(target), false, true);
-  const verticalOrder = created.filter(id => id !== last); verticalOrder.splice(verticalOrder.indexOf(target), 0, last);
-  await drop(verticalOrder);
-  await page.click('.pinned-more');
-  await startDrag(menuItem(last)); await moveTo(chip(created[0]));
-  await drop([last, ...created.slice(0, -1)]);
-  // Hovering the ellipsis opens hidden destinations during an active drag.
-  await startDrag(chip(last)); await moveTo('.pinned-more');
-  assert.equal(await page.$eval('.pinned-more-menu', el => el.hidden), false);
-  await moveTo(menuItem(created.at(-2)), true, true); await drop(created);
-  checks.push('Overflow items reorder vertically, move into the bar, and receive visible pins by hovering the ellipsis');
+  await startDrag(item(created[0])); await page.mouse.move(30, 700); await page.mouse.up(); await assertOrder(created);
+  assert.deepEqual(await page.evaluate(() => window.qaSortCalls), [], 'a drag must never connect');
+  // Choosing an entry connects and closes the dropdown, like any menu.
+  await page.click(`${item(created[0])} .pinned-item-open`);
+  assert.deepEqual(await page.evaluate(() => window.qaSortCalls), [created[0]], 'an ordinary click still connects after dragging');
+  await settle();
+  assert.equal(await page.$eval('#pinned-bar', el => el.hidden), true, 'choosing a connection closes the dropdown');
+  checks.push('Vertical drags reorder in both directions; Escape/outside drops cancel; choosing an entry connects and closes the list');
   // A failed write rolls back exactly this layout key and surfaces the error.
-  await page.setViewport({ width: 2800, height: 900 }); await settle();
+  await expandPanel();
   await page.setRequestInterception(true);
   const rejectSave = request => {
     if (request.url().endsWith('/api/appearance/patch') && request.method() === 'POST') {
@@ -185,68 +193,69 @@ try {
     } else request.continue();
   };
   page.on('request', rejectSave);
-  await startDrag(chip(created[0])); await moveTo(chip(created[2]), true); await page.mouse.up();
+  await startDrag(item(created[0])); await moveTo(item(created[2]), true); await page.mouse.up();
   await page.waitForFunction(() => document.querySelector('#toast')?.textContent.includes('排序保存失败测试'));
   await assertOrder(created);
   await page.setRequestInterception(false); page.off('request', rejectSave);
   // Drop coordinates must be correct at application zoom too.
   await page.evaluate(() => { appearance.uiScale = 1.5; applyUIScale(); }); await settle();
-  await startDrag(chip(created[1])); await moveTo(chip(created[0]));
+  await expandPanel();
+  await startDrag(item(created[1])); await moveTo(item(created[0]));
   const reordered = [created[1], created[0], ...created.slice(2)]; await drop(reordered);
-  assert.deepEqual(await page.evaluate(() => window.qaSortCalls), [created[0]]);
   await page.evaluate(() => { connect = window.qaSortConnect; delete window.qaSortConnect; delete window.qaSortCalls; });
   await page.reload({ waitUntil: 'networkidle0' });
-  await page.waitForFunction(() => document.querySelectorAll('.pinned-chip').length === 8);
+  await page.waitForFunction(() => window.DengPinnedNav && !document.querySelector('#pinned-toggle').hidden);
+  assert.equal(await page.$eval('#pinned-bar', el => el.hidden), true, 'a reload collapses the dropdown again');
+  await page.click('#pinned-toggle');
+  await page.waitForFunction(() => !document.querySelector('#pinned-bar').hidden && document.querySelectorAll('.pinned-item').length === 8);
   await assertOrder(reordered);
-  await page.evaluate(async ids => { await persistAppearance({ uiScale: 1, layout: { 'dengshell.pinned.v1': ids } }); applyUIScale(); DengPinnedNav.render(); }, created);
-  await page.setViewport({ width: 1440, height: 900 }); await settle();
-  await assertOrder(created);
-  checks.push('Failed saves restore the original order; 150% zoom and a page reload preserve successful sorting');
-  // Delete asks for confirmation; cancelling keeps the pin and the layout.
-  let chips = await page.$$('.pinned-chip');
-  await (await chips[0].$('.pinned-chip-remove')).click();
+  checks.push('Failed saves roll back; 150% zoom drops persist and survive a reload that starts collapsed');
+  // Delete asks for confirmation; cancelling keeps the pin and the layout. The
+  // dialog is not an outside click: the dropdown stays open throughout.
+  let items = await page.$$('.pinned-item');
+  await (await items[0].$('.pinned-item-remove')).click();
   await page.waitForSelector('#action-dialog[open]');
-  assert((await page.$eval('#action-title', e => e.textContent)).includes('取消固定 固定测试-1'));
+  assert((await page.$eval('#action-title', e => e.textContent)).includes('取消固定'));
   await page.click('#action-cancel');
   await page.waitForFunction(() => !document.querySelector('#action-dialog').open);
-  assert.equal(await page.$$eval('.pinned-chip', els => els.length), 8);
-  assert.deepEqual(await page.evaluate(() => appearance.layout['dengshell.pinned.v1']), created);
-  checks.push('Delete button opens a confirmation; cancel keeps the pin and layout');
-  // Confirming removes exactly that pin and persists the layout. The visible
-  // prefix and overflow list are recalculated against the current width.
-  chips = await page.$$('.pinned-chip');
-  await (await chips[0].$('.pinned-chip-remove')).click();
+  assert.equal(await page.$eval('#pinned-bar', el => el.hidden), false, 'the dropdown stays open through the confirmation dialog');
+  assert.equal(await page.$$eval('.pinned-item', els => els.length), 8);
+  assert.deepEqual(await page.evaluate(() => appearance.layout['dengshell.pinned.v1']), reordered);
+  checks.push('Delete asks for confirmation, the dropdown stays open through dialogs and cancel changes nothing');
+  // Confirming removes exactly that pin and persists the layout.
+  items = await page.$$('.pinned-item');
+  const removedId = await items[0].evaluate(el => el.dataset.pinnedId);
+  await (await items[0].$('.pinned-item-remove')).click();
   await page.waitForSelector('#action-dialog[open]');
   await page.click('#action-confirm');
-  await page.waitForFunction(() => appearance.layout['dengshell.pinned.v1'].length === 7 && document.querySelectorAll('.pinned-chip').length === 7);
-  assert.deepEqual(await page.evaluate(() => appearance.layout['dengshell.pinned.v1']), created.slice(1));
-  checks.push('Confirming removes the pin, persists the layout and reflows the overflow');
+  await page.waitForFunction(() => appearance.layout['dengshell.pinned.v1'].length === 7 && document.querySelectorAll('.pinned-item').length === 7);
+  assert.deepEqual(await page.evaluate(() => appearance.layout['dengshell.pinned.v1']), reordered.filter(id => id !== removedId));
+  checks.push('Confirming removes the pin and persists the layout');
   // Right-click opens the rename dialog prefilled with the current name;
   // cancelling changes nothing anywhere.
-  await page.evaluate(() => document.querySelector('.pinned-chip').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })));
+  const renameTarget = await page.$eval('.pinned-item', el => el.dataset.pinnedId);
+  const firstName = await page.$eval('.pinned-item .pinned-item-open span', el => el.textContent);
+  await page.evaluate(() => document.querySelector('.pinned-item').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })));
   await page.waitForSelector('#action-dialog[open]');
   assert((await page.$eval('#action-title', e => e.textContent)).includes('重命名连接'));
-  assert.equal(await page.$eval('#action-input', e => e.value), '固定测试-2');
+  assert.equal(await page.$eval('#action-input', e => e.value), firstName);
   await page.click('#action-cancel');
   await page.waitForFunction(() => !document.querySelector('#action-dialog').open);
-  assert.equal(await page.$eval('.pinned-chip .pinned-chip-open span', e => e.textContent), '固定测试-2');
-  checks.push('Right-click opens a prefilled rename dialog; cancel changes nothing');
-  // Confirming renames the saved profile: the chip, the in-app profile list
-  // (the same name the server manager edits) and the persisted config all
-  // update, while the pin layout stays untouched.
+  assert.equal(await page.$eval('.pinned-item .pinned-item-open span', el => el.textContent), firstName);
+  // Confirming renames the saved profile: the list row, the in-app profile list
+  // (the same name the server manager edits) and the persisted config update.
   const renamed = '改名后的连接';
-  await page.evaluate(() => document.querySelector('.pinned-chip').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })));
+  await page.evaluate(() => document.querySelector('.pinned-item').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })));
   await page.waitForSelector('#action-dialog[open]');
   await page.$eval('#action-input', (el, value) => { el.value = value; }, renamed);
   await page.click('#action-confirm');
-  await page.waitForFunction(name => document.querySelector('.pinned-chip .pinned-chip-open span')?.textContent === name, {}, renamed);
-  assert.equal(await page.evaluate(id => profiles.find(profile => profile.id === id)?.name, created[1]), renamed);
-  assert.equal((await api('/api/config')).data.servers.find(profile => profile.id === created[1]).name, renamed);
-  assert.deepEqual(await page.evaluate(() => appearance.layout['dengshell.pinned.v1']), created.slice(1));
-  checks.push('Renaming updates the chip, the shared profile name and the persisted config; pins stay put');
-  // Clicking a chip always opens a fresh session, even when one for that
-  // profile is already open and active: the old activate-if-exists path made
-  // repeat clicks look completely dead.
+  await page.waitForFunction(name => document.querySelector('.pinned-item .pinned-item-open span')?.textContent === name, {}, renamed);
+  assert.equal(await page.evaluate(id => profiles.find(profile => profile.id === id)?.name, renameTarget), renamed);
+  assert.equal((await api('/api/config')).data.servers.find(profile => profile.id === renameTarget).name, renamed);
+  assert.deepEqual(await page.evaluate(() => appearance.layout['dengshell.pinned.v1']), reordered.filter(id => id !== removedId));
+  checks.push('Right-click renames the shared profile name and the persisted config; pins stay put');
+  // Clicking a row always opens a fresh session, even when one for that
+  // profile is already open and active.
   const clickCalls = await page.evaluate(() => {
     const calls = { connect: [], activate: [] };
     const originalConnect = connect, originalActivate = activate;
@@ -255,34 +264,58 @@ try {
     const target = appearance.layout['dengshell.pinned.v1'][0];
     sessions.set('qa-existing', { id: 'qa-existing', profileId: target, connected: true });
     activeID = 'qa-existing';
-    document.querySelector('.pinned-chip .pinned-chip-open').click();
+    document.querySelector('.pinned-item .pinned-item-open').click();
     sessions.delete('qa-existing'); activeID = null;
     connect = originalConnect; activate = originalActivate;
     return calls;
   });
-  assert.deepEqual(clickCalls.connect, [created[1]], 'chip click must call connect for the pinned profile');
-  assert.deepEqual(clickCalls.activate, [], 'chip click must not merely activate the existing session');
-  checks.push('Clicking a chip with an existing active session still opens a new connection');
-  // Long labels and hiding/resizing the monitor column must also reflow the
-  // header, even when there is no window resize event.
+  assert.deepEqual(clickCalls.connect, [reordered[1]], 'list click must call connect for the pinned profile');
+  assert.deepEqual(clickCalls.activate, [], 'list click must not merely activate the existing session');
+  checks.push('Clicking a row with an existing active session still opens a new connection');
+  // Long names must ellipsize inside the fixed-width list instead of cropping,
+  // regardless of monitor visibility or sidebar width.
+  await expandPanel();
   await page.evaluate(() => {
     profiles.find(profile => profile.id === appearance.layout['dengshell.pinned.v1'][1]).name = '很长的服务器连接名称 '.repeat(5);
     DengPinnedNav.render();
     appearance.monitorVisible = false; applyWorkspacePlacement();
   });
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-  assert.equal((await inspectLayout()).clipped, false);
+  await expandPanel();
+  let longState = await page.evaluate(() => {
+    const bar = document.querySelector('#pinned-bar'), rect = bar.getBoundingClientRect();
+    const spans = [...bar.querySelectorAll('.pinned-item-open span')];
+    return {
+      clipped: [...bar.querySelectorAll('.pinned-item')].some(el => { const r = el.getBoundingClientRect(); return r.left < rect.left - 1 || r.right > rect.right + 1; }),
+      ellipsis: spans[1] && spans[1].scrollWidth > spans[1].clientWidth,
+    };
+  });
+  assert.equal(longState.clipped, false, 'long names never overflow the list');
+  assert(longState.ellipsis, 'long names ellipsize inside the row');
   await page.evaluate(() => { appearance.monitorVisible = true; applyWorkspacePlacement(); document.documentElement.style.setProperty('--sidebar-width', '540px'); });
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-  assert.equal((await inspectLayout()).clipped, false);
-  await page.evaluate(() => { document.documentElement.style.removeProperty('--sidebar-width'); });
-  checks.push('Long names, monitor visibility and sidebar width changes reflow without cropping');
-  await page.setViewport({ width: 2800, height: 900 });
-  await page.waitForFunction(() => document.querySelectorAll('.pinned-chip:not([hidden])').length === 7 && document.querySelector('.pinned-more-wrap').hidden);
-  checks.push('Growing the window restores all remaining connections and hides the ellipsis');
+  await expandPanel();
+  assert.equal((await inspectDropdown()).clipped, false, 'monitor and sidebar changes keep the list intact');
+  checks.push('Long names ellipsize; monitor visibility and sidebar width changes never crop the list');
+  // The button stays available even with zero pins; an open dropdown keeps
+  // showing an empty-state hint, and toggling reopens it anytime.
+  await page.evaluate(async () => { appearance.layout['dengshell.pinned.v1'] = []; await persistAppearance({ layout: { 'dengshell.pinned.v1': [] } }); DengPinnedNav.render(); });
+  await settle();
+  assert.equal(await page.$eval('#pinned-toggle', el => el.hidden), false, 'the expand button stays visible with zero pins');
+  assert.equal(await page.$eval('#pinned-bar', el => el.hidden), false, 'an open dropdown stays open with the empty-state hint');
+  assert.equal(await page.$$eval('.pinned-item', els => els.length), 0);
+  assert((await page.$eval('.pinned-empty', el => el.textContent)).includes('还没有固定的连接'), 'the empty dropdown explains how to pin');
+  await page.click('#pinned-toggle');
+  assert.equal(await page.$eval('#pinned-bar', el => el.hidden), true, 'the toggle collapses the empty dropdown');
+  await page.click('#pinned-toggle');
+  await page.waitForFunction(() => !document.querySelector('#pinned-bar').hidden);
+  assert.equal(await page.$$eval('.pinned-empty', els => els.length), 1, 'the empty dropdown reopens');
+  checks.push('The expand button is always visible; zero pins shows the empty-state hint');
+  if (process.env.DENGSHELL_PINNED_SCREENSHOT) await page.screenshot({ path: process.env.DENGSHELL_PINNED_SCREENSHOT });
   assert.deepEqual(errors, []);
   fs.writeFileSync(stage + '/pinned-nav.json', JSON.stringify({ passed: true, checks, errors }, null, 2)); console.log('PASS', checks);
 } catch (error) {
+  console.error('pageerrors:', errors);
   if (page) {
     await page.screenshot({ path: stage + '/pinned-nav-failure.png' });
     console.error('Browser state:', await page.evaluate(() => {

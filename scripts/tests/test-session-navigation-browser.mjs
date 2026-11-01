@@ -17,7 +17,7 @@ async function assertPlusFollowsLastTab() {
   await settle();
   const metrics = await page.evaluate(() => {
     const tabs = $('#session-tabs');
-    const anchor = tabs.lastElementChild || $('#connection-button');
+    const anchor = tabs.lastElementChild || $('#pinned-toggle') || $('#connection-button');
     const plus = $('#add-session').getBoundingClientRect(), previous = anchor.getBoundingClientRect();
     return { gap: plus.left - previous.right, top: plus.top, previousTop: previous.top };
   });

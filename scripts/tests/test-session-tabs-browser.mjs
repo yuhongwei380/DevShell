@@ -61,18 +61,18 @@ try {
    const rows=await page.evaluate(()=>{
      const list=[...document.querySelectorAll('.session-tab')],positions=list.map(e=>({top:e.offsetTop,left:e.offsetLeft,right:e.offsetLeft+e.offsetWidth}));
      const rows=[...new Set(positions.map(p=>p.top))].map(top=>positions.filter(p=>p.top===top));
-     return {counts:rows.map(r=>r.length),overlap:rows.some(row=>row.slice(1).some((p,i)=>p.left<row[i].right)),header:document.querySelector('.titlebar').offsetHeight,terminal:document.querySelector('.terminal-panel').offsetHeight};
+     return {counts:rows.map(r=>r.length),overlap:rows.some(row=>row.slice(1).some((p,i)=>p.left<row[i].right)),header:document.querySelector('.session-bar').offsetHeight,terminal:document.querySelector('.terminal-panel').offsetHeight};
    });
    assert(!rows.overlap,JSON.stringify(rows));
    assert.deepEqual(rows.counts,count?[count]:[],'Tabs stay in one horizontal scrolling row');
-   if(count===0||count===1)assert(rows.header<=44);
+   if(count===0||count===1)assert(rows.header<=52);
    assert(rows.terminal>200);
  }
  await page.evaluate(()=>qaSetTabs(7));await new Promise(r=>setTimeout(r,100));
  await page.click('[data-session-id="header-qa-6"] [role=tab]');
  assert.equal(await page.evaluate(()=>activeID),'header-qa-6');
  await page.click('[data-session-id="header-qa-6"] .tab-close');
- await page.waitForFunction(()=>document.querySelectorAll('.session-tab').length===6&&document.querySelector('.titlebar').offsetHeight<=44);
+ await page.waitForFunction(()=>document.querySelectorAll('.session-tab').length===6&&document.querySelector('.session-bar').offsetHeight<=52);
  await page.evaluate(()=>qaSetTabs(16));
  for(const [width,height,scale] of [[1440,1000,1],[1024,768,1],[800,600,1],[640,480,1],[480,360,1],[1440,1000,1.5],[1440,1000,2],[1024,768,1.5]]){
    await page.setViewport({width,height});await page.evaluate(s=>chooseAppearance({uiScale:s}),scale);
@@ -83,7 +83,7 @@ try {
      return {width:innerWidth,height:innerHeight,scale:effectiveScale,menu,tabs,brand,bar,controls,overflow:document.documentElement.scrollWidth>innerWidth+1};
    });
    assert(!metrics.overflow,JSON.stringify(metrics));assert(metrics.menu.left>=0&&metrics.menu.right<=width+1&&metrics.menu.bottom<=height+1,JSON.stringify(metrics));
-   assert(metrics.brand.right<=metrics.bar.left+1 || metrics.brand.bottom<=metrics.bar.top+1,JSON.stringify(metrics));assert(metrics.tabs.width>40,JSON.stringify(metrics));assert(metrics.controls.right<=width+1,JSON.stringify(metrics));
+   assert(metrics.brand.right<=metrics.bar.left+1 || (metrics.brand.left>=metrics.bar.left-1&&metrics.brand.bottom<=metrics.bar.bottom+1),JSON.stringify(metrics));assert(metrics.tabs.width>40,JSON.stringify(metrics));assert(metrics.controls.right<=width+1,JSON.stringify(metrics));
    await page.keyboard.press('Escape');
    assert(await page.$eval('#session-tabs',e=>e.scrollHeight<=e.clientHeight+1));
    await page.$eval('#session-tabs',e=>e.scrollLeft=e.scrollWidth);

@@ -74,7 +74,7 @@
 [data-theme="dark"] .disk-readout.read { background: #1d3440; }
 [data-theme="dark"] .disk-readout.write { background: #342c21; }
 [data-theme="dark"] .splitter span { background: #526473; }
-[data-theme="dark"] .titlebar .window-controls { background: #131a21; }
-[data-theme="dark"] .titlebar .window-controls button:not(.window-close):is(:hover, :focus-visible) { background: #2e3b47; }
-[data-theme="dark"] .titlebar .window-controls button:not(.window-close):active { background: #374752; }
+[data-theme="dark"] .session-bar .window-controls { background: #131a21; }
+[data-theme="dark"] .session-bar .window-controls button:not(.window-close):is(:hover, :focus-visible) { background: #2e3b47; }
+[data-theme="dark"] .session-bar .window-controls button:not(.window-close):active { background: #374752; }
 

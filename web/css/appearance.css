@@ -1,9 +1,9 @@
 :root { --view-width:100vw; --view-height:100dvh; --sidebar-default:304px; --files-default:clamp(150px,25vh,300px); --sidebar-width:var(--sidebar-default); --files-height:var(--files-default); --terminal-background:none; --background-opacity:.42; --terminal-foreground:#d3e0e8; }
 body { transform-origin:0 0; }
 .brand-logo { width:26px; height:26px; flex-shrink:0; }
-.titlebar { --wails-draggable:drag; user-select:none; }
-.titlebar :is(button,input,select,.session-tab) { --wails-draggable:no-drag; }
-.session-bar { gap:5px; min-width:0; }
+.session-bar { --wails-draggable:drag; user-select:none; gap:5px; min-width:0; }
+.session-bar :is(button,input,select,.session-tab) { --wails-draggable:no-drag; }
+.session-bar .brand { --wails-draggable:no-drag; }
 .session-tabs { min-width:0; }
 #settings-button { flex-shrink:0; color:var(--muted); }
 #about-dialog { width:360px; }
@@ -25,7 +25,7 @@ body { transform-origin:0 0; }
 .window-controls svg { width:14px; height:14px; }
 .window-controls button:hover { background:var(--surface-hover,#e6edf2); color:var(--text,#3b5368); }
 .window-controls .window-close:hover { background:#c2696e; color:white; }
-.frameless .titlebar { padding-right:7px; }
+.frameless .session-row { padding-right:7px; }
 .terminal-panel { isolation:isolate; }
 /* 纯色 · 全黑：用户显式选择，压过明暗主题的渐变底色。 */
 .terminal-panel.solid-black { background:#000!important; }
@@ -99,7 +99,6 @@ dialog { max-width:calc(var(--view-width) - 24px); max-height:calc(var(--view-he
 [data-compact="true"] .file-table th:nth-child(3) { width:34%; }
 [data-compact="true"] .key-card { gap:8px; flex-wrap:wrap; }
 [data-compact="true"] .keys-toolbar { flex-wrap:wrap; }
-[data-narrow="true"] .titlebar { display:flex; gap:8px; }
 [data-narrow="true"] .brand { flex:none; }
 [data-narrow="true"] .brand strong { font-size:13px; }
 [data-narrow="true"] .app-status { display:none; }

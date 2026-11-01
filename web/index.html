@@ -10,35 +10,35 @@
   <script src="js/security-lock.js?v=20261025-devshell-rc1"></script>
   <script src="js/theme.js?v=20261025-devshell-rc1"></script>
   <link rel="stylesheet" href="vendor/xterm.css">
-  <link rel="stylesheet" href="css/style.css?v=20261101-cmdbar2">
+  <link rel="stylesheet" href="css/style.css?v=20261101-hdrmerge1">
   <link rel="stylesheet" href="css/theme.css?v=20261101-tabdot1">
   <link rel="stylesheet" href="css/workspace-tools.css?v=20261001-composer">
-  <link rel="stylesheet" href="css/appearance.css?v=20261101-cmdbar2">
+  <link rel="stylesheet" href="css/appearance.css?v=20261101-hdrmerge1">
   <link rel="stylesheet" href="css/process-view.css?v=20260920-v002-b70">
   <link rel="stylesheet" href="css/workspace-refinements.css?v=20261025-cmdtab1">
   <link rel="stylesheet" href="css/file-browser.css?v=20260921-v002-b72">
   <link rel="stylesheet" href="css/themed-select.css?v=20260920-v002-b70">
   <link rel="stylesheet" href="css/config-document.css?v=20260920-v002-b70">
   <link rel="stylesheet" href="css/startup-update.css?v=20261101-updmirror1">
-  <link rel="stylesheet" href="css/desktop-polish.css?v=20261031-no-reconnect-btn">
+  <link rel="stylesheet" href="css/desktop-polish.css?v=20261101-hdrmerge4">
   <link rel="stylesheet" href="css/server-manager.css?v=20261023-move145">
   <link rel="stylesheet" href="css/connection-extras.css?v=20260920-v002-b70">
-  <link rel="stylesheet" href="css/help-guide.css?v=20260920-v002-b70">
+  <link rel="stylesheet" href="css/help-guide.css?v=20261101-hdrmerge1">
   <link rel="stylesheet" href="css/appearance-tools.css?v=20261031-sftp-close">
-  <link rel="stylesheet" href="css/pinned-nav.css?v=20261023-borderless1">
+  <link rel="stylesheet" href="css/pinned-nav.css?v=20261101-hdrmerge3">
   <link rel="stylesheet" href="css/font-library.css?v=20260920-v002-b70">
   <link rel="icon" href="assets/devshell.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/file-tools.css?v=20261023-notes1">
   <link rel="stylesheet" href="css/desktop-tray.css?v=20260920-v002-b70">
   <link rel="stylesheet" href="css/latency-chart.css?v=20260920-v002-b70">
   <link rel="stylesheet" href="css/common-apps.css?v=20261031-sftp-close">
-  <link rel="stylesheet" href="css/session-windows.css?v=20261101-cmdbar2">
+  <link rel="stylesheet" href="css/session-windows.css?v=20261101-hdrmerge1">
   <link rel="stylesheet" href="css/system-identity.css?v=20260920-v002-b70">
   <link rel="stylesheet" href="css/chart-styles.css?v=20260920-v002-b70">
-  <link rel="stylesheet" href="css/light-theme.css?v=20261031-sftp-close">
+  <link rel="stylesheet" href="css/light-theme.css?v=20261101-hdrmerge1">
   <link rel="stylesheet" href="css/ui-appearance.css?v=20260920-v002-b70">
   <link rel="stylesheet" href="css/security-lock.css?v=20260920-v002-b70">
-  <link rel="stylesheet" href="css/soft-dark.css?v=20260923-v002-b80">
+  <link rel="stylesheet" href="css/soft-dark.css?v=20261101-hdrmerge1">
 <link rel="stylesheet" href="css/rdp.css?v=20260927-preview1">
   <link rel="stylesheet" href="css/connection-form.css?v=20261019-serial1">
   <link rel="stylesheet" href="css/upload-confirmation.css?v=20260928-overwrite1">
@@ -85,18 +85,6 @@
     <symbol id="i-help-book" viewBox="0 0 24 24"><path d="M12 5C8 2 4 3 2 4v15c3-1 6-1 10 1 4-2 7-2 10-1V4c-2-1-6-2-10 1ZM12 5v15M5 7h3M5 10h3m8-3h3m-3 3h3"/></symbol>
   </defs></svg>
 
-  <header class="titlebar">
-    <div class="brand">
-      <button class="icon-button" id="about-button" title="关于 DevShell" aria-label="关于 DevShell" aria-haspopup="dialog" aria-controls="about-dialog"><img class="brand-logo" src="assets/devshell.svg" alt="" draggable="false"></button>
-      <button class="icon-button" id="settings-button" title="设置" aria-label="设置" aria-haspopup="menu" aria-controls="settings-menu" aria-expanded="false"><svg><use href="#i-settings"/></svg></button>
-      <button class="icon-button" id="github-button" title="GitHub 项目仓库" aria-label="GitHub 项目仓库"><svg><use href="#i-github"/></svg></button>
-      <button class="icon-button theme-toggle header-pill theme-pill" id="theme-toggle" aria-label="深色模式" aria-pressed="false" title="切换到深色模式"><svg class="theme-moon"><use href="#i-moon"/></svg><svg class="theme-sun"><use href="#i-sun"/></svg></button>
-      <button class="icon-button header-pill" id="security-lock-button" aria-label="立即锁定" title="请先在设置中启用安全锁定" disabled><svg><use href="#i-lock"/></svg></button>
-    </div>
-    <div class="pinned-bar" id="pinned-bar" aria-label="链接栏" hidden></div>
-    <div class="window-controls" id="window-controls" hidden><button data-window-action="minimise" title="最小化" aria-label="最小化"><svg><use href="#i-minimise"/></svg></button><button data-window-action="toggle-maximise" id="window-maximise" title="最大化" aria-label="最大化"><svg><use href="#i-maximise"/></svg></button><button data-window-action="close" class="window-close" title="关闭窗口" aria-label="关闭窗口"><svg><use href="#i-close"/></svg></button></div>
-  </header>
-
   <div class="app-shell" id="app-shell">
     <aside class="sidebar">
       <section class="system-section">
@@ -123,7 +111,15 @@
     <main class="main-panel">
       <nav class="session-bar" aria-label="SSH 会话">
         <div class="session-row">
+          <div class="brand">
+            <button class="icon-button" id="about-button" title="关于 DevShell" aria-label="关于 DevShell" aria-haspopup="dialog" aria-controls="about-dialog"><img class="brand-logo" src="assets/devshell.svg" alt="" draggable="false"></button>
+            <button class="icon-button" id="settings-button" title="设置" aria-label="设置" aria-haspopup="menu" aria-controls="settings-menu" aria-expanded="false"><svg><use href="#i-settings"/></svg></button>
+            <button class="icon-button" id="github-button" title="GitHub 项目仓库" aria-label="GitHub 项目仓库"><svg><use href="#i-github"/></svg></button>
+            <button class="icon-button theme-toggle header-pill theme-pill" id="theme-toggle" aria-label="深色模式" aria-pressed="false" title="切换到深色模式"><svg class="theme-moon"><use href="#i-moon"/></svg><svg class="theme-sun"><use href="#i-sun"/></svg></button>
+            <button class="icon-button header-pill" id="security-lock-button" aria-label="立即锁定" title="请先在设置中启用安全锁定" disabled><svg><use href="#i-lock"/></svg></button>
+          </div>
           <button id="connection-button" class="connection-button" title="服务器管理" aria-label="服务器管理"><svg><use href="#i-server"/></svg></button>
+          <button id="pinned-toggle" class="connection-button pinned-toggle-button" title="链接栏" aria-label="展开链接栏" aria-haspopup="true" aria-expanded="false" hidden><svg><use href="#i-bookmark"/></svg></button>
           <div id="session-tabs" class="session-tabs"></div>
           <button class="icon-button add-session" id="add-session" aria-label="新选项卡" title="新选项卡"><svg><use href="#i-plus"/></svg></button>
           <div class="session-tab-tools">
@@ -132,8 +128,10 @@
             <button class="icon-button" id="session-tabs-list" aria-label="选项卡列表" title="选项卡列表" aria-haspopup="true" aria-controls="session-tabs-menu" aria-expanded="false" disabled><svg><use href="#i-chevron"/></svg></button>
           </div>
           <button class="icon-button" id="toggle-monitor" aria-label="系统与磁盘信息" title="系统与磁盘信息" aria-expanded="false"><svg><use href="#i-cpu"/></svg></button>
+          <div class="window-controls" id="window-controls" hidden><button data-window-action="minimise" title="最小化" aria-label="最小化"><svg><use href="#i-minimise"/></svg></button><button data-window-action="toggle-maximise" id="window-maximise" title="最大化" aria-label="最大化"><svg><use href="#i-maximise"/></svg></button><button data-window-action="close" class="window-close" title="关闭窗口" aria-label="关闭窗口"><svg><use href="#i-close"/></svg></button></div>
         </div>
       </nav>
+      <div class="pinned-bar" id="pinned-bar" aria-label="链接栏" hidden></div>
       <section id="rdp-panel" class="rdp-panel" aria-label="RDP 远程桌面" hidden>
         <header class="rdp-toolbar"><div><strong id="rdp-active-name"></strong><span id="rdp-active-status"></span></div><div><label class="rdp-resolution-label">分辨率<select id="rdp-resolution" title="跟随窗口可避免低分辨率画面被放大；固定分辨率会等比适应窗口"><option value="0x0">跟随窗口 · 清晰</option><option value="1920x1080">1920 × 1080</option><option value="1600x900">1600 × 900</option><option value="1280x800">1280 × 800</option><option value="1024x768">1024 × 768</option></select></label><button id="rdp-secure-attention" type="button" title="向远程 Windows 发送安全注意序列">Ctrl + Alt + Del</button><button id="rdp-active-reconnect" type="button">重新连接</button><button id="rdp-active-disconnect" type="button">断开</button></div></header>
         <div id="rdp-viewport" class="rdp-viewport"><div id="rdp-placeholder" class="rdp-placeholder"><strong id="rdp-placeholder-message">连接中…</strong><p>连接后点击画面即可操作远程桌面。</p></div></div>
@@ -366,7 +364,7 @@
   <script src="js/command-composer.js?v=20261001-composer"></script>
   <script src="js/workspace-tools.js?v=20260925-v002-b86"></script>
   <script src="js/release-note-tags.js?v=20261023-tags2"></script>
-  <script src="js/appearance.js?v=20261101-ansipalette1"></script>
+  <script src="js/appearance.js?v=20261101-hdrmerge1"></script>
   <script src="js/ui-appearance.js?v=20261025-devshell-rc1"></script>
   <script src="js/font-library.js?v=20261019-brand1"></script>
   <script src="js/path-history.js?v=20260925-v002-b86"></script>
@@ -393,7 +391,7 @@
   <div id="session-tabs-menu" class="session-tabs-menu" role="menu" aria-label="选项卡列表" hidden></div>
   <script src="js/session-tab-order.js?v=20261022-tabs1"></script>
   <script src="js/session-windows.js?v=20261101-save-menu1"></script>
-  <script src="js/session-tabs-layout.js?v=20261022-tabs1"></script>
+  <script src="js/session-tabs-layout.js?v=20261101-hdrmerge1"></script>
   <script src="js/start-tabs.js?v=20261023-numbering1"></script>
   <script src="js/system-identity.js?v=20260920-v002-b70"></script>
   <script src="js/rdp.js?v=20261101-tabdot1"></script>
@@ -404,7 +402,7 @@
   <script src="js/quick-connect.js?v=20261101-save-menu1"></script>
   <script src="js/local-prompt.js?v=20261022-tabs1"></script>
   <script src="js/command-completion.js?v=20261025-cmdtab1"></script>
-  <script src="js/pinned-nav.js?v=20261101-save-menu1"></script>
+  <script src="js/pinned-nav.js?v=20261101-hdrmerge3"></script>
   <script src="js/process-view.js?v=20261019-serial1"></script>
   <script src="js/common-apps.js?v=20261019-brand1"></script>
   <script src="js/text-model.js?v=20260920-v002-b70"></script>

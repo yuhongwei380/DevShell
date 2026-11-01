@@ -1,49 +1,35 @@
-/* Pinned connections: a compact borderless strip in the top header row,
-   left-aligned at the terminal column (Xshell-style placement). */
-.pinned-bar { grid-column: 3; grid-row: 1; justify-self: start; align-self: center; min-width: 0; width: 100%; max-width: calc(100% - 150px); }
-.pinned-links { display: flex; align-items: center; gap: 7px; width: fit-content; max-width: 100%; padding: 4px 9px; }
+/* Pinned connections: the session bar carries an expand button (right of the
+   server-manager button); clicking it drops a vertical list under the button.
+   Nothing about the links reserves layout space, so the shell fills the whole
+   window from the very top. */
+#pinned-toggle { position: relative; }
+#pinned-toggle svg { width: 17px; height: 17px; }
+#pinned-toggle.open { background: #dce8f1; color: var(--accent, #527fa4); }
+[data-theme="dark"] #pinned-toggle.open { background: #223243; color: #b9d3e6; }
+.pinned-bar { position: fixed; z-index: 61; left: 8px; top: 8px; box-sizing: border-box; width: 256px; max-width: calc(var(--view-width, 100vw) - 16px); display: flex; flex-direction: column; gap: 3px; padding: 5px; border-radius: 12px; border: 1px solid var(--border, #dbe6ee); background: var(--surface, #ffffff); box-shadow: 0 12px 28px #293f5626; overflow-y: auto; overscroll-behavior: contain; --wails-draggable: no-drag; }
 .pinned-bar[hidden] { display: none; }
-.pinned-label { display: flex; align-items: center; gap: 5px; flex: none; font-size: 11px; color: var(--muted, #7d93a5); letter-spacing: .5px; padding-right: 2px; }
-.pinned-label svg { width: 12px; height: 12px; color: #78a99b; }
-.pinned-chip { display: flex; flex: none; align-items: center; height: 28px; padding: 3px 6px 3px 11px; border-radius: 9px; border: 1px solid var(--border, #d3dfe8); background: var(--surface, #ffffff); color: var(--text, #3d5468); font-size: 12px; font-weight: 500; box-shadow: 0 1px 3px #293f5614; --wails-draggable: no-drag; }
-.pinned-chip:hover { border-color: var(--accent, #658daf); color: var(--accent, #527fa4); }
-.pinned-chip-open { display: flex; align-items: center; gap: 6px; min-width: 0; height: 100%; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
-.pinned-chip-open svg { width: 13px; height: 13px; color: #6f9e90; flex: none; }
-.pinned-chip-open span { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pinned-chip-remove { flex: none; width: 18px; height: 18px; margin-left: 5px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted, #7d93a5); cursor: pointer; display: flex; align-items: center; justify-content: center; }
-.pinned-chip-remove svg { width: 10px; height: 10px; }
-.pinned-chip-remove:hover { background: #c0392b22; color: #c0392b; }
-.pinned-chip-open:focus-visible, .pinned-chip-remove:focus-visible { outline: 2px solid var(--accent, #658daf); outline-offset: 1px; }
-[data-theme="dark"] .pinned-chip { border-color: #33465a; background: #1b2836; color: #c6d6e2; box-shadow: 0 1px 3px #00000040; }
-[data-theme="dark"] .pinned-chip:hover { border-color: #7fa8c8; color: #e2edf4; }
-[data-theme="dark"] .pinned-chip-remove { color: #8fa6b8; }
-[data-theme="dark"] .pinned-chip-remove:hover { background: #f28b8226; color: #f28b82; }
+[data-theme="dark"] .pinned-bar { background: #16222e; border-color: #2a3a48; box-shadow: 0 12px 28px #00000066; }
+.pinned-item { position: relative; display: flex; flex: none; align-items: center; height: 32px; padding: 0 5px 0 9px; border-radius: 9px; color: var(--text, #3d5468); font-size: 12.5px; touch-action: none; user-select: none; }
+.pinned-item:hover { background: var(--surface-hover, #e6edf2); }
+.pinned-item-open { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; text-align: left; }
+.pinned-item-open svg { width: 14px; height: 14px; color: #6f9e90; flex: none; }
+.pinned-item-open span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pinned-item-remove { flex: none; width: 20px; height: 20px; margin-left: 5px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted, #7d93a5); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.pinned-item-remove svg { width: 11px; height: 11px; }
+.pinned-item-remove:hover { background: #c0392b22; color: #c0392b; }
+.pinned-item-open:focus-visible, .pinned-item-remove:focus-visible { outline: 2px solid var(--accent, #658daf); outline-offset: 1px; }
+[data-theme="dark"] .pinned-item { color: #c6d6e2; }
+[data-theme="dark"] .pinned-item:hover { background: #223243; }
+[data-theme="dark"] .pinned-item-remove { color: #8fa6b8; }
+[data-theme="dark"] .pinned-item-remove:hover { background: #f28b8226; color: #f28b82; }
+.pinned-empty { flex: none; padding: 7px 9px 8px; color: #7d8b96; font-size: 12px; line-height: 1.55; }
+[data-theme="dark"] .pinned-empty { color: #8296a8; }
 #pin-session.active svg { color: #8fc0b0; }
 #pin-session.active { background: #78a99b4d; border-color: #78a99b80; }
 
-/* Connections that do not fit collapse into the vertical-ellipsis list. */
-.pinned-more-wrap { position: relative; display: flex; flex: none; }
-.pinned-more { width: 28px; height: 28px; border-radius: 9px; border: 1px solid var(--border, #d3dfe8); background: var(--surface, #ffffff); color: var(--muted, #7d93a5); font-size: 20px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; --wails-draggable: no-drag; }
-.pinned-more:hover { border-color: var(--accent, #658daf); color: var(--accent, #527fa4); }
-.pinned-more.open { border-color: var(--accent, #658daf); }
-.pinned-more-menu { position: fixed; z-index: 60; min-width: min(190px, calc(var(--view-width, 100vw) - 16px)); max-width: calc(var(--view-width, 100vw) - 16px); max-height: 320px; overflow: auto; padding: 5px; border-radius: 11px; border: 1px solid var(--border, #dbe6ee); background: var(--surface, #ffffff); box-shadow: 0 10px 26px #293f5626; display: flex; flex-direction: column; gap: 3px; --wails-draggable: no-drag; }
-.pinned-more-item { display: flex; align-items: center; height: 30px; padding: 0 5px 0 9px; border: 0; border-radius: 8px; background: transparent; color: var(--text, #3d5468); font-size: 12px; }
-.pinned-more-item:hover { background: var(--surface-hover, #e6edf2); }
-.pinned-more-item-open { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; text-align: left; }
-.pinned-more-item-open svg { width: 13px; height: 13px; color: #6f9e90; flex: none; }
-.pinned-more-item-open span { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-[data-theme="dark"] .pinned-more { background: #1b2836; border-color: #33465a; color: #8fa6b8; }
-[data-theme="dark"] .pinned-more:hover { border-color: #7fa8c8; color: #e2edf4; }
-[data-theme="dark"] .pinned-more-menu { background: #16222e; border-color: #2a3a48; box-shadow: 0 10px 26px #00000066; }
-[data-theme="dark"] .pinned-more-item { color: #c6d6e2; }
-[data-theme="dark"] .pinned-more-item:hover { background: #223243; }
-
-.pinned-chip, .pinned-more-item { position: relative; touch-action: none; user-select: none; }
+/* Reordering happens inside the list itself: a thin accent line marks the gap. */
 .pinned-drag-source { opacity: .45; }
 .pinned-sorting, .pinned-sorting * { cursor: grabbing !important; user-select: none !important; }
-.pinned-drop-before::after, .pinned-drop-after::after { content: ''; position: absolute; pointer-events: none; background: var(--accent, #658daf); border-radius: 2px; width: 3px; top: 0; bottom: 0; }
-.pinned-chip.pinned-drop-before::after { left: -5px; }
-.pinned-chip.pinned-drop-after::after { right: -5px; }
-.pinned-more-item.pinned-drop-before::after, .pinned-more-item.pinned-drop-after::after { width: auto; height: 3px; left: 0; right: 0; bottom: auto; }
-.pinned-more-item.pinned-drop-before::after { top: -3px; }
-.pinned-more-item.pinned-drop-after::after { top: auto; bottom: -3px; }
+.pinned-item.pinned-drop-before::after, .pinned-item.pinned-drop-after::after { content: ''; position: absolute; pointer-events: none; background: var(--accent, #658daf); border-radius: 2px; width: auto; height: 3px; left: 0; right: 0; }
+.pinned-item.pinned-drop-before::after { top: -3px; }
+.pinned-item.pinned-drop-after::after { bottom: -3px; }

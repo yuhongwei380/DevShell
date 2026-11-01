@@ -40,7 +40,7 @@
   .host-heading .icon-button, .sidebar h2 svg, .connection-button, .add-session,
   .tab-close, .file-toolbar .icon-button, .upload-button, .tree-chevron,
   .drawer-heading .icon-button, .connection-search, .file-search, .server-icon,
-  .connection-group h3 svg, .titlebar .window-controls button) {
+  .connection-group h3 svg, .session-bar .window-controls button) {
   color: var(--text-secondary);
 }
 :root[data-theme="light"] :where(.file-tab.active, .session-tab.active,
@@ -50,7 +50,7 @@
   .file-search input, .path-form input)::placeholder { color: var(--text-faint); opacity: 1; }
 :root[data-theme="light"] .file-table td:first-child { color: var(--text); }
 :root[data-theme="light"] :is(.file-table td:nth-child(4), .disk-row > span:last-child) { color: var(--text-secondary); }
-:root[data-theme="light"] .titlebar .window-controls button { color: var(--text-secondary); }
+:root[data-theme="light"] .session-bar .window-controls button { color: var(--text-secondary); }
 
 :root[data-theme="light"] .server-manager-tabs button span { opacity: 1; }
 /* A failed sample is identified by its message, with readable cached values. */
@@ -79,9 +79,9 @@
 :root[data-theme="light"] #theme-toggle { color: #77551e; }
 :root[data-theme="light"] #manage-fonts { color: #6d4d75; }
 :root[data-theme="light"] #settings-button { color: #445b85; }
-:root[data-theme="light"] .titlebar .help-pill { color: #30636c; }
-:root[data-theme="light"] .titlebar .window-controls .window-close { color: #884553; }
-:root[data-theme="light"] .titlebar .window-controls .window-close:is(:hover, :focus-visible) { color: #fff; background: #a33d48; }
+:root[data-theme="light"] .help-pill { color: #30636c; }
+:root[data-theme="light"] .session-bar .window-controls .window-close { color: #884553; }
+:root[data-theme="light"] .session-bar .window-controls .window-close:is(:hover, :focus-visible) { color: #fff; background: #a33d48; }
 
 /* Shared color families for saved commands and built-in tools. The tool pill's
    tint stays separate so increasing text contrast does not darken its surface. */

@@ -1,13 +1,17 @@
 'use strict';
-// Pinned connections bar: pin the current session (saving a quick-connect
-// session first) and it appears in the top bar; each click opens a fresh
-// session tab, like double-clicking the server list.
+// Pinned connections: a bookmark button in the session bar (right of the
+// server-manager button) drops a vertical list of the pinned connections
+// under it. Nothing is tiled in the header, so the shell fills the window
+// from the top; opening a connection closes the list, like any menu.
+// Pin the current session (saving a quick-connect session first) and it
+// appears in the list; each click opens a fresh session tab, like
+// double-clicking the server list.
 // The id list lives in appearance.layout under one key, whitelisted by the
 // backend layout validator (validSavedLayoutKey in preferences.go).
 window.DengPinnedNav = (() => {
   const LAYOUT_KEY = 'dengshell.pinned.v1';
-  let bar, pinButton, pinned = [], overflowControl, layoutChips = () => {};
-  let cancelDrag, reorderPending = false, reorderSave = Promise.resolve(), suppressClickUntil = 0;
+  let bar, toggle, pinButton, pinned = [];
+  let cancelDrag, reorderPending = false, reorderSave = Promise.resolve(), suppressClickUntil = 0, expanded = false;
   function readPinned() {
     const raw = appearance.layout?.[LAYOUT_KEY];
     pinned = Array.isArray(raw) ? raw.filter(id => typeof id === 'string') : [];
@@ -44,6 +48,8 @@ window.DengPinnedNav = (() => {
     })();
     safe(() => reorderSave)();
   }
+  // Vertical drag-and-drop ordering within the open list. The drop gap is
+  // the half of the hovered row below (or above) its middle.
   function bindSorting(item, open, profile) {
     item.dataset.pinnedId = profile.id;
     item.addEventListener('dragstart', event => event.preventDefault());
@@ -73,25 +79,23 @@ window.DengPinnedNav = (() => {
         clearMark(); position = null;
         const hit = document.elementFromPoint(x, y);
         if (!hit || !bar.contains(hit)) return;
-        if (hit.closest('.pinned-more') && overflowControl.menu.hidden) overflowControl.show();
         let target = hit.closest('[data-pinned-id]');
-        const vertical = !!hit.closest('.pinned-more-menu');
         if (!target) {
-          const candidates = [...bar.querySelectorAll(vertical ? '.pinned-more-item' : '.pinned-chip:not([hidden])')];
-          target = candidates.find(el => { const r = el.getBoundingClientRect(); return vertical ? y < r.bottom : x < r.right; }) || candidates.at(-1);
+          const candidates = [...bar.querySelectorAll('.pinned-item')];
+          target = candidates.find(el => y < el.getBoundingClientRect().bottom) || candidates.at(-1);
         }
         if (!target) return;
         const r = target.getBoundingClientRect();
-        const after = vertical ? y >= (r.top + r.bottom) / 2 : x >= (r.left + r.right) / 2;
+        const after = y >= (r.top + r.bottom) / 2;
         position = { id: target.dataset.pinnedId, after };
         marked = target;
         marked.classList.add(after ? 'pinned-drop-after' : 'pinned-drop-before');
       };
       const tick = () => {
-        const menu = overflowControl.menu, r = menu.getBoundingClientRect();
-        if (!menu.hidden && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+        const r = bar.getBoundingClientRect();
+        if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
           const edge = Math.min(24, r.height / 3);
-          menu.scrollTop += (y < r.top + edge ? -5 : y > r.bottom - edge ? 5 : 0) / effectiveScale;
+          bar.scrollTop += (y < r.top + edge ? -5 : y > r.bottom - edge ? 5 : 0) / effectiveScale;
         }
         update(); frame = requestAnimationFrame(tick);
       };
@@ -134,7 +138,7 @@ window.DengPinnedNav = (() => {
     connect(profile.id);
   }
   function removeButtonFor(profile) {
-    const remove = node('button', 'pinned-chip-remove');
+    const remove = node('button', 'pinned-item-remove');
     remove.type = 'button';
     remove.append(icon('close'));
     remove.title = '关闭（取消固定）';
@@ -165,112 +169,53 @@ window.DengPinnedNav = (() => {
     render(); reflect();
     toast(`已重命名为「${saved.name}」`);
   }
-  const chipTitle = profile => `${profile.name} · ${profileSubtitle(profile)}\n拖拽调整顺序 · 左键新建会话 · 右键重命名 · × 关闭（取消固定需确认）`;
-  function chipFor(profile) {
-    const chip = node('span', 'pinned-chip');
-    const open = node('button', 'pinned-chip-open');
+  const itemTitle = profile => `${profile.name} · ${profileSubtitle(profile)}\n拖拽调整顺序 · 左键新建会话 · 右键重命名 · × 关闭（取消固定需确认）`;
+  function itemFor(profile) {
+    const item = node('span', 'pinned-item');
+    const open = node('button', 'pinned-item-open');
     open.type = 'button';
     open.append(icon('server'), node('span', '', profile.name));
-    open.onclick = () => openConnection(profile);
-    chip.oncontextmenu = event => { event.preventDefault(); safe(() => renameProfile(profile))(); };
-    chip.append(open, removeButtonFor(profile));
-    chip.title = chipTitle(profile);
-    bindSorting(chip, open, profile);
-    return chip;
+    open.onclick = () => { setExpanded(false); openConnection(profile); };
+    item.oncontextmenu = event => { event.preventDefault(); safe(() => renameProfile(profile))(); };
+    item.append(open, removeButtonFor(profile));
+    item.title = itemTitle(profile);
+    bindSorting(item, open, profile);
+    return item;
   }
-  function moreFor() {
-    const wrap = node('span', 'pinned-more-wrap');
-    const btn = node('button', 'pinned-more');
-    btn.type = 'button';
-    btn.textContent = '︙';
-    btn.setAttribute('aria-haspopup', 'true');
-    btn.setAttribute('aria-expanded', 'false');
-    btn.setAttribute('aria-controls', 'pinned-more-menu');
-    const menu = node('div', 'pinned-more-menu');
-    menu.id = 'pinned-more-menu';
-    menu.hidden = true;
-    const close = () => { menu.hidden = true; btn.classList.remove('open'); btn.setAttribute('aria-expanded', 'false'); };
-    const update = overflow => {
-      close();
-      btn.title = `还有 ${overflow.length} 个固定连接`;
-      btn.setAttribute('aria-label', `展开其余 ${overflow.length} 个固定连接`);
-      menu.replaceChildren();
-      overflow.forEach(profile => {
-        const item = node('span', 'pinned-more-item');
-        const open = node('button', 'pinned-more-item-open');
-        open.type = 'button';
-        open.append(icon('server'), node('span', '', profile.name));
-        open.onclick = () => { close(); openConnection(profile); };
-        item.oncontextmenu = event => { event.preventDefault(); safe(() => renameProfile(profile))(); };
-        item.append(open, removeButtonFor(profile));
-        item.title = chipTitle(profile);
-        bindSorting(item, open, profile);
-        menu.append(item);
-      });
-    };
-    const show = () => {
-      const r = btn.getBoundingClientRect();
-      menu.hidden = false;
-      const top = r.bottom / effectiveScale + 7;
-      menu.style.left = Math.max(8, Math.min(r.left / effectiveScale, logicalWidth() - menu.offsetWidth - 8)) + 'px';
-      menu.style.top = top + 'px';
-      menu.style.maxHeight = Math.min(320, Math.max(0, logicalHeight() - top - 8)) + 'px';
-      btn.classList.add('open');
-      btn.setAttribute('aria-expanded', 'true');
-    };
-    btn.onclick = event => {
-      event.stopPropagation();
-      if (menu.hidden) show(); else close();
-    };
-    wrap.append(btn, menu);
-    return { wrap, btn, menu, close, show, update };
+  function anchorPanel() {
+    if (!expanded || !toggle || !bar) return;
+    const r = toggle.getBoundingClientRect();
+    const top = r.bottom / effectiveScale + 7;
+    bar.style.top = top + 'px';
+    bar.style.left = Math.max(8, Math.min(r.left / effectiveScale, logicalWidth() - bar.offsetWidth - 8)) + 'px';
+    bar.style.maxHeight = Math.min(420, Math.max(0, logicalHeight() - top - 8)) + 'px';
+  }
+  function setExpanded(on) {
+    expanded = !!on;
+    if (!toggle || !bar) return;
+    if (!expanded) cancelDrag?.();
+    bar.hidden = !expanded;
+    toggle.setAttribute('aria-expanded', String(expanded));
+    toggle.classList.toggle('open', expanded);
+    const label = expanded ? '收起链接栏' : '链接栏';
+    toggle.title = label;
+    toggle.setAttribute('aria-label', label);
+    if (expanded) { bar.scrollTop = 0; anchorPanel(); }
+  }
+  function emptyRow() {
+    return node('div', 'pinned-empty', '还没有固定的连接。连接服务器后，点会话工具栏里的「固定」即可把它放进来。');
   }
   function render() {
     if (!bar) return;
     cancelDrag?.();
     readPinned();
-    const items = pinned.map(id => connectionProfile(id)).filter(Boolean);
-    bar.hidden = false;
-    const label = node('span', 'pinned-label');
-    label.append(icon('bookmark'), node('span', '', '链接栏'));
-    const row = node('div', 'pinned-links'), chips = items.map(chipFor);
-    overflowControl?.close();
-    const more = moreFor();
-    overflowControl = more;
-    row.append(label, ...chips, more.wrap);
-    bar.replaceChildren(row);
-    let previousCount = -1;
-    layoutChips = () => {
-      cancelDrag?.();
-      more.close();
-      label.hidden = false;
-      more.wrap.hidden = false;
-      chips.forEach(chip => { chip.hidden = false; });
-      // The outer grid item always spans its available track; the highlighted
-      // row remains compact. Measuring the shrinking row itself would prevent
-      // chips from returning when the window or sidebar grows again.
-      const style = getComputedStyle(row), gap = parseFloat(style.columnGap) || 0;
-      const available = bar.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
-        - parseFloat(style.borderLeftWidth) - parseFloat(style.borderRightWidth);
-      const width = element => element.getBoundingClientRect().width / effectiveScale;
-      const labelWidth = width(label), moreWidth = width(more.wrap);
-      const widths = chips.map(width);
-      let used = labelWidth, count = 0;
-      const allWidth = widths.reduce((total, value) => total + gap + value, labelWidth);
-      if (allWidth <= available - 1) count = chips.length;
-      else {
-        if (labelWidth + gap + moreWidth > available) { label.hidden = true; used = -gap; }
-        for (const chipWidth of widths) {
-          if (used + gap + chipWidth + gap + moreWidth > available - 1) break;
-          used += gap + chipWidth;
-          count++;
-        }
-      }
-      chips.forEach((chip, index) => { chip.hidden = index >= count; });
-      more.wrap.hidden = count === items.length;
-      if (count !== previousCount) { more.update(items.slice(count)); previousCount = count; }
-    };
-    layoutChips();
+    bar.hidden = !expanded;
+    const items = pinned.map(id => connectionProfile(id)).filter(Boolean).map(itemFor);
+    // The expand button is always available; the dropdown simply shows an
+    // empty-state hint until the first connection is pinned.
+    bar.replaceChildren(...(items.length ? items : [emptyRow()]));
+    if (toggle) toggle.hidden = false;
+    if (expanded) anchorPanel();
   }
   async function pin(id) { await reorderSave.catch(() => {}); pinned = [...pinned, id]; await writePinned(); render(); reflect(); }
   async function unpin(id) { await reorderSave.catch(() => {}); pinned = pinned.filter(x => x !== id); await writePinned(); render(); reflect(); toast('已从链接栏取消固定'); }
@@ -298,6 +243,8 @@ window.DengPinnedNav = (() => {
     toast(note);
   }
   function reflect() {
+    readPinned();
+    if (toggle) toggle.hidden = false;
     if (!pinButton) return;
     const state = current(), profile = profileFor(state);
     pinButton.hidden = !state || !profile;
@@ -309,6 +256,8 @@ window.DengPinnedNav = (() => {
   }
   document.addEventListener('DOMContentLoaded', () => {
     bar = $('#pinned-bar');
+    toggle = $('#pinned-toggle');
+    toggle.onclick = () => setExpanded(!expanded);
     bar.addEventListener('pointerdown', () => { suppressClickUntil = 0; }, true);
     bar.addEventListener('click', event => {
       if (Date.now() < suppressClickUntil && event.detail !== 0) {
@@ -325,19 +274,20 @@ window.DengPinnedNav = (() => {
     let frame;
     const scheduleLayout = () => {
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => layoutChips());
+      frame = requestAnimationFrame(() => anchorPanel());
     };
     new ResizeObserver(scheduleLayout).observe(bar);
     window.addEventListener('resize', scheduleLayout);
     document.fonts.ready.then(scheduleLayout);
     document.fonts.addEventListener('loadingdone', scheduleLayout);
     document.addEventListener('click', event => {
-      if (overflowControl && !overflowControl.wrap.contains(event.target)) overflowControl.close();
+      // Confirmation and rename dialogs may open while the list is showing;
+      // interacting with them must not count as an outside click.
+      if (expanded && !bar.contains(event.target) && !toggle.contains(event.target) && !event.target.closest('dialog[open]')) setExpanded(false);
     }, true);
     document.addEventListener('keydown', event => {
-      if (event.key === 'Escape' && overflowControl && !overflowControl.menu.hidden) {
-        overflowControl.close(); overflowControl.btn.focus();
-      }
+      if (event.key !== 'Escape') return;
+      if (expanded && !cancelDrag) { setExpanded(false); toggle.focus(); }
     });
   }, { once: true });
   return { render, reflect };

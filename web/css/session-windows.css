@@ -59,10 +59,7 @@
 /* Defined outlines with a restrained selected fill, without a heavy bottom edge. */
 .session-tabs{gap:8px;padding:1px 0}
 /* A single scrolling row reserves space for navigation and new tabs. */
-.titlebar { height:auto; flex-shrink:0; align-items:start; }
-.titlebar .session-bar { height:auto; min-height:42px; align-items:flex-start; padding:4px 0; }
-.session-bar > :is(.connection-button,.add-session,#toggle-monitor) { margin-top:2px; }
-.titlebar .window-controls { margin-top:1px; }
+.session-row > :is(.connection-button,.add-session,#toggle-monitor) { margin-top:2px; }
 .session-tabs { flex:0 1 auto; display:flex; flex-wrap:nowrap; align-items:center; height:35px; min-height:35px; max-height:35px; overflow-x:auto; overflow-y:hidden; scrollbar-width:none; }
 .session-tabs:empty { display:none; }
 .session-row > .add-session { flex:none; width:26px; height:30px; }

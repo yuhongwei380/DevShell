@@ -1,7 +1,7 @@
 // Keep navigation and the new-tab button outside the scrolling tab viewport.
 (() => {
   const tabs = document.getElementById('session-tabs');
-  const titlebar = document.querySelector('.titlebar');
+  const header = document.querySelector('.session-bar');
   const previous = document.getElementById('session-tabs-previous');
   const next = document.getElementById('session-tabs-next');
   const list = document.getElementById('session-tabs-list');
@@ -14,7 +14,7 @@
     previous.disabled = tabs.scrollLeft <= 1;
     next.disabled = tabs.scrollLeft >= maximum - 1;
     list.disabled = !tabs.children.length;
-    const height = titlebar.offsetHeight;
+    const height = header.offsetHeight;
     if (height !== previousHeight) {
       previousHeight = height;
       document.documentElement.style.setProperty('--titlebar-height', `${height}px`);
@@ -70,7 +70,7 @@
     event.preventDefault(); tabs.scrollLeft += event.deltaY;
   }, { passive: false });
   const sizeObserver = new ResizeObserver(() => { closeMenu(); schedule(); });
-  sizeObserver.observe(tabs); sizeObserver.observe(titlebar);
+  sizeObserver.observe(tabs); sizeObserver.observe(header);
   new MutationObserver(() => { closeMenu(); schedule(); }).observe(tabs, { childList: true });
   window.addEventListener('resize', () => { closeMenu(); schedule(); });
   schedule();
