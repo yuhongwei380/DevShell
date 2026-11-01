@@ -138,7 +138,7 @@
 /* 候选栏（命令输入条）：会话在线时收起为左侧一枚按钮，点按钮展开并聚焦输入条；
    断开连接、新建窗口与欢迎页自动恢复完整输入条。栏体宽度与高度同步过渡，
    右侧内容先行淡出；终端高度由 #terminal-output 的 ResizeObserver 自动重新 fit。 */
-.terminal-command-bar { align-self:flex-start; width:100%; overflow:hidden;
+.terminal-command-bar { align-self:flex-start; width:100%; max-width:calc(100% - var(--cmd-inline,12px)*2); overflow:hidden;
   transition:width .24s cubic-bezier(.4,.1,.2,1),min-height .24s cubic-bezier(.4,.1,.2,1),gap .24s cubic-bezier(.4,.1,.2,1); }
 .command-bar-toggle { flex:none; display:grid; place-items:center; width:28px; height:28px; margin:0; padding:0; border:0; border-radius:8px;
   background:transparent; color:inherit; cursor:pointer; transition:background .16s,color .16s,transform .16s; }
@@ -148,7 +148,7 @@
 .terminal-command-bar form,.terminal-command-bar > .terminal-tool { min-width:0;
   transition:background .16s,color .16s,transform .16s,opacity .12s ease; }
 .terminal-command-bar textarea { transition:min-height .24s cubic-bezier(.4,.1,.2,1),padding .24s cubic-bezier(.4,.1,.2,1); }
-.terminal-command-bar.command-bar-collapsed { width:47px; min-height:34px; gap:0; }
+.terminal-command-bar.command-bar-collapsed { width:47px; max-width:none; min-height:34px; gap:0; }
 .terminal-command-bar.command-bar-collapsed form,.terminal-command-bar.command-bar-collapsed > .terminal-tool { opacity:0; }
 .terminal-command-bar.command-bar-collapsed textarea { min-height:0!important; height:auto!important; padding-block:0!important; }
 @media(prefers-reduced-motion:reduce){.terminal-command-bar,.terminal-command-bar form,.terminal-command-bar textarea{transition:none}}

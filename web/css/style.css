@@ -189,7 +189,7 @@ svg use { pointer-events: none; }
 .prompt-path { color: #aecadb; }
 .prompt-sign { color: #a0b6c5; }
 .cursor { display: inline-block; height: 1.05em; width: .5em; background: #b3c9d5; vertical-align: -.15em; opacity: .8; margin-left: 3px; border-radius: 2px; }
-.terminal-command-bar { display: flex; align-items: center; position: relative; margin: 3px 12px 8px; padding: 3px 8px 3px 11px; gap: 9px; min-height: 44px; border-radius: 9px; background: #152b3a66; color: #8ca8bb; }
+.terminal-command-bar { display: flex; align-items: center; position: relative; --cmd-inline: 12px; margin: 3px var(--cmd-inline) 8px; padding: 3px 8px 3px 11px; gap: 9px; min-height: 44px; border-radius: 9px; background: #152b3a66; color: #8ca8bb; }
 .terminal-command-bar > svg { width: 16px; height: 16px; align-self: flex-start; margin-top: 7px; }
 .terminal-command-bar form { flex: 1; min-width: 0; display: flex; }
 .terminal-command-bar input { border: 0; width: 100%; background: transparent; color: #dae7ee; font-size: 11px; padding: 5px 0; }
@@ -361,7 +361,7 @@ svg use { pointer-events: none; }
   .file-table th:nth-child(1) { width: 75%; }
   .file-table th:nth-child(2) { width: 25%; }
   .terminal-meta { padding: 0 12px; font-size: 8px; }
-  .terminal-command-bar { margin: 5px 9px 9px; }
+  .terminal-command-bar { --cmd-inline: 9px; margin: 5px var(--cmd-inline) 9px; }
   .terminal-command-bar input { font-size: 9px; }
   .statusbar-end { display: none; }
   .specs { flex-direction: column; gap: 3px; }

@@ -123,7 +123,7 @@ dialog { max-width:calc(var(--view-width) - 24px); max-height:calc(var(--view-he
 [data-short="true"] .welcome-state h1 { font-size:16px; margin:0 0 10px; }
 [data-short="true"] .welcome-state button { padding:8px 14px; }
 [data-short="true"] .terminal-meta { height:30px; min-height:30px; }
-[data-short="true"] .terminal-command-bar { margin:2px 9px 5px; min-height:28px; }
+[data-short="true"] .terminal-command-bar { --cmd-inline:9px; margin:2px var(--cmd-inline) 5px; min-height:28px; }
 [data-short="true"] .sidebar { gap:8px; }
 [data-short="true"] .host-card { padding:8px 12px; }
 [data-short="true"] .system-section,[data-short="true"] .disk-section { padding:10px 12px; }
