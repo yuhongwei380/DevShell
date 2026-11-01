@@ -169,6 +169,7 @@ func (a *App) Handler(assets fs.FS) http.Handler {
 	a.registerFileToolsHTTP(mux)
 	a.registerPromptStyleHTTP(mux)
 	a.registerUtilitiesHTTP(mux)
+	a.registerBackupRoutes(mux)
 	mux.HandleFunc("POST /api/commands", a.saveCommandHTTP)
 	mux.HandleFunc("POST /api/command-groups", a.saveCommandGroupHTTP)
 	mux.HandleFunc("POST /api/commands/move", a.moveCommandHTTP)

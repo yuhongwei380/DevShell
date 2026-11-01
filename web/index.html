@@ -21,7 +21,7 @@
   <link rel="stylesheet" href="css/config-document.css?v=20260920-v002-b70">
   <link rel="stylesheet" href="css/startup-update.css?v=20261101-updmirror1">
   <link rel="stylesheet" href="css/desktop-polish.css?v=20261101-hdrmerge5">
-  <link rel="stylesheet" href="css/server-manager.css?v=20261023-move145">
+  <link rel="stylesheet" href="css/server-manager.css?v=20261101-backup1">
   <link rel="stylesheet" href="css/connection-extras.css?v=20260920-v002-b70">
   <link rel="stylesheet" href="css/help-guide.css?v=20261101-hdrmerge1">
   <link rel="stylesheet" href="css/appearance-tools.css?v=20261031-sftp-close">
@@ -175,7 +175,7 @@
       <label class="connection-search"><svg><use href="#i-search"/></svg><input id="connection-search" placeholder="搜索名称、地址、分组或备注" aria-label="搜索服务器"></label>
     </div>
     <div id="connection-groups" role="tabpanel" aria-labelledby="server-tab-servers"></div>
-    <div id="server-manager-create" class="server-manager-create"><button class="new-connection" id="new-connection"><svg><use href="#i-plus"/></svg>新建连接</button><button class="text-button" id="open-rdp-sessions" type="button" hidden>RDP 会话</button><button class="text-button" id="new-group">＋ 新建分组</button></div>
+    <div id="server-manager-create" class="server-manager-create"><button class="new-connection" id="new-connection"><svg><use href="#i-plus"/></svg>新建连接</button><button class="text-button" id="open-rdp-sessions" type="button" hidden>RDP 会话</button><button class="text-button" id="new-group">＋ 新建分组</button><button class="text-button" id="export-backup" type="button" title="导出连接、密钥与主机指纹为备份文件">备份</button><button class="text-button" id="import-backup" type="button" title="从备份文件导入连接">恢复</button><input type="file" id="backup-picker" accept="application/json,.json" hidden></div>
   </aside>
   <div id="server-group-menu" class="server-group-menu" role="menu" aria-label="分组操作" hidden></div>
   <dialog id="server-move-dialog" aria-labelledby="server-move-title"><form id="server-move-form">
@@ -309,6 +309,7 @@
     </div>
   </dialog>
   <dialog id="proxies-dialog" class="manager-dialog"><div class="dialog-heading"><div><h2>代理管理器</h2><p>保存常用代理，在服务器连接配置中选择。</p></div><button class="icon-button" id="close-proxies" aria-label="关闭代理管理器"><svg><use href="#i-close"/></svg></button></div><div class="manager-toolbar"><span>支持 SOCKS5 与 HTTP CONNECT</span><button class="upload-button" id="new-proxy"><svg><use href="#i-plus"/></svg>新建代理</button></div><div id="proxy-list"></div><p class="empty-state" id="proxies-empty">还没有代理。可添加本机代理，也可连接远程代理。</p></dialog>
+  <dialog id="backup-dialog" class="manager-dialog"><div class="dialog-heading"><div><h2>会话备份</h2><p>把连接、分组、密钥、代理与受信主机指纹导出为单个 JSON 文件，另一台机器导入即恢复。</p></div><button type="button" class="icon-button" id="close-backup" aria-label="关闭会话备份"><svg><use href="#i-close"/></svg></button></div><label class="backup-secrets"><input type="checkbox" id="backup-secrets" checked>包含已保存的密码、私钥与口令</label><p class="rdp-session-help">勾选后备份文件为明文 JSON，含敏感凭据，请妥善保管；不勾选只导出连接结构与主机指纹，导入后需重新填写凭据。</p><p id="backup-status" role="status"></p><button type="button" class="primary-button" id="do-export-backup">导出备份文件</button><p class="rdp-session-help">导入：在服务器管理底部点「恢复」并选择备份文件。同名同地址的连接自动跳过，不会重复。</p></dialog>
   <dialog id="proxy-editor-dialog"><form id="proxy-editor-form"><div class="dialog-heading"><h2 id="proxy-editor-title">新建代理</h2><button type="button" class="icon-button" id="close-proxy-editor" aria-label="关闭代理编辑"><svg><use href="#i-close"/></svg></button></div><input type="hidden" name="id"><label>名称<input name="name" required maxlength="100" placeholder="例如：本机代理"></label><label>类型<select name="type"><option value="socks5">SOCKS5</option><option value="http">HTTP CONNECT</option></select></label><div class="form-row"><label>地址<input name="host" required placeholder="127.0.0.1"></label><label class="port-field">端口<input name="port" type="number" min="1" max="65535" required value="7890"></label></div><label>用户名（可选）<input name="user" autocomplete="off"></label><label>密码（可选）<input name="password" type="password" autocomplete="new-password" placeholder="留空保留已保存密码"></label><label class="checkbox-label"><input type="checkbox" name="clearPassword">清除已保存的代理密码</label><button class="primary-button" type="submit" id="save-proxy">保存代理</button></form></dialog>
 
 
@@ -380,6 +381,7 @@
   <script src="js/startup-update.js?v=20261101-updmirror2"></script>
   <script src="js/portable-preferences.js?v=20261025-devshell-rc1"></script>
   <script src="js/server-manager.js?v=20261019-serial1"></script>
+  <script src="js/backup-manager.js?v=20261101-backup1"></script>
   <script src="js/server-explorer.js?v=20261023-move145"></script>
   <script src="js/help-guide.js?v=20261101-ansipalette1"></script>
   <script src="js/chart-styles.js?v=20260920-v002-b70"></script>
