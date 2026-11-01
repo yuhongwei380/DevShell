@@ -35,7 +35,7 @@ const ApplicationVersion = "v26.11.0"
 // ApplicationDisplayVersion identifies this self-maintained branch in the user
 // interface. ApplicationVersion above stays the functional version that drives
 // update comparison and package metadata; never put branch text into it.
-const ApplicationDisplayVersion = "ver.Phoenix · v26.11.0-rc.6"
+const ApplicationDisplayVersion = "ver.Phoenix · v26.11.0-rc.8"
 
 // Package managers use ApplicationVersion without the leading v. It must stay
 // greater than the last upstream package version (0.3.0).
