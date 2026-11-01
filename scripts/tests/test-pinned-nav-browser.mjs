@@ -49,6 +49,11 @@ try {
     const ws = document.querySelector('#workspace').getBoundingClientRect();
     return {
       besideManager: t.left >= c.right - 1 && t.top < c.bottom && t.bottom > c.top,
+      monitorAligned: (() => {
+        const s = document.querySelector('.sidebar .system-section').getBoundingClientRect();
+        const w = document.querySelector('#workspace').getBoundingClientRect();
+        return Math.abs(s.top - w.top) < 2;
+      })(),
       brandAligned: (() => {
         const b = document.querySelector('.session-bar .brand').getBoundingClientRect();
         return Math.abs((b.top + b.bottom) / 2 - (c.top + c.bottom) / 2) < 3;
@@ -60,6 +65,7 @@ try {
   });
   assert(collapsedState.besideManager, 'the expand button sits right of the server manager button');
   assert(collapsedState.brandAligned, 'the app buttons share the session row center line');
+  assert(collapsedState.monitorAligned, 'the monitor column card top aligns with the shell top');
   assert(collapsedState.rowTopLogical < 14, 'the session row (and with it the shell) reaches the top of the window');
   assert.equal(collapsedState.barHidden, true, 'the links dropdown starts collapsed');
   checks.push('No titlebar row: the shell reaches the top and the links live behind an expand button next to the server manager');

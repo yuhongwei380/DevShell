@@ -14,7 +14,7 @@
 [data-narrow="true"] .session-bar .brand .header-pill { margin:0!important; }
 html:not([data-narrow="true"]):not([data-monitor-visible="false"]) .session-bar .brand { position:fixed; top:13px; left:var(--workspace-inset); width:var(--sidebar-width); box-sizing:border-box; padding-right:0; margin-right:0; border-right:0; z-index:2; }
 html:not([data-narrow="true"]):not([data-monitor-visible="false"]) .session-bar .brand > #theme-toggle { margin-left:auto; }
-html:not([data-narrow="true"]):not([data-monitor-visible="false"]) .sidebar { padding-top:45px; }
+html:not([data-narrow="true"]):not([data-monitor-visible="false"]) .sidebar { padding-top:48px; }
 /* Window buttons sit at the right end of the row with a stronger, visible pill. */
 .session-bar .window-controls { flex-shrink:0; gap:3px; padding:3px; border-radius:11px; background:#a7bed240; }
 
