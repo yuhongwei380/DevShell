@@ -78,6 +78,9 @@ dialog :is(input, select):focus { background-color: var(--focus-input); }
 [data-theme="dark"] .pill { color: #a7cdb9; background: #284338; }
 [data-theme="dark"] .pill.offline { color: var(--muted); background: #293846; }
 [data-theme="dark"] .app-status.failed { color: #d8a195; }
+/* 会话状态灯：连接成功鲜绿带光晕，断开红色，深色背景下要醒目。 */
+[data-theme="dark"] .status-dot.green { background: #4ed08f; box-shadow: 0 0 0 3px #4ed08f33, 0 0 7px #4ed08f59; }
+[data-theme="dark"] .status-dot.red { background: #f06055; box-shadow: 0 0 0 3px #f0605533, 0 0 7px #f060554d; }
 [data-theme="dark"] .splitter span { background: #5d788647; }
 [data-theme="dark"] .splitter:is(:hover, :focus-visible) span { background: #85a7bd; }
 

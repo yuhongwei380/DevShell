@@ -35,7 +35,8 @@ svg use { pointer-events: none; }
 .text-button:hover { background: #e9eff5; }
 .text-button svg { width: 15px; height: 15px; }
 .status-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
-.status-dot.green { background: #6bb69a; box-shadow: 0 0 0 3px #6bb69a12; }
+.status-dot.green { background: #1f9d63; box-shadow: 0 0 0 3px #1f9d6326; }
+.status-dot.red { background: #cf4a41; box-shadow: 0 0 0 3px #cf4a4126; }
 .status-dot.amber { background: #c1a26c; }
 .status-dot.blue { background: #93aec4; }
 .pill { font-size: 10px; color: #81a18f; background: #edf6f1; padding: 3px 7px; border-radius: 6px; }

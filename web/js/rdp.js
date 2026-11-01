@@ -81,7 +81,7 @@
       const tab = document.createElement('div'); tab.className = `session-tab rdp-tab${selected ? ' active' : ''}`; tab.dataset.sessionId = item.id;
       tab.dataset.connecting = String(item.status === 'connecting'); tab.dataset.failed = String(item.status === 'error');
       const select = button('', () => activateRDP(item.id)); select.setAttribute('role','tab'); select.setAttribute('aria-selected',String(selected)); select.setAttribute('aria-busy',String(item.status === 'connecting')); select.title = item.name + ' · RDP';
-      const dot = document.createElement('span'); dot.className = `status-dot ${item.status === 'connected' ? 'green' : 'blue'}`;
+      const dot = document.createElement('span'); dot.className = `status-dot ${item.status === 'connected' ? 'green' : item.status === 'connecting' ? 'blue' : 'red'}`;
       const text = document.createElement('span'); text.className = 'session-tab-text';
       const label = document.createElement('span'); label.className = 'session-tab-label'; label.textContent = item.name;
       const badge = document.createElement('span'); badge.className = 'session-current-badge'; badge.textContent = 'RDP'; text.append(label,badge); select.append(dot,text);
