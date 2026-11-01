@@ -41,12 +41,13 @@ window.DevShellTransfers = (() => {
         `<svg viewBox="0 0 48 48"><circle class="transfer-ring-track" cx="24" cy="24" r="20" pathLength="100"></circle>` +
         `<circle class="transfer-ring-fill" cx="24" cy="24" r="20" pathLength="100" stroke-dasharray="${value} 100"></circle></svg>` +
         `<span class="transfer-percent">${value}</span></span>` +
-        `<span class="shell-transfer-label">${active.length} 项 · 查看传输任务</span>`;
+        `<span class="shell-transfer-label">${active.length} 项</span>`;
     } else {
       button.removeAttribute?.('aria-valuenow');
       button.removeAttribute?.('aria-busy');
       const failed = unread.filter(task => task.status === 'failed').length;
-      button.textContent = failed ? `上传失败 ${failed} 项 · 查看传输任务` : `上传已完成 · ${unread.length} 项 · 查看传输任务`;
+      button.textContent = failed ? `上传失败 ${failed} 项` : `上传已完成 · ${unread.length} 项`;
+      button.title = '点击打开传输任务';
     }
     button.onclick = () => showPane('transfers');
   }
