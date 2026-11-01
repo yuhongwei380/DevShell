@@ -27,6 +27,8 @@ body { transform-origin:0 0; }
 .window-controls .window-close:hover { background:#c2696e; color:white; }
 .frameless .titlebar { padding-right:7px; }
 .terminal-panel { isolation:isolate; }
+/* 纯色 · 全黑：用户显式选择，压过明暗主题的渐变底色。 */
+.terminal-panel.solid-black { background:#000!important; }
 .terminal-panel::before { content:""; position:absolute; inset:0; z-index:0; background-image:var(--terminal-background); background-size:cover; background-position:center; background-color:transparent; background-blend-mode:normal; opacity:var(--background-opacity); filter:brightness(.6); pointer-events:none; }
 /* Dim the backdrop without changing the terminal's ANSI foreground/background. */
 .terminal-panel.has-background::after { content:""; position:absolute; inset:0; z-index:0; background:rgb(13 24 32); opacity:calc(var(--background-opacity) * .35); pointer-events:none; }
@@ -72,6 +74,7 @@ dialog { max-width:calc(var(--view-width) - 24px); max-height:calc(var(--view-he
 .asset-choice { display:block; width:100%; text-align:left; }
 .asset-choice:hover { background:var(--surface-hover,#edf2f6); }
 .background-thumb { width:100%; height:100px; background-color:#1b2e3a; background-size:cover; background-position:center; display:grid; place-items:center; color:#9ab5c7; }
+.background-thumb.solid-black-thumb { background-color:#000; }
 .background-thumb svg { width:30px; height:30px; opacity:.7; }
 .asset-caption { display:flex; flex-direction:column; gap:6px; padding:12px; }
 .asset-caption strong { font-size:12px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }

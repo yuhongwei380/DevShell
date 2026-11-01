@@ -44,7 +44,7 @@ function initializeAppearanceCatalogs() {
   return appearanceReady;
 }
 function allFonts() { return [...(fontCatalog?.fonts || []).map(font => ({ ...font, id: `builtin:${font.id}` })), ...managedAssets.filter(asset => asset.kind === 'font').map(asset => ({ ...asset, family: `Deng custom ${asset.id}` }))]; }
-function allBackgrounds() { return [{ id: 'builtin:none', name: '纯色 · 专注', kind: 'builtin' }, ...backgroundCatalog.map(background => ({ ...background, id: `builtin:${background.id}`, kind: 'builtin' })), ...managedAssets.filter(asset => asset.kind === 'background')]; }
+function allBackgrounds() { return [{ id: 'builtin:none', name: '纯色 · 专注', kind: 'builtin' }, { id: 'builtin:black', name: '纯色 · 全黑', kind: 'builtin' }, ...backgroundCatalog.map(background => ({ ...background, id: `builtin:${background.id}`, kind: 'builtin' })), ...managedAssets.filter(asset => asset.kind === 'background')]; }
 async function assetURL(asset) {
   if (asset.file) return new URL(asset.file, location.href).href;
   if (!assetData.has(asset.id)) {
@@ -220,9 +220,9 @@ async function applyAppearance() {
   for (const state of sessions.values()) { state.term.options.fontSize = terminalFont; state.term.options.fontWeight = boldForFont(next.fontId) ? '700' : '400'; }
   const background = allBackgrounds().find(item => item.id === next.backgroundId) || allBackgrounds()[0];
   if (activeBackgroundID !== background.id) {
-    const url = background.id === 'builtin:none' ? '' : await assetURL(background);
+    const url = background.id.startsWith('builtin:') ? '' : await assetURL(background);
     if (generation !== mediaGeneration) return;
-    document.documentElement.style.setProperty('--terminal-background', url ? `url(${JSON.stringify(url)})` : 'none'); activeBackgroundID = background.id; $('.terminal-panel').classList.toggle('has-background', !!url);
+    document.documentElement.style.setProperty('--terminal-background', url ? `url(${JSON.stringify(url)})` : 'none'); activeBackgroundID = background.id; const panel = $('.terminal-panel'); panel.classList.toggle('has-background', !!url); panel.classList.toggle('solid-black', background.id === 'builtin:black');
   }
   if (generation !== mediaGeneration) return;
   renderAppearanceControls(); clampAppearancePalette(); requestAnimationFrame(fitActive);
@@ -412,7 +412,8 @@ function createAssetCard(asset, isFont) {
     thumb.textContent = 'Aa 012 中文'; card.dataset.fontId = asset.id;
     thumb.style.fontFamily = `"${asset.family}", "Deng CJK", monospace`;
     loadFace(asset).catch(error => { if (thumb.isConnected) thumb.textContent = '预览不可用'; console.warn(error.message); });
-  } else if (asset.id !== 'builtin:none') {
+  } else if (asset.id === 'builtin:black') thumb.classList.add('solid-black-thumb');
+  else if (asset.id !== 'builtin:none') {
     assetURL(asset).then(url => { if (thumb.isConnected) thumb.style.backgroundImage = `url(${JSON.stringify(url)})`; }).catch(() => { if (thumb.isConnected) thumb.textContent = '无法读取'; });
   } else thumb.append(icon('terminal'));
   const caption = node('div', 'asset-caption'); caption.append(node('strong'), node('span'));
