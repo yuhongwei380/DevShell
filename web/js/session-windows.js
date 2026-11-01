@@ -161,6 +161,7 @@
   const button=node('button','','拆分为独立窗口');button.type='button';button.setAttribute('role','menuitem');button.append(icon('popout'));
   const dismiss=e=>{if(!menu.contains(e.target))close()};
   const close=()=>{menu.remove();document.removeEventListener('pointerdown',dismiss);if(menuCleanup===close)menuCleanup=null};menuCleanup=close;
+  if(window.DengQuickConnect?.canSave(state)){const save=node('button','','保存连接');save.type='button';save.setAttribute('role','menuitem');save.title='把这次临时连接保存到服务器列表';save.onclick=safe(()=>{close();return window.DengQuickConnect.saveCurrent(state)});menu.append(save);}// 快速连接的临时会话：菜单顶部"保存连接"沿用旧工具条按钮的入口逻辑
   const another=node('button','','新建同服务器会话');another.type='button';another.setAttribute('role','menuitem');another.onclick=safe(()=>{close();return connect(state.profileId)});menu.append(another);
   button.onclick=safe(()=>{close();return detach(state)});menu.append(button);
   const caption=node('div','merge-window-caption','合并到窗口'),loading=node('div','merge-window-empty','正在查找其他窗口…');menu.append(caption,loading);document.documentElement.append(menu);

@@ -1,6 +1,7 @@
 'use strict';
 window.DengQuickConnect = (() => {
   let dialog, form, output, saveDialog, savingID = '', saveGeneration = 0;
+  const NEW_GROUP = '__new__';
   function open(command = '') {
     setDrawer(false);
     form.elements.command.value = command; output.textContent = '';
@@ -22,15 +23,26 @@ window.DengQuickConnect = (() => {
     if (profile.verbose) toast(`已开启 -${'v'.repeat(profile.verbose)} 连接诊断：终端显示调试信息，并写入 data/logs/ssh-disconnect.jsonl`);
     return connect(profile.id);
   }
-  function reflect() {
-    const state = current(), profile = profileFor(state), b = $('#save-quick-connection');
-    if (b) b.hidden = !state?.connected || !profile?.temporary;
+  function canSave(state) {
+    const profile = profileFor(state);
+    return !!(state?.connected && profile?.temporary);
   }
-  function saveCurrent() {
-    const state = current(), profile = profileFor(state);
+  // 分组下拉列出服务器管理里的既有分组（子分组用 "A / B" 完整路径，与后端 legacyGroupPath 一致）；
+  // 后端按名称匹配，选"新建分组…"并提交新名字时，不存在的名字会自动创建为顶层分组。
+  function renderGroupChoices() {
+    const select = saveDialog.querySelector('[name=group]'), extra = $('#quick-save-new-group');
+    const tree = serverGroupTree(), names = new Set(['快速连接']);
+    for (const group of tree.flat) { const path = tree.paths.get(group.id); if (path) names.add(path); }
+    const existing = [...names].filter(name => name !== '快速连接').sort(compareServerNames);
+    select.replaceChildren(new Option('快速连接', '快速连接'), ...existing.map(name => new Option(name, name)), new Option('＋ 新建分组…', NEW_GROUP));
+    select.value = '快速连接';
+    extra.hidden = true; saveDialog.querySelector('[name=groupNew]').value = '';
+  }
+  function saveCurrent(state = current()) {
+    const profile = profileFor(state);
     if (!state?.connected || !profile?.temporary) return;
     savingID = profile.id; saveGeneration++;
-    const f = saveDialog.querySelector('form'); f.elements.name.value = profile.name; f.elements.group.value = '快速连接';
+    const f = saveDialog.querySelector('form'); f.elements.name.value = profile.name; renderGroupChoices();
     window.DengProfileNotes.init(f.elements.notes, profile.notes || '');
     // Quick-connect credentials the user just typed are remembered by default
     // when the connection is saved; the checkbox stays visible to opt out.
@@ -62,18 +74,21 @@ window.DengQuickConnect = (() => {
     };
     $('#add-session').onclick = () => window.DengStartTabs.create();
     const welcome = node('button', '', '快速连接'); welcome.id = 'welcome-quick-connect'; welcome.onclick = () => open(); $('#welcome-connect').before(welcome);
-    const b = node('button','terminal-popout'); b.id = 'save-quick-connection'; b.hidden = true; b.append(icon('plus'),node('span','','保存连接')); b.title = '保存此临时连接'; b.onclick = saveCurrent; $('#toggle-sftp').before(b);
     saveDialog = node('dialog'); saveDialog.id = 'quick-save-dialog'; saveDialog.setAttribute('aria-labelledby','quick-save-title');
-    saveDialog.innerHTML = `<form><div class="dialog-heading"><h2 id="quick-save-title">保存连接</h2><button type="button" class="icon-button" aria-label="取消保存" data-close><svg><use href="#i-close"/></svg></button></div><p id="quick-save-target"></p><label>名称<input name="name" required maxlength="100"></label><label>分组<input name="group" maxlength="100" value="快速连接"></label><label>备注（可选）<textarea name="notes" rows="3" aria-describedby="quick-save-notes-hint" placeholder="续费网址、到期时间、用途等"></textarea><small id="quick-save-notes-hint" class="notes-input-hint" aria-live="polite">正文最多 3 行，每行最多 20 个中文或 40 个英文字符</small></label><label class="checkbox-label"><input name="remember" type="checkbox">记住本次登录凭据</label><p id="quick-save-note" role="status" class="notes-input-hint"></p><p id="quick-save-error" role="alert"></p><button type="submit" class="primary-button">保存连接</button></form>`;
+    saveDialog.innerHTML = `<form><div class="dialog-heading"><h2 id="quick-save-title">保存连接</h2><button type="button" class="icon-button" aria-label="取消保存" data-close><svg><use href="#i-close"/></svg></button></div><p id="quick-save-target"></p><label>名称<input name="name" required maxlength="100"></label><label>分组<select name="group"></select></label><label id="quick-save-new-group" hidden>新分组名称<input name="groupNew" maxlength="100" placeholder="输入新分组名称"></label><label>备注（可选）<textarea name="notes" rows="3" aria-describedby="quick-save-notes-hint" placeholder="续费网址、到期时间、用途等"></textarea><small id="quick-save-notes-hint" class="notes-input-hint" aria-live="polite">正文最多 3 行，每行最多 20 个中文或 40 个英文字符</small></label><label class="checkbox-label"><input name="remember" type="checkbox">记住本次登录凭据</label><p id="quick-save-note" role="status" class="notes-input-hint"></p><p id="quick-save-error" role="alert"></p><button type="submit" class="primary-button">保存连接</button></form>`;
     document.body.append(saveDialog); saveDialog.querySelector('[data-close]').onclick = () => saveDialog.close();
+    saveDialog.querySelector('[name=group]').onchange = event => { const extra = $('#quick-save-new-group'); extra.hidden = event.target.value !== NEW_GROUP; if (!extra.hidden) saveDialog.querySelector('[name=groupNew]').focus(); };
     saveDialog.querySelector('form').onsubmit = async e => {
-      e.preventDefault(); const f = e.currentTarget, b = f.querySelector('[type=submit]'), generation = saveGeneration; if (b.disabled || !window.DengProfileNotes.validate(f.elements.notes)) return; b.disabled = true;
+      e.preventDefault(); const f = e.currentTarget, b = f.querySelector('[type=submit]'), generation = saveGeneration; if (b.disabled || !window.DengProfileNotes.validate(f.elements.notes)) return;
+      const choice = f.elements.group.value, group = choice === NEW_GROUP ? f.elements.groupNew.value.trim() : choice;
+      if (!group) { $('#quick-save-error').textContent = '请填写新分组名称'; return; }
+      b.disabled = true;
       try {
-        const id = savingID, p = await post(`/api/quick-connect/${id}/save`, { name:f.elements.name.value,group:f.elements.group.value,notes:f.elements.notes.value,remember:f.elements.remember.checked,secret:f.elements.remember.checked ? credentials.get(id) || '' : '' });
-        temporaryProfiles.delete(id); profiles = profiles.filter(p => p.id !== id); profiles.push(p); renderTabs(); reflect();
+        const id = savingID, p = await post(`/api/quick-connect/${id}/save`, { name:f.elements.name.value,group,notes:f.elements.notes.value,remember:f.elements.remember.checked,secret:f.elements.remember.checked ? credentials.get(id) || '' : '' });
+        temporaryProfiles.delete(id); profiles = profiles.filter(p => p.id !== id); profiles.push(p); renderTabs();
         if (generation === saveGeneration) saveDialog.close(); await loadProfiles(); toast('连接已保存');
       } catch (error) { if (generation === saveGeneration && saveDialog.open) $('#quick-save-error').textContent = error.message; } finally { b.disabled = false; }
     };
   }, { once:true });
-  return { open, run, reflect };
+  return { open, run, saveCurrent, canSave };
 })();

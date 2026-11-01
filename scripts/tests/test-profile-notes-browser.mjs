@@ -73,12 +73,12 @@ try {
   await page.evaluate(()=>{
     temporaryProfiles.set('temporary-notes-qa',{id:'temporary-notes-qa',temporary:true,name:'快速连接测试',host:'192.0.2.30',user:'root',port:22,auth:'password'});
     sessions.set('temporary-notes-qa',{id:'temporary-notes-qa',profileId:'temporary-notes-qa',connected:true});activeID='temporary-notes-qa';
-    document.querySelector('#save-quick-connection').onclick();
+    window.DengQuickConnect.saveCurrent();
   });
   const quick = '#quick-save-dialog textarea[name=notes]';
   await page.focus(quick); await page.keyboard.sendCharacter('一\n二\n三');await page.keyboard.press('Enter');
   assert.equal(await page.$eval(quick,e=>e.value),'一\n二\n三');
-  await page.evaluate(()=>{$('#quick-save-dialog').close();$('#save-quick-connection').onclick();});
+  await page.evaluate(()=>{$('#quick-save-dialog').close();window.DengQuickConnect.saveCurrent();});
   assert.equal(await page.$eval(quick,e=>e.value),'');
   await page.evaluate(()=>{ $('#quick-save-dialog').close(); sessions.delete('temporary-notes-qa');temporaryProfiles.delete('temporary-notes-qa');activeID='';setDrawer(true); });
   await page.waitForNetworkIdle({idleTime:200});

@@ -290,9 +290,8 @@ window.DengPinnedNav = (() => {
       profiles = profiles.filter(p => p.id !== saved.id);
       profiles.push(saved);
       renderConnections(); renderTabs();
-      // The session is no longer temporary even if pinning below fails, so
-      // refresh the "保存连接" button instead of leaving it visibly dead.
-      window.DengQuickConnect?.reflect();
+      // The session is no longer temporary even if pinning below fails; the
+      // session tab menu rebuilds its "保存连接" entry on every open.
       if (!saved.hasSecret) note = '已固定到链接栏；这个连接没有保存凭据（本窗口未输入过密码），下次连接仍需输入';
     }
     await pin(profile.id);
