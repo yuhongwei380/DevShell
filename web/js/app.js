@@ -625,6 +625,7 @@ function renderSessionInfo() {
   $('#welcome-state').hidden = !!state; window.DengLocalPrompt?.reflect();
   $('#terminal-meta-host').textContent = profile ? (profile.protocol === 'serial' ? window.DengSerial.label(profile) : `${profile.user}@${sessionDisplayName(state)}`) : 'SSH 终端'; $('#terminal-state').textContent = state?.handoffProvisional ? '正在接收标签…' : state?.pendingConnection ? '正在连接…' : state?.connectionFailed ? '连接未完成' : state?.connected ? '已连接' : state?.disconnectDiagnostic ? `已断开 · ${state.disconnectDiagnostic.code}` : '待连接';
   $('#terminal-state').title = state?.disconnectDiagnostic?.message || '';
+  $('#terminal-status-dot').className = `status-dot ${state?.connected ? 'green' : state?.pendingConnection ? 'blue' : 'red'}`;
   // The "当前连接" badge lives in the session header, merged with the connected
   // status: the green dot plus badge replaces the plain "已连接" text.
   const currentConnected = !!state?.connected && !state?.handoffProvisional;

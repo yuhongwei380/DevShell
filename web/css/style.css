@@ -176,7 +176,7 @@ svg use { pointer-events: none; }
 .terminal-panel { background: linear-gradient(115deg, #273f50, #223746 70%, #203342); color: #d4e1e8; display: flex; flex-direction: column; overflow: hidden; min-height: 0; position: relative; border-radius: 16px; box-shadow: 0 6px 20px #263d5017; }
 .terminal-meta { height: 38px; min-height: 38px; display: flex; align-items: center; justify-content: space-between; padding: 0 22px; color: #88a1b2; font-size: 11px; gap: 15px; }
 .terminal-meta > span:first-child { display: flex; align-items: center; gap: 9px; }
-.terminal-meta .status-dot { width: 5px; height: 5px; background: #8dbdaa; box-shadow: none; }
+.terminal-meta .status-dot { width: 5px; height: 5px; }
 .terminal-protocol { color: #718e9f; margin-left: 4px; font-size: 9px; }
 .meta-divider { margin: 0 8px; color: #527083; }
 .terminal-output { padding: 8px 24px 12px; overflow: auto; flex: 1; position: relative; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; font-size: var(--terminal-font); font-family: "DejaVu Sans Mono", "Liberation Mono", monospace; tab-size: 4; }
