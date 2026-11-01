@@ -19,7 +19,7 @@ try{
   document.querySelectorAll('dialog[open]').forEach(d=>d.close());setDrawer(false);pollStats=pollNetwork=pollLatency=()=>{};
   const id='background-check';profiles.push({id,name:'背景显示检查',host:'fixture.invalid',user:'qa',port:22});
   const s={...makeSessionState({id,profileId:id,home:'/'}),localOnly:true};sessions.set(id,s);createTerminal(s);activate(id);s.term.options.cursorBlink=false;
-  await writeTerminalAndWait(s,'🔗  连接主机...\r\n✅  连接主机成功！\r\n\r\n背景强度 39% · 保留已确认的深色主题\r\n');
+  await writeTerminalAndWait(s,'连接主机...\r\n连接主机成功！\r\n\r\n背景强度 39% · 保留已确认的深色主题\r\n');
  });
  const inspect=()=>page.evaluate(async()=>{
   await appearanceSave;

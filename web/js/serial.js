@@ -56,7 +56,7 @@
       if (!alive()) return null;
       await restoreReconnectTerminal(state);
       if (!alive()) return null;
-      showConnectionProgress(state, `🔌  打开串口 ${profile.serialPort || profile.host}…`);
+      showConnectionProgress(state, `打开串口 ${profile.serialPort || profile.host}…`);
       const info = await post('/api/serial/sessions', { profileId: profileID });
       if (!info) return null;
       // The tab may close while the port is opening; release the physical port.
@@ -71,7 +71,7 @@
       return state;
     } catch (error) {
       if (alive()) {
-        showConnectionProgress(state, '❌  打开串口失败：' + (error.message || String(error)), true);
+        showConnectionProgress(state, '打开串口失败：' + (error.message || String(error)), true);
         toast(`❌  ${profile.name}：${error.message || error}`);
       }
       return null;

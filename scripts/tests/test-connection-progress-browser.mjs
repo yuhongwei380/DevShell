@@ -65,24 +65,24 @@ try {
     await page.evaluate(theme => { DevShellTheme.set(theme); qa.start(theme + '-slow'); }, theme);
     const slow = theme + '-slow', fast = theme + '-fast';
     await page.waitForFunction(id => !!qa.requests[id], {}, slow);
-    assert.equal((await text(slow)).trim(), '🔗  连接主机...');
+    assert.equal((await text(slow)).trim(), '连接主机...');
     assert.equal(await page.$('.terminal-connection-state'), null);
     await page.screenshot({path:stage + '/connecting-' + theme + '.png'});
     await page.evaluate(id => qa.start(id, true), fast);
     await page.waitForFunction(id => !!qa.requests[id], {}, fast);
     await page.evaluate(id => qa.resolve(id, id + '-1'), fast);
     await page.waitForFunction(id => !!qa.sockets[id + '-1'], {}, fast);
-    assert(!(await text(fast)).includes('✅  连接主机成功！'), 'SSH authentication alone is not terminal readiness');
+    assert(!(await text(fast)).includes('连接主机成功！'), 'SSH authentication alone is not terminal readiness');
     await page.evaluate(id => qa.ready(id, 'REMOTE_FIRST_LINE\r\nqa@fixture:~$ '), fast);
-    assert.match(await text(fast), /^🔗  连接主机\.\.\.\n✅  连接主机成功！\nREMOTE_FIRST_LINE\nqa@fixture:~\$ /);
-    assert.equal((await text(slow)).trim(), '🔗  连接主机...', 'another tab received a success message');
+    assert.match(await text(fast), /^连接主机\.\.\.\n连接主机成功！\nREMOTE_FIRST_LINE\nqa@fixture:~\$ /);
+    assert.equal((await text(slow)).trim(), '连接主机...', 'another tab received a success message');
     assert.equal(await page.evaluate(() => current().profileId), slow, 'background connection stole focus');
     await page.evaluate(id => qa.ready(id), fast);
-    assert.equal((await text(fast)).split('✅  连接主机成功！').length - 1, 1, 'duplicate readiness repeated status');
+    assert.equal((await text(fast)).split('连接主机成功！').length - 1, 1, 'duplicate readiness repeated status');
     await page.evaluate(id => qa.requests[id].reject(Error('连接被拒绝\n请重试\x1b[2J')), slow);
     await page.waitForFunction(id => qa.state(id).connectionFailed, {}, slow);
-    assert.match(await text(slow), /^🔗  连接主机\.\.\.\n❌  连接主机失败：连接被拒绝\n请重试\[2J/);
-    assert(!(await text(slow)).includes('✅  连接主机成功！'));
+    assert.match(await text(slow), /^连接主机\.\.\.\n连接主机失败：连接被拒绝\n请重试\[2J/);
+    assert(!(await text(slow)).includes('连接主机成功！'));
     // Reconnect must append new status after retained output, not overwrite it.
     await page.evaluate(id => {
       activate(qa.state(id).id); markSessionDisconnected(qa.state(id));
@@ -91,11 +91,11 @@ try {
     await page.waitForFunction(id => !!qa.requests[id], {}, fast);
     const reconnecting = await text(fast);
     assert(reconnecting.includes('REMOTE_FIRST_LINE'));
-    assert(reconnecting.lastIndexOf('🔗  连接主机...') > reconnecting.indexOf('── 重新连接'));
+    assert(reconnecting.lastIndexOf('连接主机...') > reconnecting.indexOf('── 重新连接'));
     await page.evaluate(id => qa.resolve(id, id + '-2'), fast);
     await page.waitForFunction(id => !!qa.sockets[id + '-2'], {}, fast);
     await page.evaluate(id => qa.ready(id, 'NEW_SHELL\r\nqa@fixture:~$ '), fast);
-    assert.match(await text(fast), /🔗  连接主机\.\.\.\n✅  连接主机成功！\nNEW_SHELL/);
+    assert.match(await text(fast), /连接主机\.\.\.\n连接主机成功！\nNEW_SHELL/);
     await page.screenshot({path:stage + '/connected-' + theme + '.png'});
     checks.push(theme + ': inline progress, readiness ordering, concurrent tabs, failures, reconnect history');
   }
@@ -111,15 +111,15 @@ try {
   await page.evaluate(() => qa.resolve('channel-failure','channel-failure-1'));
   await page.waitForFunction(() => !!qa.sockets['channel-failure-1']);
   await page.evaluate(() => qa.sockets['channel-failure-1'].close());
-  assert(!(await text('channel-failure')).includes('✅  连接主机成功！'));
-  assert((await text('channel-failure')).includes('🔌  连接已断开'));
+  assert(!(await text('channel-failure')).includes('连接主机成功！'));
+  assert((await text('channel-failure')).includes('连接已断开'));
   // Keep credential/host-key approval dialogs; cancellation stays in the terminal.
   await page.evaluate(() => qa.start('credentials', false, false));
   await page.waitForSelector('#action-dialog[open]');
-  assert((await text('credentials')).includes('🔑  等待输入凭据'));
+  assert((await text('credentials')).includes('等待输入凭据'));
   await page.click('#action-cancel');
   await page.waitForFunction(() => qa.state('credentials').connectionFailed);
-  assert((await text('credentials')).includes('🚫  已取消连接'));
+  assert((await text('credentials')).includes('已取消连接'));
   checks.push('late cancellation, channel startup failure, credential cancellation');
   assert.deepEqual(errors, []);
   fs.writeFileSync(stage + '/connection-progress.json', JSON.stringify({passed:true,checks,errors},null,2));
