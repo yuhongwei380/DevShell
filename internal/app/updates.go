@@ -94,17 +94,20 @@ type UpdatePackage struct {
 	expiresAt        int64
 }
 type UpdateStatus struct {
-	Status         string         `json:"status"`
-	CurrentVersion string         `json:"currentVersion"`
-	CurrentBuild   uint64         `json:"currentBuild"`
-	LatestVersion  string         `json:"latestVersion,omitempty"`
-	LatestBuild    uint64         `json:"latestBuild,omitempty"`
-	Notes          string         `json:"notes,omitempty"`
-	Source         string         `json:"source"`
-	Platform       string         `json:"platform"`
-	InstallerReady bool           `json:"installerReady"`
-	Reason         string         `json:"reason,omitempty"`
-	Package        *UpdatePackage `json:"package,omitempty"`
+	Status         string `json:"status"`
+	CurrentVersion string `json:"currentVersion"`
+	CurrentBuild   uint64 `json:"currentBuild"`
+	LatestVersion  string `json:"latestVersion,omitempty"`
+	LatestBuild    uint64 `json:"latestBuild,omitempty"`
+	Notes          string `json:"notes,omitempty"`
+	Source         string `json:"source"`
+	Platform       string `json:"platform"`
+	InstallerReady bool   `json:"installerReady"`
+	Reason         string `json:"reason,omitempty"`
+	// Mirror is the accelerator host that actually served the manifest or
+	// release list for this result; empty means the direct GitHub channel.
+	Mirror  string         `json:"mirror,omitempty"`
+	Package *UpdatePackage `json:"package,omitempty"`
 }
 type UpdateReceipt struct {
 	Build            uint64 `json:"build"`
@@ -183,12 +186,18 @@ var updateTransport = func() *http.Transport {
 	return t
 }()
 
-func updateClient(timeout time.Duration) *http.Client {
+func updateClient(timeout time.Duration, mirror string) *http.Client {
+	allowed := map[string]bool{"api.github.com": true, "github.com": true, "objects.githubusercontent.com": true, "release-assets.githubusercontent.com": true}
+	if host := updateMirrorHost(mirror); host != "" {
+		allowed[host] = true
+	}
 	return &http.Client{Transport: updateTransport, Timeout: timeout, CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		// GitHub serves release assets from objects.githubusercontent.com and,
 		// since the 2025 asset migration, release-assets.githubusercontent.com.
-		// Both are official GitHub asset hosts; anything else is rejected.
-		if len(via) > 2 || req.URL.Scheme != "https" || (req.URL.Host != "api.github.com" && req.URL.Host != "github.com" && req.URL.Host != "objects.githubusercontent.com" && req.URL.Host != "release-assets.githubusercontent.com") || req.URL.User != nil {
+		// Both are official GitHub asset hosts; anything else is rejected. The
+		// user-configured accelerator origin joins the allowlist only while it
+		// is explicitly set in settings.
+		if len(via) > 2 || req.URL.Scheme != "https" || !allowed[req.URL.Hostname()] || req.URL.User != nil {
 			return errors.New("更新地址跳转无效")
 		}
 		return nil
@@ -257,18 +266,22 @@ func (a *App) updateProbe(ctx context.Context, timeout time.Duration) UpdateStat
 		return noUpdate("invalid-receipt")
 	}
 	platform := currentUpdatePlatform()
+	mirror := a.store.UpdateMirror()
 	address, artifact := updateAddress(platform)
-	client := updateClient(timeout)
+	client := updateClient(timeout, mirror)
 	if isReleaseCandidateBuild() {
-		source, reason := latestReleaseUpdateSource(ctx, client, platform)
+		source, reason, viaMirror := latestReleaseUpdateSource(ctx, client, platform, mirror)
 		if reason != "" {
 			result := noUpdate(reason)
 			result.Source = updateReleaseListURL
+			if viaMirror {
+				result.Mirror = updateMirrorHost(mirror)
+			}
 			return result
 		}
 		address, artifact = source.manifestURL, source.artifactURL
 	}
-	result := checkUpdateTrustedAt(ctx, client, address, artifact, platform, hash, receipt, updatetrust.PublisherKeys(), time.Now())
+	result := checkUpdateTrustedAt(ctx, client, address, artifact, platform, hash, receipt, updatetrust.PublisherKeys(), time.Now(), mirror)
 	if result.Status == "available" && !NativePackageUpdateSupported() {
 		result.InstallerReady = false
 		result.Reason = "当前发行版不支持内置安装或缺少安装工具，请从 GitHub Releases 下载对应安装包升级，保留原数据目录。"
@@ -298,10 +311,10 @@ func checkUpdate(ctx context.Context, client *http.Client, address, platform, cu
 // independent key through this helper, never a production signing private key.
 func checkUpdateTrusted(ctx context.Context, client *http.Client, address, platform, currentHash string, receipt UpdateReceipt, trusted map[string]ed25519.PublicKey, now time.Time) UpdateStatus {
 	_, artifact := updateAddress(platform)
-	return checkUpdateTrustedAt(ctx, client, address, artifact, platform, currentHash, receipt, trusted, now)
+	return checkUpdateTrustedAt(ctx, client, address, artifact, platform, currentHash, receipt, trusted, now, "")
 }
 
-func checkUpdateTrustedAt(ctx context.Context, client *http.Client, address, artifact, platform, currentHash string, receipt UpdateReceipt, trusted map[string]ed25519.PublicKey, now time.Time) UpdateStatus {
+func checkUpdateTrustedAt(ctx context.Context, client *http.Client, address, artifact, platform, currentHash string, receipt UpdateReceipt, trusted map[string]ed25519.PublicKey, now time.Time, mirror string) UpdateStatus {
 	result := noUpdate("unavailable")
 	result.Source = address
 	result.Platform = platform
@@ -309,30 +322,48 @@ func checkUpdateTrustedAt(ctx context.Context, client *http.Client, address, art
 		result.Reason = "platform-unavailable"
 		return result
 	}
-	req, e := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
-	if e != nil {
-		return result
+	// Accelerator-first fetch: when a mirror is configured it is tried before
+	// the canonical GitHub URL, and a failed or non-200 mirror attempt falls
+	// back to the direct URL. The manifest content keeps carrying the build
+	// high-water mark and SHA-256 checks regardless of which host served it.
+	var response *http.Response
+	notFound := false
+	for _, candidate := range updateFetchAttempts(mirror, address) {
+		req, e := http.NewRequestWithContext(ctx, http.MethodGet, candidate, nil)
+		if e != nil {
+			continue
+		}
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("User-Agent", "DevShell/"+strings.TrimPrefix(ApplicationVersion, "v"))
+		req.Header.Set("Cache-Control", "no-cache")
+		candidateResponse, e := client.Do(req)
+		if e != nil {
+			continue
+		}
+		if candidateResponse.StatusCode != http.StatusOK {
+			notFound = notFound || candidateResponse.StatusCode == http.StatusNotFound
+			candidateResponse.Body.Close()
+			continue
+		}
+		response = candidateResponse
+		if candidate != address {
+			result.Mirror = updateMirrorHost(mirror)
+		}
+		break
 	}
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "DevShell/"+strings.TrimPrefix(ApplicationVersion, "v"))
-	req.Header.Set("Cache-Control", "no-cache")
-	response, e := client.Do(req)
-	if e != nil {
+	if response == nil {
 		if ctx.Err() != nil {
 			result.Reason = "timeout"
 		}
-		return result
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
 		// Release policy 2026-10-20: Linux payloads (up.deb / up.pkg.tar.zst)
 		// are no longer published. A 404 on a Linux manifest means "retired",
 		// not "network failure", so deployed Linux clients get an honest hint.
-		if response.StatusCode == http.StatusNotFound && strings.HasPrefix(platform, "linux-") {
+		if notFound && strings.HasPrefix(platform, "linux-") {
 			result.Reason = "linux-discontinued"
 		}
 		return result
 	}
+	defer response.Body.Close()
 	data, e := io.ReadAll(io.LimitReader(response.Body, 65537))
 	if e != nil || len(data) > 65536 {
 		result.Reason = "invalid"
@@ -622,58 +653,78 @@ func (a *App) PreparedUpdate(id string) (UpdateDownload, error) {
 func (a *App) downloadUpdate(ctx context.Context, job *UpdateDownload) {
 	defer job.cancel()
 	err := func() error {
-		req, e := http.NewRequestWithContext(ctx, http.MethodGet, job.Package.URL, nil)
-		if e != nil {
-			return e
-		}
-		response, e := updateClient(15 * time.Minute).Do(req)
-		if e != nil {
-			return e
-		}
-		defer response.Body.Close()
-		if response.StatusCode != http.StatusOK {
-			return fmt.Errorf("下载失败 (%d)", response.StatusCode)
-		}
-		if response.ContentLength >= 0 && response.ContentLength != job.Total {
-			return errors.New("更新文件大小与描述不符")
-		}
-		f, e := os.OpenFile(job.File, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
-		if e != nil {
-			return e
-		}
-		defer f.Close()
-		h := sha256.New()
-		reader := io.LimitReader(response.Body, job.Total+1)
-		buf := make([]byte, 128<<10)
-		var total int64
-		for {
-			n, re := reader.Read(buf)
-			if n > 0 {
-				total += int64(n)
-				if total > job.Total {
-					return errors.New("更新文件超过描述的大小")
-				}
-				if _, e = f.Write(buf[:n]); e != nil {
-					return e
-				}
-				h.Write(buf[:n])
-				a.updateCheck.mu.Lock()
-				job.Received = total
-				a.updateCheck.mu.Unlock()
+		var last error
+		for _, candidate := range updateFetchAttempts(a.store.UpdateMirror(), job.Package.URL) {
+			if e := a.downloadUpdateCandidate(ctx, job, candidate); e != nil {
+				last = e
+				continue
 			}
-			if re == io.EOF {
-				break
-			}
-			if re != nil {
-				return re
-			}
+			return nil
 		}
-		if total != job.Total || hex.EncodeToString(h.Sum(nil)) != job.Package.SHA256 {
-			return errors.New("更新文件 SHA-256 校验失败")
-		}
-		return f.Sync()
+		return last
 	}()
 	a.finishUpdateDownload(ctx, job, err)
+}
+
+// downloadUpdateCandidate streams one candidate host (the configured
+// accelerator or the canonical GitHub asset) into the job file. Any partial
+// file is discarded before the next candidate so a retry never resumes a
+// broken stream, and the SHA-256 and size checks run per attempt.
+func (a *App) downloadUpdateCandidate(ctx context.Context, job *UpdateDownload, address string) error {
+	req, e := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
+	if e != nil {
+		return e
+	}
+	response, e := updateClient(15*time.Minute, a.store.UpdateMirror()).Do(req)
+	if e != nil {
+		return e
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return fmt.Errorf("下载失败 (%d)", response.StatusCode)
+	}
+	if response.ContentLength >= 0 && response.ContentLength != job.Total {
+		return errors.New("更新文件大小与描述不符")
+	}
+	_ = os.Remove(job.File)
+	a.updateCheck.mu.Lock()
+	job.Received = 0
+	a.updateCheck.mu.Unlock()
+	f, e := os.OpenFile(job.File, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if e != nil {
+		return e
+	}
+	defer f.Close()
+	h := sha256.New()
+	reader := io.LimitReader(response.Body, job.Total+1)
+	buf := make([]byte, 128<<10)
+	var total int64
+	for {
+		n, re := reader.Read(buf)
+		if n > 0 {
+			total += int64(n)
+			if total > job.Total {
+				return errors.New("更新文件超过描述的大小")
+			}
+			if _, e = f.Write(buf[:n]); e != nil {
+				return e
+			}
+			h.Write(buf[:n])
+			a.updateCheck.mu.Lock()
+			job.Received = total
+			a.updateCheck.mu.Unlock()
+		}
+		if re == io.EOF {
+			break
+		}
+		if re != nil {
+			return re
+		}
+	}
+	if total != job.Total || hex.EncodeToString(h.Sum(nil)) != job.Package.SHA256 {
+		return errors.New("更新文件 SHA-256 校验失败")
+	}
+	return f.Sync()
 }
 func (a *App) finishUpdateDownload(ctx context.Context, job *UpdateDownload, err error) {
 	a.updateCheck.mu.Lock()

@@ -152,7 +152,8 @@ func (a *App) fontLibraryClient() *http.Client {
 	if a.fontLibrary.client != nil {
 		return a.fontLibrary.client
 	}
-	return updateClient(2 * time.Minute)
+	// Font library traffic never uses the update accelerator mirror.
+	return updateClient(2*time.Minute, "")
 }
 
 func fetchLibraryFile(ctx context.Context, client *http.Client, file LibraryFile, progress func(int64)) ([]byte, error) {

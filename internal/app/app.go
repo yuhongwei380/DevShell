@@ -145,7 +145,7 @@ func (a *App) Handler(assets fs.FS) http.Handler {
 		if err != nil {
 			notes, _ = release.Read(ApplicationVersion)
 		}
-		data, _ := json.Marshal(map[string]any{"securityLock": lockState, "base": a.baseURL, "token": a.token, "theme": preferences.Theme, "uiScale": preferences.UIScale, "uiPreferences": uiPreferences, "uiFontRuntime": a.uiFontRuntime(), "version": ApplicationVersion, "displayVersion": ApplicationDisplayVersion, "build": ApplicationBuild, "releaseNotes": notes})
+		data, _ := json.Marshal(map[string]any{"securityLock": lockState, "base": a.baseURL, "token": a.token, "theme": preferences.Theme, "uiScale": preferences.UIScale, "uiPreferences": uiPreferences, "uiFontRuntime": a.uiFontRuntime(), "version": ApplicationVersion, "displayVersion": ApplicationDisplayVersion, "build": ApplicationBuild, "updateMirror": preferences.UpdateMirror, "releaseNotes": notes})
 		fmt.Fprintf(w, "window.DEVSHELL = %s;", data)
 	})
 	mux.HandleFunc("GET /api/ui-fonts/runtime", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, a.uiFontRuntime()) })

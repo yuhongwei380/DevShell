@@ -250,7 +250,7 @@ func TestUpdateUnavailableDeadlineAndMalformed(t *testing.T) {
 	}
 }
 func TestUpdateRejectsForeignRedirect(t *testing.T) {
-	client := updateClient(time.Second)
+	client := updateClient(time.Second, "")
 	req, _ := http.NewRequest("GET", "https://evil.example/up.exe", nil)
 	if client.CheckRedirect(req, nil) == nil {
 		t.Fatal("foreign host accepted")

@@ -12,32 +12,36 @@ import (
 // Appearance is stored alongside connection settings, so native and browser
 // windows use the same selection and custom assets survive application upgrades.
 type Appearance struct {
-	UIFontID            string                     `json:"uiFontId"`
-	UITextColors        map[string]string          `json:"uiTextColors"`
-	FontID              string                     `json:"fontId"`
-	FontColors          map[string]string          `json:"fontColors,omitempty"`
-	FontBold            map[string]bool            `json:"fontBold"`
-	ChartStyles         map[string]ChartLineStyle  `json:"chartStyles"`
-	BackgroundID        string                     `json:"backgroundId"`
-	BackgroundOpacity   float64                    `json:"backgroundOpacity"`
-	BackgroundVersion   int                        `json:"backgroundVersion"`
-	UIScale             float64                    `json:"uiScale"`
-	TerminalFontSize    float64                    `json:"terminalFontSize"`
-	TerminalBold        bool                       `json:"terminalBold,omitempty"` // Legacy input only; migrated to the selected font.
-	Theme               string                     `json:"theme"`
-	AnsiPalette         string                     `json:"ansiPalette,omitempty"` // soft (default) | vivid | bright
-	WindowWidth         int                        `json:"windowWidth"`
-	WindowHeight        int                        `json:"windowHeight"`
-	WindowMaximised     bool                       `json:"windowMaximised"`
-	OnboardingCompleted bool                       `json:"onboardingCompleted"`
-	MonitorVisible      bool                       `json:"monitorVisible"`
-	FilesPosition       string                     `json:"filesPosition"`
-	FollowTerminal      bool                       `json:"followTerminal"`
-	PromptUsernameColor string                     `json:"promptUsernameColor"`
-	PromptHostnameColor string                     `json:"promptHostnameColor"`
-	MinimizeAction      string                     `json:"minimizeAction"`
-	ExternalEditor      string                     `json:"externalEditor"`
-	Layout              map[string]json.RawMessage `json:"layout"`
+	UIFontID            string                    `json:"uiFontId"`
+	UITextColors        map[string]string         `json:"uiTextColors"`
+	FontID              string                    `json:"fontId"`
+	FontColors          map[string]string         `json:"fontColors,omitempty"`
+	FontBold            map[string]bool           `json:"fontBold"`
+	ChartStyles         map[string]ChartLineStyle `json:"chartStyles"`
+	BackgroundID        string                    `json:"backgroundId"`
+	BackgroundOpacity   float64                   `json:"backgroundOpacity"`
+	BackgroundVersion   int                       `json:"backgroundVersion"`
+	UIScale             float64                   `json:"uiScale"`
+	TerminalFontSize    float64                   `json:"terminalFontSize"`
+	TerminalBold        bool                      `json:"terminalBold,omitempty"` // Legacy input only; migrated to the selected font.
+	Theme               string                    `json:"theme"`
+	AnsiPalette         string                    `json:"ansiPalette,omitempty"` // soft (default) | vivid | bright
+	WindowWidth         int                       `json:"windowWidth"`
+	WindowHeight        int                       `json:"windowHeight"`
+	WindowMaximised     bool                      `json:"windowMaximised"`
+	OnboardingCompleted bool                      `json:"onboardingCompleted"`
+	MonitorVisible      bool                      `json:"monitorVisible"`
+	FilesPosition       string                    `json:"filesPosition"`
+	FollowTerminal      bool                      `json:"followTerminal"`
+	PromptUsernameColor string                    `json:"promptUsernameColor"`
+	PromptHostnameColor string                    `json:"promptHostnameColor"`
+	MinimizeAction      string                    `json:"minimizeAction"`
+	ExternalEditor      string                    `json:"externalEditor"`
+	// UpdateMirror is the optional GitHub accelerator origin (ghproxy-style
+	// URL prefix) used for update manifest and artifact fetches. Empty means
+	// direct connections; signature, build and SHA-256 checks still apply.
+	UpdateMirror string                     `json:"updateMirror,omitempty"`
+	Layout       map[string]json.RawMessage `json:"layout"`
 }
 
 func defaultAppearance() Appearance {
@@ -134,6 +138,14 @@ func (s *Store) SaveAppearance(value Appearance) (Appearance, error) {
 	return s.saveAppearanceLocked(value)
 }
 
+// UpdateMirror returns the persisted, normalized GitHub accelerator origin for
+// update traffic; empty means direct connections.
+func (s *Store) UpdateMirror() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.config.Appearance.UpdateMirror
+}
+
 // Caller holds s.mu across reading, validation and committing the new value.
 func (s *Store) saveAppearanceLocked(value Appearance) (Appearance, error) {
 	if value.UIFontID == "" {
@@ -151,6 +163,11 @@ func (s *Store) saveAppearanceLocked(value Appearance) (Appearance, error) {
 	if len(value.ExternalEditor) > 4096 || strings.ContainsAny(value.ExternalEditor, "\x00\r\n") {
 		return Appearance{}, errors.New("外部编辑器路径无效")
 	}
+	mirror, err := normalizeUpdateMirror(value.UpdateMirror)
+	if err != nil {
+		return Appearance{}, err
+	}
+	value.UpdateMirror = mirror
 	if value.FilesPosition == "" {
 		value.FilesPosition = "right"
 	}

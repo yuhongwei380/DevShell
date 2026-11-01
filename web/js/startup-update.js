@@ -4,7 +4,7 @@
  function showUpdate(result){return new Promise(resolve=>{
   const dialog=document.createElement('dialog');dialog.id='startup-update-dialog';dialog.className='manager-dialog startup-update-dialog';dialog.setAttribute('aria-labelledby','startup-update-title');
   dialog.innerHTML='<div class="dialog-heading"><div><h2 id="startup-update-title">发现 DevShell 更新</h2><p id="startup-update-versions"></p></div><button type="button" class="icon-button" aria-label="稍后再说"><svg><use href="#i-close"/></svg></button></div><div class="startup-update-content"><p class="startup-update-source">更新来源：GitHub Releases · SHA-256 校验</p><h3>更新内容</h3><p id="startup-update-notes"></p><p class="startup-update-install-note"></p><div id="startup-update-progress" hidden><progress max="100" value="0"></progress><p role="status"></p></div><p id="startup-update-error" role="alert"></p></div><div class="startup-update-actions"><button type="button" class="secondary-button" id="startup-update-later">稍后再说</button><button type="button" class="primary-button" id="startup-update-install">下载并安装更新</button></div>';
-  dialog.querySelector('.startup-update-source').textContent='更新来源：GitHub Releases（yuhongwei380/DevShell）· HTTPS 与 SHA-256 校验';
+  dialog.querySelector('.startup-update-source').textContent='更新来源：GitHub Releases（yuhongwei380/DevShell）· HTTPS 与 SHA-256 校验';if(result.mirror)dialog.querySelector('.startup-update-source').textContent=`更新来源：加速域名 ${result.mirror} · HTTPS 与 SHA-256 校验`;
   const versionLabel=(version,build)=>build?`${version}（构建 ${build}）`:version;dialog.querySelector('#startup-update-versions').textContent=`${versionLabel(result.currentVersion,result.currentBuild)} → ${versionLabel(result.latestVersion,result.latestBuild)}`;dialog.querySelector('#startup-update-notes').textContent=result.notes||'发布者尚未提供更新说明。';dialog.querySelector('.startup-update-install-note').textContent=result.platform.startsWith('linux')?`确认后下载并校验${result.package?.format==='pacman'?' Arch 安装包':' DEB 安装包'}，关闭当前 SSH 会话，再打开系统安装授权。安装后继续使用当前数据目录。`:'确认后下载并校验程序，关闭当前 SSH 会话，保留旧程序副本并自动重新启动。';
   window.DengReleaseNoteTags?.highlight(dialog.querySelector('#startup-update-notes'));
   const manual=result.installerReady===false;if(manual)dialog.querySelector('.startup-update-install-note').textContent=result.reason||'请从 GitHub Releases 下载对应安装包，保留原数据目录。';
@@ -28,10 +28,29 @@ async function checkNow(){
   if(result?.status==='available'){await showUpdate(result);return;}
   const label=(version,build)=>build?`${version}（构建 ${build}）`:version;
   if(result?.reason==='current'||result?.reason==='build-rollback'||result?.reason==='version-rollback')toast(`已是最新版本 ${label(result.currentVersion,result.currentBuild)}`);
-  else toast(`检查更新失败：${({unavailable:'网络不可用或无法访问更新源',timeout:'检查超时，请稍后再试','release-not-found':'更新源中未找到匹配的 Release 资产','invalid-receipt':'本地更新记录损坏',invalid:'更新描述校验未通过','invalid-signature':'更新签名校验未通过','platform-unavailable':'当前平台未提供内置更新，请从 GitHub Releases 下载对应安装包升级，原数据目录会保留','linux-discontinued':'Linux 版已停止发布更新，当前版本可继续使用；如需升级请改用 Windows / macOS 版，旧版安装包仍可在 Releases 历史版本中获取'})[result?.reason]||'未知错误'}`);
+  else{const reasonTexts={unavailable:'网络不可用或无法访问更新源',timeout:'检查超时，请稍后再试','release-not-found':'更新源中未找到匹配的 Release 资产','invalid-receipt':'本地更新记录损坏',invalid:'更新描述校验未通过','invalid-signature':'更新签名校验未通过','platform-unavailable':'当前平台未提供内置更新，请从 GitHub Releases 下载对应安装包升级，原数据目录会保留','linux-discontinued':'Linux 版已停止发布更新，当前版本可继续使用；如需升级请改用 Windows / macOS 版，旧版安装包仍可在 Releases 历史版本中获取'};const mirrorHint=['unavailable','timeout','release-not-found'].includes(result?.reason)?'；可在「更新加速域名」中填写 GitHub 加速地址后重试':'';toast(`检查更新失败：${reasonTexts[result?.reason]||'未知错误'}${mirrorHint}`);}
  }catch(error){toast(`检查更新失败：${error.message||String(error)}`)}
  finally{checking=false}
 }
-window.DengUpdates={checkNow,showUpdate};
+window.DengUpdates={checkNow,showUpdate,mirrorSettings};
+ // GitHub accelerator settings: ghproxy-style prefix hosts tried before the
+ // canonical GitHub URLs. Manifest trust (product/platform/build/SHA-256) and
+ // the downloaded-file SHA-256 check are unchanged; a failing accelerator
+ // still falls back to direct GitHub.
+const MIRROR_PRESETS=[['直连 GitHub（默认）',''],['gh-proxy.org','https://gh-proxy.org'],['ghfast.top','https://ghfast.top'],['mirror.mikus.ink','https://mirror.mikus.ink']];
+function mirrorSettings(){return new Promise(resolve=>{
+ const dialog=document.createElement('dialog');dialog.className='manager-dialog startup-update-dialog';dialog.id='update-mirror-dialog';
+ dialog.innerHTML='<div class="dialog-heading"><div><h2>GitHub 更新加速域名</h2><p id="update-mirror-note">网络受限时可改用镜像下载更新，清单与安装包仍强制校验</p></div><button type="button" class="icon-button" aria-label="关闭加速设置"><svg><use href="#i-close"/></svg></button></div><div class="update-mirror-body"><label for="update-mirror-preset">常用加速域名</label><select id="update-mirror-preset">'+MIRROR_PRESETS.map(([label,value])=>`<option value="${value}">${label}</option>`).join('')+'<option value="__custom">自定义…</option></select><label for="update-mirror-input">自定义地址（https，仅主机名）</label><input id="update-mirror-input" placeholder="例如 https://gh-proxy.org" spellcheck="false" autocomplete="off"><p class="update-mirror-help">下载仍会校验产品、平台、构建号与 SHA-256；加速域名失败时自动回落直连。留空即直连。</p><p id="update-mirror-error" role="alert"></p></div><div class="dialog-buttons"><button type="button" class="secondary-button" id="update-mirror-clear">清除（直连）</button><button type="button" class="primary-button" id="update-mirror-save">保存</button></div>';
+ const preset=dialog.querySelector('#update-mirror-preset'),input=dialog.querySelector('#update-mirror-input'),error=dialog.querySelector('#update-mirror-error');
+ const fill=value=>{const known=MIRROR_PRESETS.find(([,v])=>v===value);preset.value=known?value:'__custom';if(known)input.value='';else input.value=value||'';};
+ const current=async()=>{try{const config=await api('/api/config');fill(config?.appearance?.updateMirror||'')}catch{fill('')}};
+ const commit=async value=>{error.textContent='';try{await post('/api/appearance/patch',{updateMirror:String(value||'').trim()});toast(String(value||'').trim()?'已保存，检查与下载更新将优先使用该加速域名':'已清除加速域名，恢复直连 GitHub');dialog.close();}catch(reason){error.textContent=reason?.message||String(reason)}};
+ preset.onchange=()=>{if(preset.value!=='__custom')input.value=''};
+ dialog.querySelector('#update-mirror-save').onclick=()=>commit(preset.value==='__custom'?input.value:preset.value);
+ dialog.querySelector('#update-mirror-clear').onclick=()=>{fill('');commit('')};
+ const close=()=>dialog.close();dialog.querySelector('.icon-button').onclick=close;dialog.oncancel=event=>{event.preventDefault();close()};
+ dialog.addEventListener('close',()=>{dialog.remove();resolve()},{once:true});
+ document.body.append(dialog);dialog.showModal();current();
+});}
 document.addEventListener('DOMContentLoaded',async()=>{let timer;try{if(window.DEVSHELL?.detachedNonce)return;const check=Promise.race([api('/api/updates/check').catch(()=>null),new Promise(resolve=>{timer=setTimeout(()=>resolve(null),3000)})]);const result=await check;clearTimeout(timer);if(result?.status==='available')await showUpdate(result);}catch(e){console.warn('启动更新检查未完成',e)}finally{clearTimeout(timer);resolveStartup();window.dispatchEvent(new Event('dengshell:startup-ready'))}},{once:true});
 })();
