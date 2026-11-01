@@ -31,7 +31,7 @@ VIAddVersionKey /LANG=2052 "LegalCopyright" "DevShell contributors · MIT"
 !define MUI_FINISHPAGE_RUN "$INSTDIR\DevShell.exe"
 !define MUI_FINISHPAGE_RUN_TEXT "启动 DevShell"
 !insertmacro MUI_PAGE_FINISH
-!define MUI_UNCONFIRMPAGE_TEXT_TOP "卸载会移除程序和快捷方式，并保留 data 中的个人配置、密钥、字体和背景。"
+!define MUI_UNCONFIRMPAGE_TEXT_TOP "卸载会移除程序和快捷方式，并保留 data 中的连接凭据、个人配置、密钥、字体和背景；重新安装到原位置后连接照常可用。"
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "SimpChinese"

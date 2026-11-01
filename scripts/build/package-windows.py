@@ -34,6 +34,20 @@ def build(stage, output):
                         './cmd/installer-control'], cwd=ROOT, check=True,
                        env={**os.environ, 'GOOS': 'windows', 'GOARCH': 'amd64', 'CGO_ENABLED': '0'})
         files = sorted(p for p in stage.rglob('*') if p.is_file())
+        # Hard guard: the uninstall list must stay inside the distribution
+        # layout (program file, docs, licenses, support entries). Personal
+        # configuration, connection credentials, keys, fonts and backgrounds
+        # under data\ must never be deletable by the uninstaller, and the
+        # recursive delete form is banned outright.
+        def program_owned(relative: str) -> bool:
+            rel = relative.replace('\\', '/')
+            return (rel in ('data', 'data/docs', 'data/licenses', 'data/support')
+                    or rel.startswith('data/docs/') or rel.startswith('data/licenses/')
+                    or rel == 'DevShell.exe')
+        for p in stage.rglob('*'):
+            relative = str(p.relative_to(stage))
+            if not program_owned(relative):
+                raise SystemExit(f'staging contains non-program file, refusing to build uninstaller: {relative}')
         uninstall = []
         for p in files:
             if p.relative_to(stage).as_posix() == 'DevShell.exe':
@@ -44,6 +58,9 @@ def build(stage, output):
             relative = nsis_string(str(p.relative_to(stage)).replace('/', '\\'))
             uninstall.append(f'RMDir "$INSTDIR\\{relative}"')
         (temp / 'uninstall-files.nsh').write_text('\n'.join(uninstall)+'\n', encoding='utf-8')
+        nsh = (temp / 'uninstall-files.nsh').read_text(encoding='utf-8')
+        if 'RMDir /r' in nsh:
+            raise SystemExit('uninstaller manifest contains a recursive delete')
         # makensis uses libc tmpfile(), which ignores TMPDIR on Linux. A private
         # mount keeps its mmap scratch on disk without touching the system /tmp.
         prefix = []
