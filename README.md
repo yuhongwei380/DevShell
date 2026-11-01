@@ -6,7 +6,7 @@ DevShell 是一款中文界面的开源 SSH 桌面工具，适合日常管理 VP
 
 本说明对应正式版 **v26.10.1 · 构建 2026102401**。本版把 v26.10.0 以来的全部改动统一发布：监控面板固定在左侧并可在外观配置中显示／隐藏，窄窗口终端头部按钮紧凑成组，首次启动 SFTP 面板默认收起，设置新增“外观配置”入口。左侧监控宽度固定为 304 px，右侧 SFTP 固定为 420 px（小窗口下相应收窄），磁盘监控只显示总容量大于 10 GB 的挂载点。[正式版下载](https://github.com/yuhongwei380/DevShell/releases/tag/v26.10.1-build26102401)；构建号已切换为 `YYYYMMDD` + 两位序号，新的构建号数值低于历史十一位构建号，**此前安装的任意版本（含测试版）需手动安装本构建一次**，之后可继续使用内置更新。完整变化见 [更新日志](CHANGELOG.md)。
 
-当前测试版为 **v26.10.3-rc.1 · 构建 2026102502**，包含右侧 SFTP 扩窗、Shell 上传进度与完成提示、暗色进度环修复及 DevShell 命名统一。[测试版下载](https://github.com/yuhongwei380/DevShell/releases/tag/v26.10.3-rc1-build26102502)。正式版用户需手动安装测试版。
+当前测试版为 **v26.11.0-rc.1 · 构建 2026103103**，包含上传状态圆环进度、SFTP 面板位置设置、「跟随终端目录」默认开启、双击断开标签订重连等。[测试版下载](https://github.com/yuhongwei380/DevShell/releases/tag/v26.11.0-rc.1-build26103103)。正式版用户需手动安装测试版。
 
 > **项目来源**：本项目源自上游 [BitsFlowCloud/DengShell](https://github.com/BitsFlowCloud/DengShell) 的 **DengShell v0.03 分支**，在此基础上独立维护。上游改动不再自动同步，已移植的上游改进（构建 107–114）见更新日志。
 

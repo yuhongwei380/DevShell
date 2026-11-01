@@ -66,13 +66,11 @@ jobs:
           $notes = "docs/release/RELEASE-$tag.md"
           if (-not (Test-Path $notes)) { $notes = "docs/release/RELEASE-$version.md" }
           $releaseOptions = @('--latest')
-          $title = $tag
           if ($tag -match '-(rc|alpha|beta)([0-9.-]|$)') {
             $releaseOptions = @('--prerelease', '--latest=false')
-          } else {
-            # 正式版 title 只体现版本号：去掉 tag 的 -build<构建号> 后缀；rc 保留完整 tag。
-            $title = $tag -replace '-build\d+$',''
           }
+          # 发版 title（正式版与 rc 一致）只体现版本号：去掉 tag 的 -build<构建号> 后缀；构建号保留在 tag/发版说明/CHANGELOG。
+          $title = $tag -replace '-build\d+$',''
           if (gh release view $tag 2>$null) {
             gh release edit $tag --title "DevShell $title" --notes-file $notes @releaseOptions
           } else {
@@ -108,13 +106,11 @@ jobs:
           notes="docs/release/RELEASE-$tag.md"
           if [[ ! -f "$notes" ]]; then notes="docs/release/RELEASE-$version.md"; fi
           release_options=(--latest)
-          title="$tag"
           if [[ "$tag" =~ -(rc|alpha|beta)([0-9.-]|$) ]]; then
             release_options=(--prerelease --latest=false)
-          else
-            # 正式版 title 只体现版本号：去掉 tag 的 -build<构建号> 后缀；rc 保留完整 tag。
-            title="${tag%-build*}"
           fi
+          # 发版 title（正式版与 rc 一致）只体现版本号：去掉 tag 的 -build<构建号> 后缀；构建号保留在 tag/发版说明/CHANGELOG。
+          title="${tag%-build*}"
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release edit "$tag" --title "DevShell $title" --notes-file "$notes" "${release_options[@]}"
           else
