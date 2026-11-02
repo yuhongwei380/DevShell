@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 )
 
@@ -32,12 +33,19 @@ func parseMonitorGPUs(lines []string) []GPU {
 			if card != "" && card != "device" {
 				name = fmt.Sprintf("AMD 独立显卡 (%s)", card)
 			}
-			gpus = append(gpus, GPU{Name: name, MemUsed: number(fields[2]), MemTotal: total, Util: percentValue(fields[4])})
+			gpus = append(gpus, GPU{Index: len(gpus), Name: name, MemUsed: number(fields[2]), MemTotal: total, Util: percentValue(fields[4])})
 			continue
 		}
 		fields := strings.Split(line, ",")
 		if len(fields) < 5 {
 			continue
+		}
+		// Keep the nvidia-smi ordinal: after a card drops off the bus the probe
+		// still reports the surviving GPUs with their real indices, and the
+		// panel must not renumber them into the missing card's slot.
+		index := len(gpus)
+		if parsed, err := strconv.Atoi(strings.TrimSpace(fields[0])); err == nil {
+			index = parsed
 		}
 		util := percentValue(fields[len(fields)-1])
 		total := decimal(strings.TrimSpace(fields[len(fields)-2]))
@@ -46,7 +54,7 @@ func parseMonitorGPUs(lines []string) []GPU {
 		if name == "" || total <= 0 || used < 0 {
 			continue
 		}
-		gpus = append(gpus, GPU{Name: name, MemUsed: uint64(used) << 20, MemTotal: uint64(total) << 20, Util: util})
+		gpus = append(gpus, GPU{Index: index, Name: name, MemUsed: uint64(used) << 20, MemTotal: uint64(total) << 20, Util: util})
 	}
 	return gpus
 }

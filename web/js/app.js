@@ -900,7 +900,9 @@ async function pollStats() {
 }
 function meter(selector, percent, detail, valid = true) { const el = $(selector); el.querySelector('i').style.width = `${valid ? Math.max(0, Math.min(100, percent)) : 0}%`; el.querySelector('b').textContent = valid ? `${percent.toFixed(1)}%` : '—'; el.querySelector('em').textContent = detail; }
 // Discrete GPUs only: the backend never reports integrated graphics, so an
-// empty list hides the whole block. Multi-GPU hosts get GPU0, GPU1, ... rows.
+// empty list hides the whole block. Rows keep the probe's own ordinals
+// (GPU0, GPU1, ...): after a card drops off the bus the survivors display
+// their real nvidia-smi indices instead of being renumbered from 0.
 function renderGPUs(stats) {
   const gpus = stats?.gpus || [], box = $('#gpu-metrics');
   box.hidden = !gpus.length;
@@ -912,7 +914,7 @@ function renderGPUs(stats) {
     const meter = node('div', 'meter');
     const fill = node('i', 'gpu-fill'); fill.style.width = `${util}%`;
     meter.append(fill, node('b', '', `${util.toFixed(1)}%`), node('em', '', gpu.memTotal ? `显存 ${prettySize(gpu.memUsed)} / ${prettySize(gpu.memTotal)}` : '显存未知'));
-    row.append(node('span', '', `GPU${index}`), meter);
+    row.append(node('span', '', `GPU${Number.isInteger(gpu.index) && gpu.index >= 0 ? gpu.index : index}`), meter);
     return row;
   }));
 }

@@ -113,9 +113,12 @@ type Disk struct {
 }
 
 // GPU is one discrete graphics card detected on the remote host. Integrated
-// GPUs (no dedicated VRAM) are never reported.
+// GPUs (no dedicated VRAM) are never reported. Index is the nvidia-smi ordinal
+// when available so a card that drops off the bus (e.g. GPU0 losing its driver
+// and leaving 1/2/3) keeps its real label instead of being renumbered from 0.
 type GPU struct {
 	Name     string  `json:"name"`
+	Index    int     `json:"index"`
 	MemUsed  uint64  `json:"memUsed"`
 	MemTotal uint64  `json:"memTotal"`
 	Util     float64 `json:"util"`

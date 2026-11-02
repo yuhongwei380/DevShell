@@ -16,16 +16,34 @@ func TestParseMonitorGPUsNVIDIACSV(t *testing.T) {
 	if len(gpus) != 3 {
 		t.Fatalf("expected 3 usable GPUs, got %d: %+v", len(gpus), gpus)
 	}
-	if gpus[0].Name != "NVIDIA GeForce RTX 4090" || gpus[0].MemUsed != 1234<<20 || gpus[0].MemTotal != 24576<<20 || gpus[0].Util != 45 {
+	if gpus[0].Name != "NVIDIA GeForce RTX 4090" || gpus[0].MemUsed != 1234<<20 || gpus[0].MemTotal != 24576<<20 || gpus[0].Util != 45 || gpus[0].Index != 0 {
 		t.Fatalf("unexpected first GPU: %+v", gpus[0])
 	}
-	if gpus[1].Name != "NVIDIA H100 PCIe" || gpus[1].MemTotal != 81559<<20 {
+	if gpus[1].Name != "NVIDIA H100 PCIe" || gpus[1].MemTotal != 81559<<20 || gpus[1].Index != 1 {
 		t.Fatalf("unexpected second GPU: %+v", gpus[1])
 	}
 	// Names containing commas keep everything between the index and the last
 	// three numeric columns as the display name.
-	if gpus[2].Name != "Some, Comma, Name, GPU" || gpus[2].MemUsed != 512<<20 || gpus[2].MemTotal != 1024<<20 || gpus[2].Util != 10 {
+	if gpus[2].Name != "Some, Comma, Name, GPU" || gpus[2].MemUsed != 512<<20 || gpus[2].MemTotal != 1024<<20 || gpus[2].Util != 10 || gpus[2].Index != 3 {
 		t.Fatalf("unexpected comma-named GPU: %+v", gpus[2])
+	}
+}
+
+// A card that drops off the bus leaves a gap in nvidia-smi's index column;
+// the survivors must keep their real ordinals instead of being renumbered.
+func TestParseMonitorGPUsKeepsNVIDIAIndexAfterDropout(t *testing.T) {
+	gpus := parseMonitorGPUs([]string{
+		"1, NVIDIA GeForce RTX 4090, 1234, 24576, 45",
+		"2, NVIDIA GeForce RTX 4090, 0, 24576, 0",
+		"3, NVIDIA GeForce RTX 4090, 10, 24576, 5",
+	})
+	if len(gpus) != 3 {
+		t.Fatalf("expected 3 surviving GPUs, got %+v", gpus)
+	}
+	for i, expected := range []int{1, 2, 3} {
+		if gpus[i].Index != expected {
+			t.Fatalf("GPU after dropout must keep nvidia-smi index %d, got %+v", expected, gpus[i])
+		}
 	}
 }
 
@@ -39,7 +57,7 @@ func TestParseMonitorGPUsAMDSysfs(t *testing.T) {
 		t.Fatalf("expected only the discrete AMD card, got %+v", gpus)
 	}
 	gpu := gpus[0]
-	if gpu.Name != "AMD 独立显卡 (card2)" || gpu.MemUsed != 2147483648 || gpu.MemTotal != 25769803776 || gpu.Util != 18 {
+	if gpu.Name != "AMD 独立显卡 (card2)" || gpu.MemUsed != 2147483648 || gpu.MemTotal != 25769803776 || gpu.Util != 18 || gpu.Index != 0 {
 		t.Fatalf("unexpected AMD GPU: %+v", gpu)
 	}
 }
