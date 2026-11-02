@@ -1,14 +1,14 @@
 'use strict';
 // Apply the same category emphasis to plain-text update offers and rendered logs.
 window.DengReleaseNoteTags = (() => {
-  const kinds = { 新增: 'added', 修复: 'fixed', 调整: 'changed' };
+  const kinds = { 新增: 'added', 修复: 'fixed', 调整: 'changed', 安全: 'security' };
   function highlight(container) {
     const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT), texts = [];
     while (walker.nextNode()) {
       if (!walker.currentNode.parentElement.closest('pre,code,.release-note-tag')) texts.push(walker.currentNode);
     }
     for (const text of texts) {
-      const matches = [...text.data.matchAll(/(^|[\r\n])([ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?)(新增|修复|调整)([：:])([ \t]*)/g)];
+      const matches = [...text.data.matchAll(/(^|[\r\n])([ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?)(新增|修复|调整|安全)([：:])([ \t]*)/g)];
       if (!matches.length) continue;
       const fragment = document.createDocumentFragment();
       let offset = 0;

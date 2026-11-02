@@ -88,15 +88,15 @@ try {
   const originalTheme = await page.evaluate(() => DevShellTheme.preference);
   const categoryParsing = await page.evaluate(() => {
     const container = document.createElement('div');
-    container.innerHTML = '<p>新增：项目</p><p>修复: 项目</p><p>  1. 调整：项目</p><pre>新增：代码块</pre><p><code>修复：行内代码</code></p><p>正文中的调整：保持不变</p>';
+    container.innerHTML = '<p>新增：项目</p><p>修复: 项目</p><p>  1. 调整：项目</p><p>安全：项目</p><pre>新增：代码块</pre><p><code>修复：行内代码</code></p><p>正文中的调整：保持不变</p>';
     const original = container.textContent;
     DengReleaseNoteTags.highlight(container);
     const first = container.innerHTML;
     DengReleaseNoteTags.highlight(container);
     return { kinds: [...container.querySelectorAll('.release-note-tag')].map(tag => tag.dataset.kind), originalPreserved: original === container.textContent, repeatedUnchanged: first === container.innerHTML, codeTags: container.querySelectorAll('pre .release-note-tag,code .release-note-tag').length };
   });
-  assert.deepEqual(categoryParsing, { kinds: ['added', 'fixed', 'changed'], originalPreserved: true, repeatedUnchanged: true, codeTags: 0 });
-  async function assertCategoryColors(selector, expectedKinds = ['added', 'changed', 'fixed']) {
+  assert.deepEqual(categoryParsing, { kinds: ['added', 'fixed', 'changed', 'security'], originalPreserved: true, repeatedUnchanged: true, codeTags: 0 });
+  async function assertCategoryColors(selector, expectedKinds = ['added', 'changed', 'fixed', 'security']) {
     const tags = await page.$eval(selector, container => {
       const luminance = css => {
         const channels = css.match(/[\d.]+/g).slice(0, 3).map(Number).map(value => { const c = value / 255; return c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4; });
@@ -125,10 +125,10 @@ try {
     }
   }
   const releaseKinds = await page.evaluate(() => {
-    const kinds = { 新增: 'added', 修复: 'fixed', 调整: 'changed' };
-    return [...new Set([...DEVSHELL.releaseNotes.matchAll(/(?:^|\n)\s*(?:[-*+]\s+)?(新增|修复|调整)[：:]/g)].map(match => kinds[match[1]]))].sort();
+    const kinds = { 新增: 'added', 修复: 'fixed', 调整: 'changed', 安全: 'security' };
+    return [...new Set([...DEVSHELL.releaseNotes.matchAll(/(?:^|\n)\s*(?:[-*+]\s+)?(新增|修复|调整|安全)[：:]/g)].map(match => kinds[match[1]]))].sort();
   });
-  const categoryFixture = '新增：第一项\n修复: 第二项\n- 调整：第三项';
+  const categoryFixture = '新增：第一项\n修复: 第二项\n- 调整：第三项\n- 安全：第四项';
   for (const theme of ['light', 'dark']) {
     await page.evaluate(value => DevShellTheme.set(value), theme);
     await page.waitForFunction(() => !document.documentElement.dataset.lightSwitch);
