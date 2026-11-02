@@ -1,0 +1,9 @@
+# Issues 模板选择配置
+# blank_issues_enabled: false 可强制用户只能从下方模板新建
+
+blank_issues_enabled: true
+
+contact_links:
+  - name: 先看常见问题（FAQ）
+    url: https://github.com/yuhongwei380/DevShell/blob/master/README.md#%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98
+    about: 连接失败、更新、安装等问题大多已在 README「常见问题」中说明，请先自查。

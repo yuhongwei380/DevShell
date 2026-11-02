@@ -1,0 +1,127 @@
+name: 🐞 问题反馈
+description: 报告 DevShell 使用中遇到的问题（崩溃、显示异常、连接失败等）
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈！请尽量填写完整，方便快速复现问题。
+        提交前请先阅读 [README 常见问题](https://github.com/yuhongwei380/DevShell/blob/master/README.md#%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98)，并搜索 [已有 Issues](https://github.com/yuhongwei380/DevShell/issues?q=is%3Aissue) 是否已有人反馈。
+
+  - type: input
+    id: version
+    attributes:
+      label: DevShell 版本与构建号
+      description: 可在「关于」页面或标题栏查看，例如 `v26.11.0-rc.2 · 构建 2026110101`
+      placeholder: "v26.11.0-rc.2 · 构建 2026110101"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: 操作系统
+      multiple: true
+      options:
+        - Windows 11
+        - Windows 10
+        - macOS 27
+        - macOS 26
+        - macOS 15
+        - Linux（历史版本）
+        - 其他（请在下方说明）
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 涉及功能
+      multiple: true
+      options:
+        - 服务器与连接管理
+        - SSH 终端 / 多会话
+        - 串口终端
+        - SFTP 文件管理 / 编辑
+        - 服务器监控
+        - 网络诊断（ping / MTR）
+        - 命令历史与快捷命令
+        - 密钥 / 代理管理
+        - 外观、字体与主题
+        - 安装、卸载与内置更新
+        - 启动 / 崩溃
+        - 其他
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 发生了什么
+      description: 描述实际出现的现象，崩溃请说明是否有报错弹窗或程序直接退出
+      placeholder: 例如：连接某台服务器后，点击 SFTP 面板程序退出……
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望的行为
+      placeholder: 你认为正常应该是什么样？
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 按步骤写，能给出稳定复现的路径最好
+      placeholder: |
+        1. 打开「服务器管理」，新建一条 SSH 连接
+        2. 双击连接打开终端
+        3. ……
+    validations:
+      required: true
+
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: 出现频率
+      options:
+        - 每次必现
+        - 偶尔出现
+        - 之后再未出现
+    validations:
+      required: true
+
+  - type: dropdown
+    id: after-update
+    attributes:
+      label: 是否在升级到较新版本后才出现？
+      options:
+        - 是（请注明上个正常的版本号）
+        - 否
+        - 不确定
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志与截图
+      description: 可直接拖拽截图或日志文件到此输入框；日志请留意脱敏，删除 IP、主机名、密钥等敏感信息
+      render: text
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: precheck
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我已搜索已有 Issues，没有相同问题
+          required: true
+        - label: 我已填写当前使用的版本号与构建号
+          required: true
