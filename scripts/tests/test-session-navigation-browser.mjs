@@ -43,20 +43,17 @@ try {
   const conciseSnapshot = () => page.evaluate(() => ({ concise: document.documentElement.dataset.concise, meta: getComputedStyle(document.querySelector('.terminal-meta')).display, monitor: document.documentElement.dataset.monitorVisible, files: document.querySelector('#files-panel').hidden, bar: document.querySelector('.terminal-command-bar').classList.contains('command-bar-collapsed') }));
   const concisePick = async value => { await page.evaluate(v => { const box = document.querySelector('#concise-mode-setting'); box.value = v; box.dispatchEvent(new Event('change')); }, value); await new Promise(resolve => setTimeout(resolve, 120)); };
   await concisePick('false');
-  await page.waitForFunction(() => document.documentElement.dataset.concise === 'false' && document.documentElement.dataset.monitorVisible === 'true' && !document.querySelector('#files-panel').hidden && !document.querySelector('.terminal-command-bar').classList.contains('command-bar-collapsed'), { timeout: 5000 });
+  await page.waitForFunction(() => document.documentElement.dataset.concise === 'false' && document.documentElement.dataset.monitorVisible === 'true' && !document.querySelector('.terminal-command-bar').classList.contains('command-bar-collapsed'), { timeout: 5000 });
   const conciseOff = await conciseSnapshot();
   await concisePick('true');
-  await page.waitForFunction(() => document.documentElement.dataset.concise === 'true' && document.documentElement.dataset.monitorVisible === 'false' && document.querySelector('#files-panel').hidden && document.querySelector('.terminal-command-bar').classList.contains('command-bar-collapsed'), { timeout: 5000 });
+  await page.waitForFunction(() => document.documentElement.dataset.concise === 'true' && document.documentElement.dataset.monitorVisible === 'false' && document.querySelector('.terminal-command-bar').classList.contains('command-bar-collapsed'), { timeout: 5000 });
   const conciseOn = await conciseSnapshot();
   await concisePick('false');
-  await page.waitForFunction(() => document.documentElement.dataset.concise === 'false' && !document.querySelector('#files-panel').hidden, { timeout: 5000 });
-  await page.evaluate(() => document.querySelector('#toggle-sftp').click());
-  await new Promise(resolve => setTimeout(resolve, 200));
+  await page.waitForFunction(() => document.documentElement.dataset.concise === 'false' && document.documentElement.dataset.monitorVisible === 'true', { timeout: 5000 });
   assert.deepEqual(conciseSeen, { row: true, value: 'true' });
   assert.deepEqual(conciseOn, { concise: 'true', meta: 'none', monitor: 'false', files: true, bar: true });
-  assert.deepEqual(conciseOff, { concise: 'false', meta: 'flex', monitor: 'true', files: false, bar: false });
-  assert.equal(await page.evaluate(() => document.querySelector('#files-panel').hidden), true);
-  checks.push('Concise mode defaults on for new profiles, hides monitor sidebar, SFTP panel and meta bar, collapses the command bar, and restores them when off');
+  assert.deepEqual(conciseOff, { concise: 'false', meta: 'flex', monitor: 'true', files: true, bar: false });
+  checks.push('Concise mode defaults on, hides monitor sidebar, SFTP panel and meta bar, collapses the command bar, restores monitor and meta when off, and never auto-expands the SFTP panel');
   const header = await page.evaluate(() => {
     const dot = document.querySelector('#terminal-status-dot'), group = dot.parentElement, state = document.querySelector('#terminal-state');
     return { dot: getComputedStyle(dot).width, clip: getComputedStyle(group).overflow, host: getComputedStyle(document.querySelector('#terminal-meta-host')).fontSize, stateHidden: state.hidden, stateText: state.textContent };
