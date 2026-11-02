@@ -163,6 +163,7 @@
   const close=()=>{menu.remove();document.removeEventListener('pointerdown',dismiss);if(menuCleanup===close)menuCleanup=null};menuCleanup=close;
   if(window.DengQuickConnect?.canSave(state)){const save=node('button','','保存连接');save.type='button';save.setAttribute('role','menuitem');save.title='把这次临时连接保存到服务器列表';save.onclick=safe(()=>{close();return window.DengQuickConnect.saveCurrent(state)});menu.append(save);}// 快速连接的临时会话：菜单顶部"保存连接"沿用旧工具条按钮的入口逻辑
   const another=node('button','','新建同服务器会话');another.type='button';another.setAttribute('role','menuitem');another.onclick=safe(()=>{close();return connect(state.profileId)});menu.append(another);
+  if(state.profileId&&!window.DengQuickConnect?.canSave(state)){const profile=profileFor(state);if(profile){const rename=node("button","","重命名连接");rename.type="button";rename.setAttribute("role","menuitem");rename.title="修改该连接的名称，与服务器管理同步";rename.onclick=safe(()=>{close();return window.DengPinnedNav.renameProfile(profile)});menu.append(rename);}}// 已保存连接：复用链接栏右键重命名，保存后连接配置、标签与服务器列表同步
   button.onclick=safe(()=>{close();return detach(state)});menu.append(button);
   const caption=node('div','merge-window-caption','合并到窗口'),loading=node('div','merge-window-empty','正在查找其他窗口…');menu.append(caption,loading);document.documentElement.append(menu);
   window.DengWindowTransfers.targets().then(targets=>{

@@ -290,5 +290,5 @@ window.DengPinnedNav = (() => {
       if (expanded && !cancelDrag) { setExpanded(false); toggle.focus(); }
     });
   }, { once: true });
-  return { render, reflect };
+  return { render, reflect, renameProfile };
 })();

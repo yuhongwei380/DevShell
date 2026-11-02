@@ -270,7 +270,7 @@ try {
     const tab = [...$('#session-tabs').children].find(el => el.dataset.startTabId === page.id);
     DengTabOrder.commit(tab, { before: $('#session-tabs').firstElementChild.dataset.tabKey });
     const oldApi = api, oldCreate = createTerminal, oldRefresh = DengCommandHistory.refresh;
-    const profile = { id: 'tabs-replace-profile', name: '起始页建立的连接', host: 'example.invalid', user: 'qa', port: 22, auth: 'agent' };
+    const profile = await post('/api/profiles', { name: '起始页建立的连接', host: 'example.invalid', user: 'qa', port: 22, auth: 'agent', clearSecret: false });
     profiles.push(profile);
     let opened = 0;
     api = async (url, options) => url === '/api/sessions' ? { id: ++opened === 1 ? 'tabs-replaced' : 'tabs-background', profileId: profile.id, home: '/', sftpAvailable: false } : oldApi(url, options);
@@ -290,6 +290,38 @@ try {
   assert.equal(await page.evaluate(() => qaSocketCloses), 0);
   assert.equal(await page.$$eval('.session-tab.active', els => els.length), 1);
   checks.push('Closing a start page activates a neighbor without disconnecting another session');
+  const renameFlow = await page.evaluate(async () => {
+    const state = sessions.get('tabs-replaced'); if (!state) return { ok: false, reason: 'live session missing' };
+    state.ready = true;
+    const tab = [...$('#session-tabs').children].find(el => el.dataset.sessionId === 'tabs-replaced');
+    tab.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 40 }));
+    const buttons = [...document.querySelectorAll('#session-tab-menu button')];
+    const items = buttons.map(el => el.textContent.trim());
+    const item = buttons.find(el => el.textContent.includes('重命名连接'));
+    if (!item) return { ok: false, items };
+    item.click();
+    await new Promise(resolve => setTimeout(resolve, 40));
+    const dialogOpen = $('#action-dialog').open, prefilled = $('#action-input').value;
+    $('#action-input').value = '改名后的连接';
+    $('#action-form').requestSubmit();
+    let label;
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      label = document.querySelector('#session-tabs [data-session-id="tabs-replaced"] .session-tab-label')?.textContent;
+      if (label?.startsWith('改名后的连接')) break;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    const profileName = profiles.find(p => p.id === state.profileId)?.name;
+    state.ready = false;
+    document.querySelector('#session-tab-menu')?.remove();
+    return { ok: true, items, dialogOpen, prefilled, label, profileName };
+  });
+  assert(renameFlow.ok, `tab menu rename flow: ${JSON.stringify(renameFlow)}`);
+  assert(renameFlow.items.includes('重命名连接') && !renameFlow.items.some(text => text.includes('保存连接')));
+  assert.equal(renameFlow.dialogOpen, true);
+  assert.equal(renameFlow.prefilled, '起始页建立的连接');
+  assert(renameFlow.label?.startsWith('改名后的连接'), `tab label after rename: ${renameFlow.label}`);
+  assert.equal(renameFlow.profileName, '改名后的连接');
+  checks.push('Right-clicking a tab renames the saved connection; profile, tab label and lists update together');
   if (process.env.DENGSHELL_TABS_SCREENSHOT) {
     await page.evaluate(() => { DevShellTheme.set('dark'); DengStartTabs.create(); });
     await page.waitForFunction(() => !document.documentElement.dataset.lightSwitch); await settle();
