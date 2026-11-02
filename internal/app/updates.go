@@ -48,7 +48,7 @@ const ApplicationPackageVersion = "26.11.0"
 // sequence is numerically below the retired 11-digit high-water mark
 // (20261024156), so installs at any older build must manually install the
 // 2026102401 release once before built-in updates continue normally.
-const ApplicationBuild uint64 = 2026110204
+const ApplicationBuild uint64 = 2026110205
 
 // currentReleaseNotesVersions lists the exact notes artifacts shipped with
 // this build, newest naming first: the suffixless vX.Y.Z-rc.N file (since
