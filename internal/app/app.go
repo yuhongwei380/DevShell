@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +20,7 @@ import (
 type App struct {
 	rdp              rdpState
 	serial           serialState
+	local            localShellState
 	securityLock     securityLockState
 	sshDiagnostics   sshDiagnosticLog
 	uiFontMu         sync.Mutex
@@ -98,6 +100,7 @@ func (a *App) Close() {
 	a.cancel()
 	a.closeRDP()
 	a.closeSerial()
+	a.closeLocalShells()
 	a.updateCleanup.Wait()
 	a.updateCheck.mu.Lock()
 	if job := a.updateCheck.job; job != nil && job.Status != "downloading" && job.releaseLease != nil {
@@ -148,7 +151,7 @@ func (a *App) Handler(assets fs.FS) http.Handler {
 				break
 			}
 		}
-		data, _ := json.Marshal(map[string]any{"securityLock": lockState, "base": a.baseURL, "token": a.token, "theme": preferences.Theme, "uiScale": preferences.UIScale, "uiPreferences": uiPreferences, "uiFontRuntime": a.uiFontRuntime(), "version": ApplicationVersion, "displayVersion": ApplicationDisplayVersion, "build": ApplicationBuild, "updateMirror": preferences.UpdateMirror, "releaseNotes": notes})
+		data, _ := json.Marshal(map[string]any{"securityLock": lockState, "base": a.baseURL, "token": a.token, "theme": preferences.Theme, "uiScale": preferences.UIScale, "uiPreferences": uiPreferences, "uiFontRuntime": a.uiFontRuntime(), "version": ApplicationVersion, "displayVersion": ApplicationDisplayVersion, "build": ApplicationBuild, "updateMirror": preferences.UpdateMirror, "releaseNotes": notes, "localShellSupported": runtime.GOOS != "windows"})
 		fmt.Fprintf(w, "window.DEVSHELL = %s;", data)
 	})
 	mux.HandleFunc("GET /api/ui-fonts/runtime", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, a.uiFontRuntime()) })
@@ -214,6 +217,7 @@ func (a *App) Handler(assets fs.FS) http.Handler {
 	a.registerLocalProbeHTTP(mux)
 	a.registerRDPHTTP(mux)
 	a.registerSerialHTTP(mux)
+	a.registerLocalShellHTTP(mux)
 	mux.HandleFunc("POST /api/sessions", func(w http.ResponseWriter, r *http.Request) {
 		var input struct {
 			ProfileID       string           `json:"profileId"`

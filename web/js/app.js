@@ -165,6 +165,7 @@ function releaseConnectionAttempt(state) {
 async function connect(profileID, force = false, options = {}) {
   if (connectionProfile(profileID)?.protocol === "rdp") return window.DengRDP.connect(profileID, {...options, previousID: force ? options.sessionId : null});
   if (connectionProfile(profileID)?.protocol === "serial") return window.DengSerial.connect(profileID, {...options, previousID: force ? options.sessionId : null});
+  if (connectionProfile(profileID)?.protocol === "local") return window.DengLocalShell.reconnect({ ...options, previousID: force ? options.sessionId : null });
   const matches = [...sessions.values()].filter(s => s.profileId === profileID);
   const previous = force ? (options.sessionId ? sessions.get(options.sessionId) : matches.find(s => s.id === activeID) || matches[0]) : null;
   // Reconnect keeps the same profile in its own tab. A disconnected tab may
@@ -395,7 +396,7 @@ class DesktopSocket {
     queueMicrotask(() => {
       this.readyState = WebSocket.OPEN;
       // Serial tabs dial the serial terminal endpoint through the same IPC pipe.
-      const request = opener === 'serial' ? native().OpenSerialTerminal(id) : native().OpenTerminalWithHandoff ? native().OpenTerminalWithHandoff(id, handoffNonce) : native().OpenTerminal(id);
+      const request = opener === 'serial' ? native().OpenSerialTerminal(id) : opener === 'local' ? native().OpenLocalShellTerminal(id) : native().OpenTerminalWithHandoff ? native().OpenTerminalWithHandoff(id, handoffNonce) : native().OpenTerminal(id);
       request.catch(error => { toast(String(error)); this.onerror?.(); finish(); });
     });
   }
@@ -430,8 +431,8 @@ function createTerminal(state) {
   terminal.parser.registerOscHandler(7, data => { if (!state.follow) return false; try { const url = new URL(data); if (url.protocol === 'file:') { const path = decodeURIComponent(url.pathname); if (path !== state.cwd) navigate(path, state).catch(error => toast(error?.message || String(error))); } } catch {} return true; });
   const openSocket = () => {
   if (state.closed) return;
-  const socketURL = new URL(endpoint(`${state.serial ? '/api/serial/sessions/' : '/api/sessions/'}${state.id}/terminal`)); socketURL.protocol = socketURL.protocol === 'https:' ? 'wss:' : 'ws:'; socketURL.searchParams.set('token', boot.token); socketURL.searchParams.set('cols', String(terminal.cols)); socketURL.searchParams.set('rows', String(terminal.rows)); if (state.handoffNonce) socketURL.searchParams.set('handoff', state.handoffNonce);
-  const ws = native() ? new DesktopSocket(state.id, state.handoffNonce || '', state.serial ? 'serial' : '') : new WebSocket(socketURL); ws.binaryType = 'arraybuffer'; state.ws = ws;
+  const socketURL = new URL(endpoint(`${state.localShell ? '/api/local-shell/sessions/' : state.serial ? '/api/serial/sessions/' : '/api/sessions/'}${state.id}/terminal`)); socketURL.protocol = socketURL.protocol === 'https:' ? 'wss:' : 'ws:'; socketURL.searchParams.set('token', boot.token); socketURL.searchParams.set('cols', String(terminal.cols)); socketURL.searchParams.set('rows', String(terminal.rows)); if (state.handoffNonce) socketURL.searchParams.set('handoff', state.handoffNonce);
+  const ws = native() ? new DesktopSocket(state.id, state.handoffNonce || '', state.localShell ? 'local' : state.serial ? 'serial' : '') : new WebSocket(socketURL); ws.binaryType = 'arraybuffer'; state.ws = ws;
   ws.onmessage = event => {
     if (state.closed || !state.connected || sessions.get(state.id) !== state) return;
     if (event.data instanceof ArrayBuffer) {
@@ -453,7 +454,7 @@ function createTerminal(state) {
       // The relay sends ready only after the remote shell starts, before its
       // first output. Window handoffs must not add text to a running shell.
       const freshConnection = state.announceConnectionReady;
-      if (state.announceConnectionReady) { state.announceConnectionReady = false; showConnectionProgress(state, state.serial ? '串口已打开！' : '连接主机成功！'); if (!state.serial && state.sftpAvailable === false && !state.sftpPending) showConnectionProgress(state, state.sftpDisabled ? 'Dropbear 连接默认关闭 SFTP，SSH 终端可正常使用。' : 'SFTP 文件服务不可用，SSH 终端可正常使用。'); }
+      if (state.announceConnectionReady) { state.announceConnectionReady = false; showConnectionProgress(state, state.localShell ? '本地 Shell 已打开！' : state.serial ? '串口已打开！' : '连接主机成功！'); if (!state.serial && !state.localShell && state.sftpAvailable === false && !state.sftpPending) showConnectionProgress(state, state.sftpDisabled ? 'Dropbear 连接默认关闭 SFTP，SSH 终端可正常使用。' : 'SFTP 文件服务不可用，SSH 终端可正常使用。'); }
       if (state.sftpPending) void refreshFileStatus(state);
       acceptShellIntegration(state, message.integration); state.ready = true; applyPendingFollow(state); state.handoffProvisional = false; state.ownershipUncertain = false; terminal.options.disableStdin = !!state.detaching || !state.connected; state.restoring = false; state.restoration = null;
       // Fresh connects only: queued per-profile commands (issue #5) start
@@ -523,7 +524,8 @@ function markSessionDisconnected(state) {
   // A disconnected session never continues its queued connect-time commands.
   state.autoCommands = null; clearTimeout(state.autoCommandTimer); state.autoCommandTimer = null;
   state.term.options.disableStdin = true;
-  if (state.serial) state.term.writeln('\r\n\x1b[38;5;245m串口已关闭，终端内容已保留。点击重新连接可重新打开串口。\x1b[0m');
+  if (state.localShell) state.term.writeln('\r\n\x1b[38;5;245m本地 Shell 已退出，终端内容已保留。点击重新连接可在本标签新开一个本地 Shell。\x1b[0m');
+  else if (state.serial) state.term.writeln('\r\n\x1b[38;5;245m串口已关闭，终端内容已保留。点击重新连接可重新打开串口。\x1b[0m');
   else state.term.writeln('\r\n\x1b[38;5;245m连接已断开，终端内容已保留。点击重新连接可建立新会话。\x1b[0m');
   state.term.writeln('\x1b[38;5;245m💡  本机提示符已就绪：在下方输入框输入 ssh 用户@主机 连接新地址，reconnect 重连本会话，exit 关闭标签；↑ / ↓ 回看本机输入过的命令。\x1b[0m');
   // The remote shell is gone and terminal stdin is disabled: a blinking cursor
@@ -532,7 +534,7 @@ function markSessionDisconnected(state) {
   state.term.write('\x1b[?25l');
   // Serial sessions have no SSH disconnect diagnostic endpoint; the reason is
   // already visible (device unplugged, port closed, or the tab was closed).
-  if (!state.serial) showDisconnectDiagnostic(state);
+  if (!state.serial && !state.localShell) showDisconnectDiagnostic(state);
   renderTabs();
   if (activeID === state.id) { renderSessionInfo(); renderFiles(); $('#command-input').focus(); }
 }
@@ -571,7 +573,7 @@ async function disconnectSession(state = current()) {
   state.disconnecting = true;
   if (activeID === state.id) $('#disconnect').disabled = true;
   try {
-    await remove(state.serial ? `/api/serial/sessions/${state.id}` : `/api/sessions/${state.id}`);
+    await remove(state.localShell ? `/api/local-shell/sessions/${state.id}` : state.serial ? `/api/serial/sessions/${state.id}` : `/api/sessions/${state.id}`);
     markSessionDisconnected(state); state.ws?.close();
   } finally {
     state.disconnecting = false;
@@ -615,6 +617,7 @@ async function closeSession(id) {
   if (window.DengStartTabs?.has(id)) return window.DengStartTabs.close(id);
   if (window.DengRDP?.has(id)) return window.DengRDP.close(id);
   if (window.DengSerial?.has(id)) return window.DengSerial.close(id);
+  if (window.DengLocalShell?.has(id)) return window.DengLocalShell.close(id);
   const state = sessions.get(id); if (!state || state.detaching || state.handoffProvisional) return;
   dropSessionView(id);
   if (state.ownershipUncertain || state.localOnly) return;
@@ -631,7 +634,7 @@ function renderTabs() {
     tab.dataset.failed = String(!!state.connectionFailed);
     const label = node('span', 'session-tab-text');
     label.append(node('span', 'session-tab-label', profile ? sessionDisplayName(state) : '已删除配置'));
-    const button = node('button'); button.type = 'button'; button.append(node('span', `status-dot ${state.connected ? 'green' : state.pendingConnection ? 'blue' : 'red'}`), label); button.onclick = () => activate(state.id); button.setAttribute('role', 'tab'); button.setAttribute('aria-selected', String(selected)); button.setAttribute('aria-current', selected ? 'page' : 'false'); button.title = profile ? (profile.protocol === 'serial' ? `${profile.name} · ${window.DengSerial.label(profile)}` : `${profile.name} · ${profile.user}@${profile.host}:${profile.port}`) : '已删除配置';
+    const button = node('button'); button.type = 'button'; button.append(node('span', `status-dot ${state.connected ? 'green' : state.pendingConnection ? 'blue' : 'red'}`), label); button.onclick = () => activate(state.id); button.setAttribute('role', 'tab'); button.setAttribute('aria-selected', String(selected)); button.setAttribute('aria-current', selected ? 'page' : 'false'); button.title = profile ? (profile.protocol === 'serial' ? `${profile.name} · ${window.DengSerial.label(profile)}` : profile.protocol === 'local' ? `${profile.name} · 本机` : `${profile.name} · ${profile.user}@${profile.host}:${profile.port}`) : '已删除配置';
     if (selected && state.connected) tab.classList.add('current-session');
     button.setAttribute('aria-busy', String(!!state.pendingConnection));
     if (state.localOnly) button.title += ` · ${state.connectionMessage}`;
@@ -903,7 +906,7 @@ function monitorVisible() { return !document.hidden && !window.DevShellWindowHid
 function monitorPollDelay(value, interval) { return Number.isFinite(value) ? Math.max(0, Math.min(interval, value)) + 5 : interval; }
 async function pollNetwork() {
   if(window.DengSecurityLock?.isLocked())return;
-  const state = current(); if (!state?.connected || state.serial || (!state.terminalOutputStarted && !state.terminalBackgroundReady) || networkRequests.has(state) || !monitorVisible()) return;
+  const state = current(); if (!state?.connected || state.serial || state.localShell || (!state.terminalOutputStarted && !state.terminalBackgroundReady) || networkRequests.has(state) || !monitorVisible()) return;
   clearTimeout(networkTimer); networkTimer = 0; networkRequests.add(state); networkPolledSession = state.id;
   let delay = 1000;
   try {
@@ -928,7 +931,7 @@ async function pollNetwork() {
   }
 }
 async function pollStats() {
-  const state = current(); if (!state?.connected || state.serial || (!state.terminalOutputStarted && !state.terminalBackgroundReady) || statsRequests.has(state) || !monitorVisible()) return;
+  const state = current(); if (!state?.connected || state.serial || state.localShell || (!state.terminalOutputStarted && !state.terminalBackgroundReady) || statsRequests.has(state) || !monitorVisible()) return;
   if ((!networkTimer && !networkRequests.has(state)) || networkPolledSession !== state.id) pollNetwork();
   clearTimeout(statsTimer); statsTimer = 0; statsRequests.add(state); const includeProcesses = true;
   let delay = 5000;
@@ -996,7 +999,7 @@ function drawCharts(samples) {
 }
 const latencyRequests = new Set();
 async function pollLatency() {
-  const state = current(); if (!state?.connected || state.serial || (!state.terminalOutputStarted && !state.terminalBackgroundReady) || latencyRequests.has(state) || !monitorVisible()) return;
+  const state = current(); if (!state?.connected || state.serial || state.localShell || (!state.terminalOutputStarted && !state.terminalBackgroundReady) || latencyRequests.has(state) || !monitorVisible()) return;
   latencyRequests.add(state);
   try {
     const sample = await api(`/api/sessions/${state.id}/latency`); if (sessions.get(state.id) !== state || !state.connected) return;
@@ -1008,7 +1011,7 @@ function renderLatency() { renderLatencyDetails(); }
 setInterval(pollLatency, 1000);
 setInterval(() => {
   if (!monitorVisible()) { clearTimeout(networkTimer); clearTimeout(statsTimer); networkTimer = statsTimer = 0; return; }
-  if (!current()?.connected || current().serial) return;
+  if (!current()?.connected || current().serial || current().localShell) return;
   if (!networkRequests.has(current()) && !networkTimer) pollNetwork();
   if (!statsRequests.has(current()) && !statsTimer) pollStats();
   renderNetwork(current().stats);
@@ -1019,7 +1022,10 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) { po
 let drawerTrigger;
 function setDrawer(open) { if (open) drawerTrigger = document.activeElement; $('#connections-drawer').hidden = !open; $('#drawer-backdrop').hidden = !open; if (open) { renderConnections(); $('#connection-search').focus(); safe(refreshServerManagerHistory)(); } else { closeServerGroupMenu(); drawerTrigger?.focus(); } }
 for (const id of ['connection-button', 'welcome-connect']) $(`#${id}`).onclick = () => setDrawer(true);
-$('#add-session').onclick = () => window.DengStartTabs.create();
+// “+”：本地 Shell 开关（设置 → 其他功能，仅支持的平台可见）打开时直接新开本机
+// 终端标签，关闭时保持原有的新选项卡页行为。Windows 上功能已移除，恒走新会话页。
+function createNewSessionTab() { return (typeof appearance !== 'undefined' && appearance.localShellEnabled && window.DEVSHELL?.localShellSupported !== false) ? window.DengLocalShell.reconnect() : window.DengStartTabs.create(); }
+$('#add-session').onclick = () => createNewSessionTab();
 $('#close-connections').onclick = () => setDrawer(false); $('#drawer-backdrop').onclick = () => setDrawer(false);
 $('#connection-search').oninput = renderConnections;
 function renderConnections() { renderServerManager(); }

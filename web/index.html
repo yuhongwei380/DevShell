@@ -121,7 +121,7 @@
           <button id="connection-button" class="connection-button" title="服务器管理" aria-label="服务器管理"><svg><use href="#i-server"/></svg></button>
           <button id="pinned-toggle" class="connection-button pinned-toggle-button" title="链接栏" aria-label="展开链接栏" aria-haspopup="true" aria-expanded="false" hidden><svg><use href="#i-bookmark"/></svg></button>
           <div id="session-tabs" class="session-tabs"></div>
-          <button class="icon-button add-session" id="add-session" aria-label="新选项卡" title="新选项卡"><svg><use href="#i-plus"/></svg></button>
+          <button class="icon-button add-session" id="add-session" aria-label="新会话" title="新会话"><svg><use href="#i-plus"/></svg></button>
           <div class="session-tab-tools">
             <button class="icon-button" id="session-tabs-previous" aria-label="向左滚动选项卡" title="向左滚动选项卡" disabled><svg><use href="#i-chevron"/></svg></button>
             <button class="icon-button" id="session-tabs-next" aria-label="向右滚动选项卡" title="向右滚动选项卡" disabled><svg><use href="#i-chevron"/></svg></button>
@@ -302,6 +302,7 @@
     <div class="settings-menu-view" id="settings-other-view" role="group" aria-label="其他功能" hidden>
       <div class="settings-submenu-heading"><button type="button" role="menuitem" id="other-settings-back" data-settings-view="main"><svg><use href="#i-chevron"/></svg>返回设置</button><strong>其他功能</strong></div>
       <div class="scale-setting placement-setting"><label for="feature-auto-commands">连接后自动执行命令</label><select id="feature-auto-commands" aria-label="连接后自动执行命令" title="SSH 连接按各自配置把命令敲进远端终端；关闭后所有连接都不再自动执行"><option value="true">开启</option><option value="false">关闭</option></select></div>
+      <div class="scale-setting placement-setting"><label for="feature-local-shell">本地终端</label><select id="feature-local-shell" aria-label="本地终端" title="开启后点“+”直接新开本机终端（Windows 命令提示符、macOS 登录 Shell 于家目录）；关闭时保持新会话起始页"><option value="true">开启</option><option value="false">关闭</option></select></div>
     </div>
   </div>
   <dialog id="about-dialog" aria-labelledby="about-title"><div class="dialog-heading"><h2 id="about-title">关于 DevShell</h2><button type="button" class="icon-button" id="close-about" aria-label="关闭版本信息"><svg><use href="#i-close"/></svg></button></div><dl class="about-versions"><dt>软件版本</dt><dd id="about-version"></dd><dt>构建版本</dt><dd id="about-build"></dd></dl></dialog>
@@ -376,7 +377,7 @@
   <script src="js/command-composer.js?v=20261001-composer"></script>
   <script src="js/workspace-tools.js?v=20260925-v002-b86"></script>
   <script src="js/release-note-tags.js?v=20261102-sectag1"></script>
-  <script src="js/appearance.js?v=20261102-autocmd2"></script>
+  <script src="js/appearance.js?v=20261102-localshell2"></script>
   <script src="js/ui-appearance.js?v=20261025-devshell-rc1"></script>
   <script src="js/font-library.js?v=20261019-brand1"></script>
   <script src="js/path-history.js?v=20260925-v002-b86"></script>
@@ -409,10 +410,11 @@
   <script src="js/system-identity.js?v=20260920-v002-b70"></script>
   <script src="js/rdp.js?v=20261101-tabdot1"></script>
   <script src="js/serial.js?v=20261101-noicon1"></script>
+  <script src="js/local-shell.js?v=20261102-localshell2"></script>
   <script src="js/upload-confirmation.js?v=20260928-overwrite1"></script>
   <script src="js/shell-transfers.js?v=20261101-transferpill1"></script>
-  <script src="js/app.js?v=20261102-autocmd1"></script>
-  <script src="js/quick-connect.js?v=20261101-save-menu1"></script>
+  <script src="js/app.js?v=20261102-localshell2"></script>
+  <script src="js/quick-connect.js?v=20261102-localshell1"></script>
   <script src="js/local-prompt.js?v=20261022-tabs1"></script>
   <script src="js/command-completion.js?v=20261025-cmdtab1"></script>
   <script src="js/pinned-nav.js?v=20261102-rename1"></script>

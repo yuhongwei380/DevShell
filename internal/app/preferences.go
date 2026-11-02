@@ -46,6 +46,12 @@ type Appearance struct {
 	// while this global switch stays on; it lives under Settings → Other
 	// features. Default on: profiles without commands behave as before.
 	AutoCommandsEnabled bool                       `json:"autoCommandsEnabled"`
+	// LocalShellEnabled gates the local shell feature (issue #4 slice A):
+	// when on, the session tab “+” opens a local terminal with the user's
+	// login shell at home instead of the start-tab page. macOS only — the
+	// feature was removed on Windows, where enabling it is rejected. Lives
+	// under Settings → Other features. Default off on supported platforms.
+	LocalShellEnabled bool                       `json:"localShellEnabled"`
 	Layout              map[string]json.RawMessage `json:"layout"`
 }
 

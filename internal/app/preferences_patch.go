@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"runtime"
 	"strings"
 )
 
@@ -43,6 +44,16 @@ func (s *Store) PatchAppearance(patch map[string]json.RawMessage) (Appearance, e
 			err = mergePreferenceMap(value.FontColors, raw)
 		case "fontBold":
 			err = mergePreferenceMap(value.FontBold, raw)
+		case "localShellEnabled":
+			// 本地终端功能仅 macOS 支持（Windows 已移除）：Windows 上开启请求一律拒绝。
+			var enabled bool
+			if json.Unmarshal(raw, &enabled) != nil {
+				return Appearance{}, errors.New("本地终端开关必须是布尔值")
+			}
+			if enabled && runtime.GOOS == "windows" {
+				return Appearance{}, errors.New("当前平台不支持本地终端")
+			}
+			value.LocalShellEnabled = enabled
 		case "layout":
 			var changes map[string]json.RawMessage
 			if json.Unmarshal(raw, &changes) == nil {

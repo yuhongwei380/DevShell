@@ -207,6 +207,12 @@ func (d *Desktop) OpenTerminal(sessionID string) error {
 func (d *Desktop) OpenSerialTerminal(sessionID string) error {
 	return d.openTerminalSocketPath(sessionID, "/api/serial/sessions/"+url.PathEscape(sessionID)+"/terminal", "")
 }
+
+// OpenLocalShellTerminal bridges the local shell terminal WebSocket through
+// the same native IPC path. Local shells never participate in window handoff.
+func (d *Desktop) OpenLocalShellTerminal(sessionID string) error {
+	return d.openTerminalSocketPath(sessionID, "/api/local-shell/sessions/"+url.PathEscape(sessionID)+"/terminal", "")
+}
 func (d *Desktop) openTerminalSocket(sessionID, nonce string) error {
 	return d.openTerminalSocketPath(sessionID, "/api/sessions/"+url.PathEscape(sessionID)+"/terminal", nonce)
 }
