@@ -322,6 +322,11 @@ func TestDownloadMustMatchOfferAndBytes(t *testing.T) {
 				t.Fatal(e)
 			}
 			defer a.Close()
+			if corrupt {
+				// Keep the one-shot offer refresh hermetic: the stub probe
+				// reports no newer offer, so the failure must surface.
+				a.updateCheck.probe = func(context.Context, time.Duration) UpdateStatus { return noUpdate("none") }
+			}
 			payload := []byte("verified update content")
 			path := t.TempDir() + "/payload"
 			os.WriteFile(path, payload, 0600)
@@ -395,6 +400,68 @@ func TestDownloadMustMatchOfferAndBytes(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// A release re-published mid-session (moved tag replacing the assets) leaves
+// the cached offer behind the shipped bytes. The download must refresh the
+// offer exactly once and retry, completing against the new package instead
+// of failing with a checksum mismatch.
+func TestStaleOfferRefreshesAndRedownloads(t *testing.T) {
+	a, e := New(t.TempDir())
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer a.Close()
+	if !NativePackageUpdateSupported() {
+		t.Skip("host does not support built-in install")
+	}
+	oldPayload := []byte("first published asset")
+	newPayload := []byte("re-published asset")
+	path := t.TempDir() + "/payload"
+	os.WriteFile(path, oldPayload, 0600)
+	hashOld, _ := FileSHA256(path)
+	os.WriteFile(path, newPayload, 0600)
+	hashNew, _ := FileSHA256(path)
+	// The shipped asset already carries the re-published bytes while the
+	// cached offer still describes the previous ones.
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write(newPayload) }))
+	defer s.Close()
+	a.updateCheck.once.Do(func() {
+		a.updateCheck.done = make(chan struct{})
+		a.updateCheck.result = noUpdate("none")
+		close(a.updateCheck.done)
+	})
+	a.setUpdateResult(UpdateStatus{Status: "available", Package: &UpdatePackage{Format: NativePackageFormat(), Build: ApplicationBuild + 1, Version: ApplicationVersion, URL: s.URL + "/up.deb", SHA256: hashOld, ExecutableSHA256: hashOld, Size: int64(len(oldPayload)), expiresAt: time.Now().Add(time.Hour).Unix()}})
+	var probes int
+	a.updateCheck.probe = func(context.Context, time.Duration) UpdateStatus {
+		probes++
+		return UpdateStatus{Status: "available", Package: &UpdatePackage{Format: NativePackageFormat(), Build: ApplicationBuild + 1, Version: ApplicationVersion, URL: s.URL + "/up.deb", SHA256: hashNew, ExecutableSHA256: hashNew, Size: int64(len(newPayload)), expiresAt: time.Now().Add(time.Hour).Unix()}}
+	}
+	job, e := a.StartUpdateDownload(hashOld)
+	if e != nil {
+		t.Fatal(e)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		job, e = a.UpdateDownload(job.ID)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if job.Status != "downloading" {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if job.Status != "ready" {
+		t.Fatalf("stale offer did not recover: %+v", job)
+	}
+	hash, e := FileSHA256(job.File)
+	if e != nil || hash != hashNew {
+		t.Fatalf("stale asset kept: %v %s", e, hash)
+	}
+	if probes != 1 {
+		t.Fatalf("offer refreshed %d times; want exactly once", probes)
 	}
 }
 

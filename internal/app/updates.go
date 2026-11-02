@@ -158,7 +158,18 @@ type startupUpdate struct {
 	mu       sync.Mutex
 	job      *UpdateDownload
 	manualMu sync.Mutex
+	probe    func(context.Context, time.Duration) UpdateStatus // test seam; nil uses updateProbe
 }
+
+// Integrity failures mean the cached offer trails the shipped assets, for
+// example when a release was re-published while this session kept an older
+// check result. The download refreshes the offer exactly once and retries;
+// transport errors keep the existing per-candidate retry behaviour.
+var (
+	errUpdateSizeMismatch = errors.New("更新文件大小与描述不符")
+	errUpdateSizeExceeded = errors.New("更新文件超过描述的大小")
+	errUpdateHashMismatch = errors.New("更新文件 SHA-256 校验失败")
+)
 
 func updateAddress(platform string) (string, string) {
 	manifest, artifact := updateAssetNames(platform)
@@ -658,15 +669,36 @@ func (a *App) PreparedUpdate(id string) (UpdateDownload, error) {
 func (a *App) downloadUpdate(ctx context.Context, job *UpdateDownload) {
 	defer job.cancel()
 	err := func() error {
-		var last error
-		for _, candidate := range updateFetchAttempts(a.store.UpdateMirror(), job.Package.URL) {
-			if e := a.downloadUpdateCandidate(ctx, job, candidate); e != nil {
-				last = e
-				continue
+		refreshed := false
+		for {
+			var last error
+			for _, candidate := range updateFetchAttempts(a.store.UpdateMirror(), job.Package.URL) {
+				if e := a.downloadUpdateCandidate(ctx, job, candidate); e != nil {
+					last = e
+					continue
+				}
+				return nil
 			}
-			return nil
+			if refreshed || !errors.Is(last, errUpdateSizeMismatch) && !errors.Is(last, errUpdateSizeExceeded) && !errors.Is(last, errUpdateHashMismatch) {
+				return last
+			}
+			// The offer predates re-published assets: refresh the check once
+			// and retarget the job at the current package before retrying.
+			refreshed = true
+			probe := a.updateProbe
+			if a.updateCheck.probe != nil {
+				probe = a.updateCheck.probe
+			}
+			offer := boundedUpdateProbe(ctx, func() UpdateStatus { return probe(ctx, updateTimeout) })
+			a.setUpdateResult(offer)
+			if offer.Status != "available" || offer.Package == nil || (offer.Package.URL == job.Package.URL && offer.Package.SHA256 == job.Package.SHA256 && offer.Package.Size == job.Total) {
+				return last
+			}
+			a.updateCheck.mu.Lock()
+			job.Package = *offer.Package
+			job.Total = offer.Package.Size
+			a.updateCheck.mu.Unlock()
 		}
-		return last
 	}()
 	a.finishUpdateDownload(ctx, job, err)
 }
@@ -689,7 +721,7 @@ func (a *App) downloadUpdateCandidate(ctx context.Context, job *UpdateDownload, 
 		return fmt.Errorf("下载失败 (%d)", response.StatusCode)
 	}
 	if response.ContentLength >= 0 && response.ContentLength != job.Total {
-		return errors.New("更新文件大小与描述不符")
+		return errUpdateSizeMismatch
 	}
 	_ = os.Remove(job.File)
 	a.updateCheck.mu.Lock()
@@ -709,7 +741,7 @@ func (a *App) downloadUpdateCandidate(ctx context.Context, job *UpdateDownload, 
 		if n > 0 {
 			total += int64(n)
 			if total > job.Total {
-				return errors.New("更新文件超过描述的大小")
+				return errUpdateSizeExceeded
 			}
 			if _, e = f.Write(buf[:n]); e != nil {
 				return e
@@ -727,7 +759,7 @@ func (a *App) downloadUpdateCandidate(ctx context.Context, job *UpdateDownload, 
 		}
 	}
 	if total != job.Total || hex.EncodeToString(h.Sum(nil)) != job.Package.SHA256 {
-		return errors.New("更新文件 SHA-256 校验失败")
+		return errUpdateHashMismatch
 	}
 	return f.Sync()
 }
