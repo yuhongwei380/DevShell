@@ -117,7 +117,7 @@ func TestLatestReleaseListGoesThroughMirrorWithDirectFallback(t *testing.T) {
 	old := updateReleaseListURL
 	defer func() { updateReleaseListURL = old }()
 	buildText := strconv.FormatUint(ApplicationBuild+1, 10)
-	list, err := json.Marshal([]githubRelease{{TagName: "v26.11.0-rc.9-build" + buildText, Prerelease: true, Assets: []githubReleaseAsset{{Name: "up.exe.json", State: "uploaded"}, {Name: "up.exe", State: "uploaded"}}}})
+	list, err := json.Marshal([]githubRelease{{TagName: "v26.11.1-rc.9-build" + buildText, Prerelease: true, Assets: []githubReleaseAsset{{Name: "up.exe.json", State: "uploaded"}, {Name: "up.exe", State: "uploaded"}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,7 @@ func TestLatestReleaseListGoesThroughMirrorWithDirectFallback(t *testing.T) {
 	if reason != "" || !viaMirror {
 		t.Fatalf("release list not served via accelerator mirror: %+v %q", source, reason)
 	}
-	if !strings.Contains(source.manifestURL, "/v26.11.0-rc.9-build"+buildText+"/up.exe.json") || !strings.HasPrefix(source.manifestURL, updateReleaseDownloadBase) {
+	if !strings.Contains(source.manifestURL, "/v26.11.1-rc.9-build"+buildText+"/up.exe.json") || !strings.HasPrefix(source.manifestURL, updateReleaseDownloadBase) {
 		t.Fatalf("download source wrong: %+v", source)
 	}
 

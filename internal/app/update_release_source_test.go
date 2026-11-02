@@ -30,14 +30,14 @@ func TestParseUpdateReleaseTagAcceptsVersionOnlyTags(t *testing.T) {
 		build        uint64
 		isRC, ok     bool
 	}{
-		{"v26.11.0-rc.7-build" + abbreviated, "v26.11.0", ApplicationBuild + 1, true, true},
-		{"v26.11.0-rc.7-build" + full, "v26.11.0", ApplicationBuild + 1, true, true},
-		{"v26.11.0-rc.7", "v26.11.0", 0, true, true},
-		{"v26.11.0", "v26.11.0", 0, false, true},
-		{"v26.11.0-rc.build" + abbreviated, "", 0, false, false},
+		{"v26.11.1-rc.7-build" + abbreviated, "v26.11.1", ApplicationBuild + 1, true, true},
+		{"v26.11.1-rc.7-build" + full, "v26.11.1", ApplicationBuild + 1, true, true},
+		{"v26.11.1-rc.7", "v26.11.1", 0, true, true},
+		{"v26.11.1", "v26.11.1", 0, false, true},
+		{"v26.11.1-rc.build" + abbreviated, "", 0, false, false},
 		{"v26.11-build" + abbreviated, "", 0, false, false},
-		{"v26.11.0-rc.7-build" + full[:9], "", 0, false, false},
-		{"v26.11.0-rc.7-build261101", "", 0, false, false},
+		{"v26.11.1-rc.7-build" + full[:9], "", 0, false, false},
+		{"v26.11.1-rc.7-build261101", "", 0, false, false},
 	} {
 		version, build, isRC, ok := parseUpdateReleaseTag(tc.tag)
 		if version != tc.version || build != tc.build || isRC != tc.isRC || ok != tc.ok {
@@ -71,17 +71,17 @@ func withLocalReleaseSources(t *testing.T, list []githubRelease, manifests map[s
 }
 
 func TestLatestReleaseUpdateSourceResolvesVersionOnlyTags(t *testing.T) {
-	manifests := map[string]uint64{"v26.11.0-rc.8": ApplicationBuild + 2, "v26.11.0-rc.7": ApplicationBuild + 1}
+	manifests := map[string]uint64{"v26.11.1-rc.8": ApplicationBuild + 2, "v26.11.1-rc.7": ApplicationBuild + 1}
 	served := 0
 	client := withLocalReleaseSources(t, []githubRelease{
-		{TagName: "v26.11.0-rc.8", Prerelease: true, Assets: releaseTestAssets()},
-		{TagName: "v26.11.0-rc.7", Prerelease: true, Assets: releaseTestAssets()},
+		{TagName: "v26.11.1-rc.8", Prerelease: true, Assets: releaseTestAssets()},
+		{TagName: "v26.11.1-rc.7", Prerelease: true, Assets: releaseTestAssets()},
 	}, manifests, &served)
 	source, reason, viaMirror := latestReleaseUpdateSource(context.Background(), client, "windows-amd64", "")
 	if reason != "" || viaMirror {
 		t.Fatalf("version-only tags rejected: %+v %q", source, reason)
 	}
-	if !strings.HasSuffix(source.manifestURL, "/v26.11.0-rc.8/up.exe.json") || source.build != ApplicationBuild+2 {
+	if !strings.HasSuffix(source.manifestURL, "/v26.11.1-rc.8/up.exe.json") || source.build != ApplicationBuild+2 {
 		t.Fatalf("wrong newest version-only release chosen: %+v", source)
 	}
 	if served != 1 {
@@ -90,20 +90,20 @@ func TestLatestReleaseUpdateSourceResolvesVersionOnlyTags(t *testing.T) {
 }
 
 func TestLatestReleaseUpdateSourceOrdersMixedTagStyles(t *testing.T) {
-	legacy := "v26.11.0-rc.6-build" + strconv.FormatUint(ApplicationBuild, 10)
+	legacy := "v26.11.1-rc.6-build" + strconv.FormatUint(ApplicationBuild, 10)
 	client := withLocalReleaseSources(t, []githubRelease{
-		{TagName: "v26.11.0-rc.7", Prerelease: true, Assets: releaseTestAssets()},
+		{TagName: "v26.11.1-rc.7", Prerelease: true, Assets: releaseTestAssets()},
 		{TagName: legacy, Prerelease: true, Assets: releaseTestAssets()},
-	}, map[string]uint64{"v26.11.0-rc.7": ApplicationBuild + 1}, nil)
+	}, map[string]uint64{"v26.11.1-rc.7": ApplicationBuild + 1}, nil)
 	source, reason, _ := latestReleaseUpdateSource(context.Background(), client, "windows-amd64", "")
-	if reason != "" || !strings.HasSuffix(source.manifestURL, "/v26.11.0-rc.7/up.exe.json") {
+	if reason != "" || !strings.HasSuffix(source.manifestURL, "/v26.11.1-rc.7/up.exe.json") {
 		t.Fatalf("newer version-only release not chosen over legacy: %+v %q", source, reason)
 	}
 
 	client = withLocalReleaseSources(t, []githubRelease{
-		{TagName: "v26.11.0-rc.7", Prerelease: true, Assets: releaseTestAssets()},
+		{TagName: "v26.11.1-rc.7", Prerelease: true, Assets: releaseTestAssets()},
 		{TagName: legacy, Prerelease: true, Assets: releaseTestAssets()},
-	}, map[string]uint64{"v26.11.0-rc.7": ApplicationBuild - 1}, nil)
+	}, map[string]uint64{"v26.11.1-rc.7": ApplicationBuild - 1}, nil)
 	source, reason, _ = latestReleaseUpdateSource(context.Background(), client, "windows-amd64", "")
 	if reason != "" || !strings.HasSuffix(source.manifestURL, "/"+legacy+"/up.exe.json") {
 		t.Fatalf("stale version-only republish must not outrank newer legacy build: %+v %q", source, reason)
@@ -111,9 +111,9 @@ func TestLatestReleaseUpdateSourceOrdersMixedTagStyles(t *testing.T) {
 }
 
 func TestLatestReleaseUpdateSourceSkipsUnresolvableVersionOnlyTag(t *testing.T) {
-	legacy := "v26.11.0-rc.6-build" + strconv.FormatUint(ApplicationBuild, 10)
+	legacy := "v26.11.1-rc.6-build" + strconv.FormatUint(ApplicationBuild, 10)
 	client := withLocalReleaseSources(t, []githubRelease{
-		{TagName: "v26.11.0-rc.7", Prerelease: true, Assets: releaseTestAssets()},
+		{TagName: "v26.11.1-rc.7", Prerelease: true, Assets: releaseTestAssets()},
 		{TagName: legacy, Prerelease: true, Assets: releaseTestAssets()},
 	}, map[string]uint64{}, nil)
 	source, reason, _ := latestReleaseUpdateSource(context.Background(), client, "windows-amd64", "")
@@ -123,7 +123,7 @@ func TestLatestReleaseUpdateSourceSkipsUnresolvableVersionOnlyTag(t *testing.T) 
 }
 
 func TestLatestReleaseUpdateSourceResolvesBuildThroughMirror(t *testing.T) {
-	list := []githubRelease{{TagName: "v26.11.0-rc.8", Prerelease: true, Assets: releaseTestAssets()}}
+	list := []githubRelease{{TagName: "v26.11.1-rc.8", Prerelease: true, Assets: releaseTestAssets()}}
 	listServer := releaseListServer(list)
 	defer listServer.Close()
 	directManifests := 0
@@ -139,7 +139,7 @@ func TestLatestReleaseUpdateSourceResolvesBuildThroughMirror(t *testing.T) {
 			w.Write(data)
 			return
 		}
-		if r.URL.Path == "/"+downloads.URL+"/download/v26.11.0-rc.8/up.exe.json" {
+		if r.URL.Path == "/"+downloads.URL+"/download/v26.11.1-rc.8/up.exe.json" {
 			json.NewEncoder(w).Encode(UpdateDescriptor{SchemaVersion: 2, Build: ApplicationBuild + 2, Product: "DevShell", Platform: "windows-amd64"})
 			return
 		}
