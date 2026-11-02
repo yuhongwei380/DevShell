@@ -4,7 +4,7 @@ import path from 'node:path';
 const [url,sessionID,remote,local,module]=process.argv.slice(2);
 const {default:puppeteer}=await import(module);
 const origin=new URL(url).origin,token=new URL(url).hash.split('=')[1];
-await fetch(origin+'/api/appearance/patch',{method:'POST',headers:{'Content-Type':'application/json','X-CloudShell-Token':token},body:JSON.stringify({onboardingCompleted:true,uiScale:1})});
+await fetch(origin+'/api/appearance/patch',{method:'POST',headers:{'Content-Type':'application/json','X-CloudShell-Token':token},body:JSON.stringify({onboardingCompleted:true,uiScale:1,layout:{'cloudshell.layout':{conciseMode:false}}})});
 const browser=await puppeteer.launch({executablePath:process.env.CHROME_BIN||'/usr/bin/google-chrome',headless:true,args:['--no-sandbox']});
 let page,hold=false;const held=[],errors=[];
 try{

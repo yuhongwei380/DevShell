@@ -9,7 +9,7 @@ const { default: puppeteer } = await import(path.isAbsolute(modulePath) ? pathTo
 const fixture = JSON.parse(fs.readFileSync(path.join(stage, 'browser-fixture.json')));
 const setup = await fetch(new URL('/api/appearance/patch', fixture.url), {
   method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CloudShell-Token': fixture.token },
-  body: JSON.stringify({ onboardingCompleted: true, uiScale: 1, filesPosition: 'right', monitorVisible: true, layout: { 'cloudshell.layout': { version: 2, sidebar: 450, filesWidth: 650, files: 210 } } }),
+  body: JSON.stringify({ onboardingCompleted: true, uiScale: 1, filesPosition: 'right', monitorVisible: true, layout: { 'cloudshell.layout': { version: 2, sidebar: 450, filesWidth: 650, files: 210, conciseMode: false } } }),
 });
 assert(setup.ok, 'legacy width fixture saved');
 const profileDir = fs.mkdtempSync(path.join(stage, 'edge-fixed-panels-'));

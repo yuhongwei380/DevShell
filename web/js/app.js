@@ -660,7 +660,7 @@ function reflectCommandBar() {
   const state = current(), key = `${state?.id || ''}:${state?.connected ? 1 : 0}`;
   // 切换会话或连接状态变化都视为新的起点，撤销上一次的手动展开。
   if (key !== commandBarKey) { commandBarKey = key; commandBarPinned = false; }
-  setCommandBarCollapsed((!!state?.connected || layout.conciseMode === true) && !commandBarPinned);
+  setCommandBarCollapsed((!!state?.connected || layout.conciseMode !== false) && !commandBarPinned);
 }
 commandBarToggle.onclick = () => {
   if (commandBar.classList.contains('command-bar-collapsed')) { commandBarPinned = true; setCommandBarCollapsed(false); $('#command-input').focus(); }

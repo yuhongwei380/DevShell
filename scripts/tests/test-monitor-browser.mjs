@@ -7,7 +7,7 @@ import {spawn} from 'node:child_process';
 const [stage,chrome,modulePath]=process.argv.slice(2);
 const {default:puppeteer}=await import(isAbsolute(modulePath)?pathToFileURL(modulePath).href:modulePath);
 const fixture=JSON.parse(await readFile(join(stage,'browser-fixture.json'),'utf8'));
-await fetch(new URL('/api/appearance/patch',fixture.url),{method:'POST',headers:{'Content-Type':'application/json','X-CloudShell-Token':fixture.token},body:JSON.stringify({onboardingCompleted:true,uiScale:1})});
+await fetch(new URL('/api/appearance/patch',fixture.url),{method:'POST',headers:{'Content-Type':'application/json','X-CloudShell-Token':fixture.token},body:JSON.stringify({onboardingCompleted:true,uiScale:1,layout:{'cloudshell.layout':{conciseMode:false}}})});
 const profileDir=fs.mkdtempSync(join(stage,'edge-monitor-'));
 const child=spawn(chrome,['--headless=new','--no-sandbox','--disable-dev-shm-usage','--disable-background-networking','--remote-debugging-port=0','--user-data-dir='+profileDir,'about:blank'],{stdio:'ignore',windowsHide:true});
 let browser;

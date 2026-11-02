@@ -16,7 +16,7 @@ const { default: puppeteer } = await import(path.isAbsolute(modulePath) ? pathTo
 const fixture = JSON.parse(fs.readFileSync(stage + '/browser-fixture.json'));
 const endpoint = new URL(fixture.url).origin;
 async function api(pathname, body) { const r = await fetch(endpoint + pathname, { method: body === undefined ? 'GET' : 'POST', headers: { 'Content-Type': 'application/json', 'X-CloudShell-Token': fixture.token }, body: body === undefined ? undefined : JSON.stringify(body) }); const data = await r.json(); return { status: r.status, data }; }
-await api('/api/appearance/patch', { onboardingCompleted: true, uiScale: 1 });
+await api('/api/appearance/patch', { onboardingCompleted: true, uiScale: 1, layout: { 'cloudshell.layout': { conciseMode: false } } });
 const created = [];
 for (let i = 0; i < 8; i++) { const { status, data } = await api('/api/profiles', { name: `固定测试-${i + 1}`, host: '192.0.2.77', port: 22, user: 'root' }); assert.equal(status, 200, `create profile ${i + 1}`); created.push(data.id); }
 await api('/api/appearance/patch', { layout: { 'dengshell.pinned.v1': created } });

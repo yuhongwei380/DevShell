@@ -12,7 +12,7 @@ const api = async (pathname, body) => {
   const response = await fetch(new URL(pathname, fixture.url), { method: body === undefined ? 'GET' : 'POST', headers: { 'Content-Type': 'application/json', 'X-CloudShell-Token': fixture.token }, body: body === undefined ? undefined : JSON.stringify(body) });
   const data = await response.json(); assert(response.ok, JSON.stringify(data)); return data;
 };
-await api('/api/appearance/patch', { onboardingCompleted: true, uiScale: 1 });
+await api('/api/appearance/patch', { onboardingCompleted: true, uiScale: 1, layout: { 'cloudshell.layout': { conciseMode: false } } });
 const source = await api('/api/group-nodes', { name: '来源' });
 const parent = await api('/api/group-nodes', { name: '生产' });
 const target = await api('/api/group-nodes', { name: '同名分组', parentId: parent.id });

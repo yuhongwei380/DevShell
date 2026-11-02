@@ -4,7 +4,7 @@ const [stage,chrome,modulePath]=process.argv.slice(2);
 const {default:puppeteer}=await import(modulePath),fixture=JSON.parse(fs.readFileSync(stage+'/browser-fixture.json'));
 const browser=await puppeteer.launch({executablePath:chrome,headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
 try {
- const page=await browser.newPage();await page.setViewport({width:1280,height:800});await page.goto(fixture.url,{waitUntil:'networkidle0'});
+ const page=await browser.newPage();await page.setViewport({width:1280,height:800});await page.goto(fixture.url,{waitUntil:'networkidle0'});await page.evaluate(async()=>{layout.conciseMode=false;save('cloudshell.layout',layout);document.documentElement.dataset.concise='false';if(appearance.monitorVisible===false)await chooseAppearance({monitorVisible:true});});
  const lines=await page.evaluate(async()=>{
   document.querySelectorAll('dialog[open]').forEach(d=>d.close());
   // A detached xterm is enough: the bug is how termSink feeds newlines to the

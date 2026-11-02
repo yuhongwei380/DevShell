@@ -10,6 +10,7 @@ try {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(url);
+  await page.evaluate(async () => { layout.conciseMode = false; save('cloudshell.layout', layout); document.documentElement.dataset.concise = 'false'; if (appearance.monitorVisible === false) await chooseAppearance({ monitorVisible: true }); });
   await page.waitForFunction(() => document.querySelector('#connection-button').title === '打开服务器管理');
   await page.evaluate(() => { document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close()); setDrawer(false); });
   const settle = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));

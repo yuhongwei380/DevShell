@@ -15,7 +15,7 @@ async function api(route,body,method=body===undefined?'GET':'POST') {
  const r=await fetch(new URL(route,origin),{method,headers,body:body===undefined?undefined:JSON.stringify(body)});
  const data=await r.json();assert(r.ok,`${route}: ${JSON.stringify(data)}`);return data;
 }
-await api('/api/appearance/patch',{onboardingCompleted:true,uiScale:1,filesPosition:'bottom'});
+await api('/api/appearance/patch',{onboardingCompleted:true,uiScale:1,filesPosition:'bottom',layout:{'cloudshell.layout':{conciseMode:false}}});
 const key=await api('/api/keys',{name:'SFTP right isolated key',sourcePath:fixture.key});
 const profile=await api('/api/profiles',{name:'SFTP right isolated SSH',host:'127.0.0.1',port:fixture.port,user:'bitsflow',auth:'key',keyId:key.id});
 const trust=await api('/api/sessions',{profileId:profile.id,hostKeyApproval:{host:'127.0.0.1:'+fixture.port,fingerprint:fixture.fingerprint}});
@@ -101,23 +101,23 @@ try{
   await position('right');const right=await geometry('settings right');await button('right button');assert(right.cols<old.cols&&right.rows>old.rows,'right position should trade columns for rows');await realPTY('settings right');
   await position('bottom');await geometry('settings bottom');await realPTY('settings bottom');
  });
- await check('Follow terminal directory is a settings switch, default on, controls live sessions',async()=>{
+ await check('Follow terminal directory is a settings select, default on, controls live sessions',async()=>{
   assert.equal(await page.evaluate(()=>appearance.followTerminal),true,'default should be on');
-  assert.equal(await page.$eval('#follow-terminal-setting',e=>e.checked),true,'settings checkbox should reflect default');
+  assert.equal(await page.$eval('#follow-terminal-setting',e=>e.value),'true','settings select should reflect default');
   assert.equal(await page.evaluate(()=>current().follow),true,'connected session should follow by default');
   await page.evaluate(()=>pasteTerminalText(current(),'cd /var/tmp',{execute:true}));
   await page.waitForFunction(()=>current().terminalDirectory==='/var/tmp',{timeout:8000});await settle();
   assert.equal(await page.evaluate(()=>current().cwd),'/var/tmp','default follow should navigate the files panel');
-  await page.evaluate(()=>$('#follow-terminal-setting').click());await settle();
-  assert.equal(await page.evaluate(()=>appearance.followTerminal),false,'click should persist off');
+  await page.evaluate(()=>{const s=$('#follow-terminal-setting');s.value='false';s.dispatchEvent(new Event('change'))});await settle();
+  assert.equal(await page.evaluate(()=>appearance.followTerminal),false,'select change should persist off');
   assert.equal(await page.evaluate(()=>current().follow),false,'settings off should stop following');
   await page.evaluate(()=>pasteTerminalText(current(),'cd /etc',{execute:true}));
   await page.waitForFunction(()=>current().terminalDirectory==='/etc',{timeout:8000});await settle();
   assert.equal(await page.evaluate(()=>current().cwd),'/var/tmp','following must stay off while disabled');
-  await page.evaluate(()=>$('#follow-terminal-setting').click());await settle();
+  await page.evaluate(()=>{const s=$('#follow-terminal-setting');s.value='true';s.dispatchEvent(new Event('change'))});await settle();
   assert.equal(await page.evaluate(()=>current().follow),true,'settings on should resume following');
   assert.equal(await page.evaluate(()=>current().cwd),'/etc','enabling should jump to the terminal directory');
-  assert.equal(await page.evaluate(()=>appearance.followTerminal),true,'checkbox click should persist on');
+  assert.equal(await page.evaluate(()=>appearance.followTerminal),true,'select change should persist on');
  });
  await check('Bottom height remains resizable while right width stays fixed across drag, keyboard and toggles',async()=>{
   await position('bottom');await drag('y',-48);const bottom=await geometry('resized bottom');

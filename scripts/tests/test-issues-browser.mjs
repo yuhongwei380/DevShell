@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 const [stage,chrome,modulePath]=process.argv.slice(2);
 const {default:puppeteer}=await import(modulePath),fixture=JSON.parse(fs.readFileSync(stage+'/browser-fixture.json'));
 assert.equal(new URL(fixture.url).hostname,'127.0.0.1');
-const init=await fetch(new URL('/api/appearance/patch',fixture.url),{method:'POST',headers:{'Content-Type':'application/json','X-CloudShell-Token':fixture.token},body:JSON.stringify({onboardingCompleted:true,uiScale:1})});assert(init.ok);
+const init=await fetch(new URL('/api/appearance/patch',fixture.url),{method:'POST',headers:{'Content-Type':'application/json','X-CloudShell-Token':fixture.token},body:JSON.stringify({onboardingCompleted:true,uiScale:1,layout:{'cloudshell.layout':{conciseMode:false}}})});assert(init.ok);
 const browser=await puppeteer.launch({executablePath:chrome,headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
 const errors=[],checks=[];let page;
 try {

@@ -12,7 +12,7 @@ const api = async (path, body) => {
   const response = await fetch(origin+path, { method: body ? 'POST' : 'GET', headers: {'X-CloudShell-Token':fixture.token, 'Content-Type':'application/json'}, body:body?JSON.stringify(body):undefined });
   const value = await response.json(); assert(response.ok, JSON.stringify(value)); return value;
 };
-await api('/api/appearance/patch', {onboardingCompleted:true, theme:'light', uiScale:1});
+await api('/api/appearance/patch', {onboardingCompleted:true, theme:'light', uiScale:1, layout:{'cloudshell.layout':{conciseMode:false}}});
 const profiles = [];
 for (const shell of ['bash','zsh','fish']) profiles.push(await api('/api/profiles', {name:'隔离重连测试 '+shell, host:'127.0.0.1', port:connection.port, user:'qa_'+shell, auth:'key', keyPath:connection.keyPath}));
 const browser = await puppeteer.launch({executablePath:process.env.CHROME_BINARY||'google-chrome', headless:true, userDataDir:stage+'/browser-profile', args:['--no-sandbox','--disable-dev-shm-usage','--disable-background-networking']});

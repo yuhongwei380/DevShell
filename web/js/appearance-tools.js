@@ -65,7 +65,7 @@ function reflectFontColorDialog(card) {
 }
 function applyWorkspacePlacement() {
   const root = document.documentElement;
-  root.dataset.concise = layout.conciseMode === true ? 'true' : 'false';
+  root.dataset.concise = layout.conciseMode === false ? 'false' : 'true';
   root.dataset.monitorVisible = appearance.monitorVisible === false ? 'false' : 'true';
   root.dataset.filesPosition = ['top', 'right'].includes(appearance.filesPosition) ? appearance.filesPosition : 'bottom';
   const right = root.dataset.filesPosition === 'right';
@@ -82,8 +82,8 @@ function applyWorkspacePlacement() {
   } else splitter.removeAttribute('aria-hidden');
   if ($('#monitor-visible')) $('#monitor-visible').value = root.dataset.monitorVisible;
   if ($('#files-position')) $('#files-position').value = root.dataset.filesPosition;
-  if ($('#concise-mode-setting')) $('#concise-mode-setting').checked = root.dataset.concise === 'true';
-  if ($('#follow-terminal-setting')) $('#follow-terminal-setting').checked = appearance.followTerminal !== false;
+  if ($('#concise-mode-setting')) $('#concise-mode-setting').value = root.dataset.concise;
+  if ($('#follow-terminal-setting')) $('#follow-terminal-setting').value = appearance.followTerminal !== false ? 'true' : 'false';
   reflectTerminalFollow?.();
   syncRightPanelWindow();
   for (const dialog of movableColorDialogs) clampColorDialog(dialog);
@@ -163,20 +163,25 @@ function openPromptColors() {
   reflectPromptPreview(); if (!dialog.open) dialog.showModal(); clampColorDialog(dialog);
 }
 function initializeAppearanceTools() {
+  // 简洁模式默认开启：新配置首次启动时落盘选择，并把监控面板与 SFTP 面板按
+  // 简洁模式的默认隐藏落位；用户显式关闭后不再干预。
+  if (layout.conciseMode === undefined) { layout.conciseMode = true; save('cloudshell.layout', layout); chooseAppearance({ monitorVisible: false }).catch(() => {}); }
   const appearanceAnchor = $('#reset-layout');
   const promptButton = node('button'); promptButton.id = 'manage-prompt-colors'; promptButton.type = 'button'; promptButton.setAttribute('role', 'menuitem'); promptButton.append(icon('terminal'), document.createTextNode('提示符颜色')); promptButton.onclick = openPromptColors; appearanceAnchor.before(promptButton);
   const settingsAnchor = $('#settings-main-view .scale-setting');
-  const conciseRow = node('div', 'scale-setting placement-setting'), conciseLabel = node('label', '', '简洁模式'), conciseInput = node('input');
-  conciseLabel.htmlFor = conciseInput.id = 'concise-mode-setting'; conciseInput.type = 'checkbox'; conciseInput.title = '一键隐藏监控面板、SFTP 面板与终端标题栏，并自动收起底部命令输入条；关闭开关即恢复';
-  conciseInput.onchange = safe(() => setConciseMode(conciseInput.checked)); conciseRow.append(conciseLabel, conciseInput); settingsAnchor.before(conciseRow);
+  const conciseRow = node('div', 'scale-setting placement-setting'), conciseLabel = node('label', '', '简洁模式'), conciseSelect = node('select');
+  conciseLabel.htmlFor = conciseSelect.id = 'concise-mode-setting'; conciseSelect.title = '隐藏监控面板、SFTP 面板与终端标题栏，并自动收起底部命令输入条；关闭即恢复';
+  for (const [value, text] of [['true', '开启'], ['false', '关闭']]) { const option = node('option', '', text); option.value = value; conciseSelect.append(option); }
+  conciseSelect.onchange = safe(() => setConciseMode(conciseSelect.value === 'true')); conciseRow.append(conciseLabel, conciseSelect); settingsAnchor.before(conciseRow);
   for (const [id, key, title, options] of [['monitor-visible', 'monitorVisible', '监控面板', [['true', '显示'], ['false', '隐藏']]], ['files-position', 'filesPosition', 'SFTP面板', [['bottom', '终端下方'], ['right', '终端右侧'], ['top', '终端上方']]]]) {
     const row = node('div', 'scale-setting placement-setting'), label = node('label', '', title), select = node('select'); label.htmlFor = select.id = id; select.setAttribute('aria-label', title);
     for (const [value, text] of options) { const option = node('option', '', text); option.value = value; select.append(option); }
     select.onchange = safe(() => chooseAppearance({ [key]: key === 'monitorVisible' ? select.value === 'true' : select.value })); row.append(label, select); settingsAnchor.before(row);
   }
-  const followRow = node('div', 'scale-setting placement-setting'), followLabel = node('label', '', '跟随终端目录'), followInput = node('input');
-  followLabel.htmlFor = followInput.id = 'follow-terminal-setting'; followInput.type = 'checkbox'; followInput.title = 'SFTP 面板随终端当前目录切换，需要 Bash / Zsh / Fish 提示符集成';
-  followInput.onchange = safe(() => chooseAppearance({ followTerminal: followInput.checked })); followRow.append(followLabel, followInput); settingsAnchor.before(followRow);
+  const followRow = node('div', 'scale-setting placement-setting'), followLabel = node('label', '', '跟随终端目录'), followSelect = node('select');
+  followLabel.htmlFor = followSelect.id = 'follow-terminal-setting'; followSelect.setAttribute('aria-label', '跟随终端目录'); followSelect.title = 'SFTP 面板随终端当前目录切换，需要 Bash / Zsh / Fish 提示符集成';
+  for (const [value, text] of [['true', '开启'], ['false', '关闭']]) { const option = node('option', '', text); option.value = value; followSelect.append(option); }
+  followSelect.onchange = safe(() => chooseAppearance({ followTerminal: followSelect.value === 'true' })); followRow.append(followLabel, followSelect); settingsAnchor.before(followRow);
   applyWorkspacePlacement();
   window.addEventListener('resize', () => { for (const dialog of movableColorDialogs) clampColorDialog(dialog); });
   document.addEventListener('visibilitychange', () => { if (document.hidden) flushPromptColors().catch(() => {}); });
