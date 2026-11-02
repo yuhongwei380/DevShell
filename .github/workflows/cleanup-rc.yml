@@ -1,0 +1,41 @@
+name: Cleanup RC releases
+
+# One-shot housekeeping after the v26.11.0 official release: delete every
+# -rc. Release (assets included) and every rc tag. Idempotent: once nothing
+# matches the filter the job is a no-op. Official vX.Y.Z tags are never touched.
+
+on:
+  push:
+    paths:
+      - .github/workflows/cleanup-rc.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete rc releases and rc tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          mapfile -t pairs < <(gh api "repos/$repo/releases" --paginate --jq '.[] | select(.tag_name | contains("-rc.")) | "\(.id)\t\(.tag_name)"')
+          if [ "${#pairs[@]}" -eq 0 ]; then echo "no rc releases remain"; else
+            for pair in "${pairs[@]}"; do
+              id="${pair%%$'\t'*}"; tag="${pair#*$'\t'}"
+              gh api -X DELETE "repos/$repo/releases/$id"
+              echo "deleted release $tag ($id)"
+            done
+          fi
+          mapfile -t tags < <(gh api "repos/$repo/git/matching-refs/tags/" --jq '.[].ref' | sed 's#^refs/tags/##' | grep -- '-rc' || true)
+          if [ "${#tags[@]}" -eq 0 ]; then echo "no rc tags remain"; else
+            for tag in "${tags[@]}"; do
+              [ -z "$tag" ] && continue
+              gh api -X DELETE "repos/$repo/git/refs/tags/$tag"
+              echo "deleted tag $tag"
+            done
+          fi
