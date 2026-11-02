@@ -623,13 +623,13 @@ function updateStatus() { $('#connection-button').setAttribute('aria-label', '�
 function renderSessionInfo() {
   const state = current(), profile = profileFor(state);
   $('#welcome-state').hidden = !!state; window.DengLocalPrompt?.reflect();
-  $('#terminal-meta-host').textContent = profile ? (profile.protocol === 'serial' ? window.DengSerial.label(profile) : `${profile.user}@${sessionDisplayName(state)}`) : 'SSH 终端'; $('#terminal-state').textContent = state?.handoffProvisional ? '正在接收标签…' : state?.pendingConnection ? '正在连接…' : state?.connectionFailed ? '连接未完成' : state?.connected ? '已连接' : state?.disconnectDiagnostic ? `已断开 · ${state.disconnectDiagnostic.code}` : '待连接';
+  $('#terminal-meta-host').textContent = profile ? (profile.protocol === 'serial' ? window.DengSerial.label(profile) : `${profile.user}@${sessionDisplayName(state)}`) : 'SSH 终端'; $('#terminal-state').textContent = state?.handoffProvisional ? '正在接收标签…' : state?.pendingConnection ? '正在连接…' : state?.connectionFailed ? '连接未完成' : state?.connected ? '已连接' : state?.disconnectDiagnostic ? `已断开 · ${state.disconnectDiagnostic.code}` : '';
   $('#terminal-state').title = state?.disconnectDiagnostic?.message || '';
   $('#terminal-status-dot').className = `status-dot ${state?.connected ? 'green' : state?.pendingConnection ? 'blue' : 'red'}`;
   // The "当前连接" badge lives in the session header, merged with the connected
   // status: the green dot plus badge replaces the plain "已连接" text.
   const currentConnected = !!state?.connected && !state?.handoffProvisional;
-  $('#terminal-state').hidden = currentConnected; $('#terminal-current-badge').hidden = !currentConnected;
+  $('#terminal-state').hidden = currentConnected || !$('#terminal-state').textContent; $('#terminal-current-badge').hidden = !currentConnected;
   const localPrompt = !!state && !state.connected && !state.pendingConnection && !state.disconnecting && !state.detaching && !state.handoffProvisional && !state.ownershipUncertain;
   $('#command-history').disabled = false; $('#command-input').disabled = !!state && !(state.connected || localPrompt); $('#command-input').placeholder = state ? (state.connected ? '输入命令并回车发送 · ↑↓ 历史' : localPrompt ? '本机提示符：ssh · reconnect · ping/traceroute/nslookup/dig/curl · exit · ↑↓ 本机历史' : '输入命令并回车发送 · ↑↓ 历史') : '本机：输入 ssh 用户@主机 或 ping/traceroute/nslookup/dig/curl · ↑↓ 本机历史'; $('#command-input').value = ''; resizeCommandInput(); $('#disconnect').disabled = !state?.connected || !!(state.disconnecting || state.detaching || state.handoffProvisional || state.ownershipUncertain);
   renderMonitor(state?.connected ? state.stats : null); renderLatency(); renderCommands(); window.DengCommonApps?.render(); window.DengProcessView?.reflect(); window.DengPinnedNav?.reflect(); updateStatus(); reflectCommandBar();

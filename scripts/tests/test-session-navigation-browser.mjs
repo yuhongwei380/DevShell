@@ -39,6 +39,12 @@ try {
   assert.equal(await page.$eval('#about-button', el => el.nextElementSibling.id), 'settings-button');
   assert.equal(await page.$eval('#settings-button', el => el.nextElementSibling.id), 'github-button');
   assert.equal(await page.$eval('#settings-button use', el => el.getAttribute('href')), '#i-settings');
+  const header = await page.evaluate(() => {
+    const dot = document.querySelector('#terminal-status-dot'), group = dot.parentElement, state = document.querySelector('#terminal-state');
+    return { dot: getComputedStyle(dot).width, clip: getComputedStyle(group).overflow, host: getComputedStyle(document.querySelector('#terminal-meta-host')).fontSize, stateHidden: state.hidden, stateText: state.textContent };
+  });
+  assert.deepEqual(header, { dot: '7px', clip: 'visible', host: '12px', stateHidden: true, stateText: '' });
+  checks.push('Terminal header: 7px dot with visible glow ring, 12px host text, no 待连接 placeholder');
   await page.click('#settings-button');
   await page.waitForSelector('#settings-menu:not([hidden])');
   assert.equal(await page.$eval('#settings-main-view', el => !!el.querySelector('#manage-chart-styles')), false);

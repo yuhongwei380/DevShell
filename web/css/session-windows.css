@@ -20,8 +20,8 @@
 .terminal-popout:hover:enabled,.terminal-popout:focus-visible{background:#95bed54d;border-color:#95bed566;color:#f0f8fb}
 .terminal-popout:disabled{opacity:.42;cursor:default}
 .terminal-popout[aria-busy="true"] svg{opacity:.6;animation:detach-pulse 1.1s ease-in-out infinite}
-.terminal-meta>span:first-child{min-width:0;overflow:hidden;white-space:nowrap}
-#terminal-meta-host{overflow:hidden;text-overflow:ellipsis}
+.terminal-meta>span:first-child{min-width:0;white-space:nowrap}
+#terminal-meta-host{min-width:0;overflow:hidden;text-overflow:ellipsis}
 [data-narrow="true"] .terminal-meta .terminal-encoding{display:none}
 /* 窄窗口下把整组操作按钮推到右侧：只给首个可见按钮加 auto margin；
    若每个按钮都加，剩余空间会被均分，按钮反而在整行散开。 */
