@@ -1073,6 +1073,15 @@ function setWorkspaceVisible(visible, persist = true) {
   // after the user returns to the terminal.
   updateTransferNotice();
 }
+// 简洁模式：设置里一键隐藏监控面板、SFTP 面板与终端标题栏（含断开/固定/SFTP 按钮），
+// 关闭开关即恢复三者。开关状态随布局偏好持久化，面板可见性沿用各自的既有偏好。
+function setConciseMode(on) {
+  layout.conciseMode = on; save('cloudshell.layout', layout);
+  document.documentElement.dataset.concise = on ? 'true' : 'false';
+  return (on ? chooseAppearance({ monitorVisible: false }) : chooseAppearance({ monitorVisible: true }))
+    .then(() => setWorkspaceVisible(!on))
+    .catch(error => { toast(error.message); layout.conciseMode = !on; save('cloudshell.layout', layout); document.documentElement.dataset.concise = on ? 'false' : 'true'; });
+}
 // Serialize native resize requests, including placement changes and rapid toggles.
 let rightPanelOpen = false, rightPanelResize = Promise.resolve();
 function syncRightPanelWindow() {

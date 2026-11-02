@@ -45,6 +45,22 @@ try {
   });
   assert.deepEqual(header, { dot: '7px', clip: 'visible', host: '12px', stateHidden: true, stateText: '' });
   checks.push('Terminal header: 7px dot with visible glow ring, 12px host text, no 待连接 placeholder');
+  const concise = await page.evaluate(async () => {
+    const box = document.querySelector('#concise-mode-setting');
+    const seen = { row: !!box, checked: box.checked };
+    const snapshot = () => ({ concise: document.documentElement.dataset.concise, meta: getComputedStyle(document.querySelector('.terminal-meta')).display, monitor: document.documentElement.dataset.monitorVisible, files: document.querySelector('#files-panel').hidden });
+    box.click(); await new Promise(resolve => setTimeout(resolve, 300));
+    const on = snapshot();
+    box.click(); await new Promise(resolve => setTimeout(resolve, 300));
+    const off = snapshot();
+    document.querySelector('#toggle-sftp').click(); await new Promise(resolve => setTimeout(resolve, 200));
+    return { seen, on, off, filesAfterCleanup: document.querySelector('#files-panel').hidden };
+  });
+  assert.deepEqual(concise.seen, { row: true, checked: false });
+  assert.deepEqual(concise.on, { concise: 'true', meta: 'none', monitor: 'false', files: true });
+  assert.deepEqual(concise.off, { concise: 'false', meta: 'flex', monitor: 'true', files: false });
+  assert.equal(concise.filesAfterCleanup, true);
+  checks.push('Settings concise mode hides monitor sidebar, SFTP panel and terminal meta bar, and restores them when off');
   await page.click('#settings-button');
   await page.waitForSelector('#settings-menu:not([hidden])');
   assert.equal(await page.$eval('#settings-main-view', el => !!el.querySelector('#manage-chart-styles')), false);
