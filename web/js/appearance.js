@@ -229,7 +229,9 @@ async function applyAppearance() {
   for (const state of sessions.values()) { state.term.options.fontSize = terminalFont; state.term.options.fontWeight = boldForFont(next.fontId) ? '700' : '400'; }
   const background = allBackgrounds().find(item => item.id === next.backgroundId) || allBackgrounds()[0];
   if (activeBackgroundID !== background.id) {
-    const url = background.id.startsWith('builtin:') ? '' : await assetURL(background);
+    // Only the two solid built-ins have no image. Built-in catalogue entries
+    // carry a file and resolve through assetURL like imported backgrounds.
+    const url = background.id === 'builtin:none' || background.id === 'builtin:black' ? '' : await assetURL(background);
     if (generation !== mediaGeneration) return;
     document.documentElement.style.setProperty('--terminal-background', url ? `url(${JSON.stringify(url)})` : 'none'); activeBackgroundID = background.id; const panel = $('.terminal-panel'); panel.classList.toggle('has-background', !!url); panel.classList.toggle('solid-black', background.id === 'builtin:black');
   }

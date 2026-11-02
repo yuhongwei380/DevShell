@@ -32,7 +32,7 @@ try{
   await page.$eval('#background-opacity',(el,value)=>{el.value=String(value);el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));},value);
   await page.evaluate(()=>appearanceSave);
  };
- await page.click('#settings-button');await page.click('#manage-backgrounds');
+ await page.click('#settings-button');await page.click('#manage-appearance-config');await page.click('#manage-backgrounds');
  await page.waitForSelector('#appearance-dialog[open]');
  await page.click('[data-asset-id="builtin:mist"] .asset-choice');
  await page.waitForFunction(()=>appearance.backgroundId==='builtin:mist'&&activeBackgroundID==='builtin:mist');
