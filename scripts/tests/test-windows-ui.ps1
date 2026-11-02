@@ -79,9 +79,9 @@ function Find-ByNameType([string]$Name,[System.Windows.Automation.ControlType]$C
  }
  return $null
 }
-# 文件面板位置只在设置的外观配置里调整：点击主题化下拉框（role=combobox）打开弹出列表，再真实点击选项。
+# SFTP面板位置只在设置里调整：点击主题化下拉框（role=combobox）打开弹出列表，再真实点击选项。
 function Select-Files-Position([string]$Option){
- $combo=Find-ByNameType '文件面板' ([System.Windows.Automation.ControlType]::ComboBox)
+ $combo=Find-ByNameType 'SFTP面板' ([System.Windows.Automation.ControlType]::ComboBox)
  if(!$combo){throw 'Native files placement combo unavailable'}
  $r=$combo.Current.BoundingRectangle
  if($r.Width -le 0 -or $r.Height -le 0 -or $combo.Current.IsOffscreen){throw 'Files placement combo is not visible'}

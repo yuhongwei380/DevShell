@@ -100,13 +100,13 @@ window.DengZmodemBridge = (() => {
   const directory = state.terminalDirectory || state.cwd;
   if (intent?.kind === 'sz') {
    const names = intent.files;
-   if (!names.length) { note('检测到 lrzsz 的 sz：DevShell 不支持 ZModem，请在下方文件面板下载对应文件。'); return; }
+   if (!names.length) { note('检测到 lrzsz 的 sz：DevShell 不支持 ZModem，请在下方 SFTP 面板下载对应文件。'); return; }
    note(`DevShell 不支持 ZModem（lrzsz），已改用 SFTP 下载：${names.join('、')}`);
    for (const name of names) { try { await DengFileTools.downloadFile(state, normalizePath(name, directory)); } catch (error) { toast(`下载 ${name} 失败：${error?.message || error}`); } }
    return;
   }
   if (intent?.kind === 'rz') { note(`DevShell 不支持 ZModem（lrzsz），已改用 SFTP 上传，目标目录：${directory}`); await chooseUploads(state, directory); return; }
-  note('检测到 lrzsz（rz / sz）的 ZModem 握手：DevShell 不支持该协议，已中止。上传请使用下方文件面板，下载请使用文件右键菜单。');
+  note('检测到 lrzsz（rz / sz）的 ZModem 握手：DevShell 不支持该协议，已中止。上传请使用下方 SFTP 面板，下载请使用文件右键菜单。');
  }
 
  function observe(state, bytes) {

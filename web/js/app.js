@@ -1101,7 +1101,7 @@ async function chooseUploads(state = current(), directory = state?.cwd) {
  if (!state?.connected) return toast('请先连接服务器');
  if (native()) { const paths = await native().ChooseUploads(); if (paths?.length) await uploadNative(paths, state, directory); }
  else if (state === current()) { if (directory !== state.cwd && state.sftpAvailable !== false) { try { await navigate(directory, state); } catch {} } $('#file-picker').click(); }
- else toast('请在该连接对应的窗口里用文件面板上传');
+ else toast('请在该连接对应的窗口里用 SFTP 面板上传');
 }
 $('#upload-folder-option').onclick = safe(async () => { $('#upload-menu').hidden = true; if (native()) { const state = current(); const directory = state?.cwd; const path = await native().ChooseFolder(); if (path) await uploadNative([path], state, directory); } else $('#folder-picker').click(); });
 for (const id of ['file-picker', 'folder-picker']) $(`#${id}`).onchange = safe(async event => { const files = [...event.target.files]; event.target.value = ''; await queueFiles(files.map(file => ({ file, relativePath: file.webkitRelativePath || file.name }))); });

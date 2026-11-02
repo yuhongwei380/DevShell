@@ -74,7 +74,7 @@ function applyWorkspacePlacement() {
   splitter.classList.toggle('fixed-width-gap', right);
   splitter.tabIndex = right ? -1 : 0;
   splitter.setAttribute('aria-disabled', String(right));
-  splitter.setAttribute('aria-label', right ? '文件面板固定宽度' : '调整文件面板高度');
+  splitter.setAttribute('aria-label', right ? 'SFTP面板固定宽度' : '调整SFTP面板高度');
   if (right) {
     splitter.setAttribute('aria-hidden', 'true');
     for (const name of ['aria-valuemin', 'aria-valuemax', 'aria-valuenow']) splitter.removeAttribute(name);
@@ -164,7 +164,7 @@ function initializeAppearanceTools() {
   const appearanceAnchor = $('#reset-layout');
   const promptButton = node('button'); promptButton.id = 'manage-prompt-colors'; promptButton.type = 'button'; promptButton.setAttribute('role', 'menuitem'); promptButton.append(icon('terminal'), document.createTextNode('提示符颜色')); promptButton.onclick = openPromptColors; appearanceAnchor.before(promptButton);
   const settingsAnchor = $('#settings-main-view .scale-setting');
-  for (const [id, key, title, options] of [['monitor-visible', 'monitorVisible', '监控面板', [['true', '显示'], ['false', '隐藏']]], ['files-position', 'filesPosition', '文件面板', [['bottom', '终端下方'], ['right', '终端右侧'], ['top', '终端上方']]]]) {
+  for (const [id, key, title, options] of [['monitor-visible', 'monitorVisible', '监控面板', [['true', '显示'], ['false', '隐藏']]], ['files-position', 'filesPosition', 'SFTP面板', [['bottom', '终端下方'], ['right', '终端右侧'], ['top', '终端上方']]]]) {
     const row = node('div', 'scale-setting placement-setting'), label = node('label', '', title), select = node('select'); label.htmlFor = select.id = id; select.setAttribute('aria-label', title);
     for (const [value, text] of options) { const option = node('option', '', text); option.value = value; select.append(option); }
     select.onchange = safe(() => chooseAppearance({ [key]: key === 'monitorVisible' ? select.value === 'true' : select.value })); row.append(label, select); settingsAnchor.before(row);
