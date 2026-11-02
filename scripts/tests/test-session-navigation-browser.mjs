@@ -48,7 +48,7 @@ try {
   const concise = await page.evaluate(async () => {
     const box = document.querySelector('#concise-mode-setting');
     const seen = { row: !!box, checked: box.checked };
-    const snapshot = () => ({ concise: document.documentElement.dataset.concise, meta: getComputedStyle(document.querySelector('.terminal-meta')).display, monitor: document.documentElement.dataset.monitorVisible, files: document.querySelector('#files-panel').hidden });
+    const snapshot = () => ({ concise: document.documentElement.dataset.concise, meta: getComputedStyle(document.querySelector('.terminal-meta')).display, monitor: document.documentElement.dataset.monitorVisible, files: document.querySelector('#files-panel').hidden, bar: document.querySelector('.terminal-command-bar').classList.contains('command-bar-collapsed') });
     box.click(); await new Promise(resolve => setTimeout(resolve, 300));
     const on = snapshot();
     box.click(); await new Promise(resolve => setTimeout(resolve, 300));
@@ -57,8 +57,8 @@ try {
     return { seen, on, off, filesAfterCleanup: document.querySelector('#files-panel').hidden };
   });
   assert.deepEqual(concise.seen, { row: true, checked: false });
-  assert.deepEqual(concise.on, { concise: 'true', meta: 'none', monitor: 'false', files: true });
-  assert.deepEqual(concise.off, { concise: 'false', meta: 'flex', monitor: 'true', files: false });
+  assert.deepEqual(concise.on, { concise: 'true', meta: 'none', monitor: 'false', files: true, bar: true });
+  assert.deepEqual(concise.off, { concise: 'false', meta: 'flex', monitor: 'true', files: false, bar: false });
   assert.equal(concise.filesAfterCleanup, true);
   checks.push('Settings concise mode hides monitor sidebar, SFTP panel and terminal meta bar, and restores them when off');
   await page.click('#settings-button');

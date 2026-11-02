@@ -643,7 +643,7 @@ function changeFont(amount) { terminalFont = normalizeTerminalFontSize(terminalF
 $('#font-up').onclick = () => changeFont(.5); $('#font-down').onclick = () => changeFont(-.5);
 // 会话在线时候选栏收起为左侧按钮（点按钮展开并聚焦输入条）；断开连接、
 // 新建窗口与欢迎页自动恢复完整输入条。在线时输入为空且焦点离开输入条后自动再收起；
-// 有草稿或输入条内仍有焦点（如历史按钮）时不打扰。
+// 有草稿或输入条内仍有焦点（如历史按钮）时不打扰。简洁模式下无论连接状态都自动收起。
 const commandBar = $('#terminal-command-bar'), commandBarToggle = $('#command-bar-toggle');
 let commandBarPinned = false, commandBarKey = null;
 function setCommandBarCollapsed(collapsed) {
@@ -660,7 +660,7 @@ function reflectCommandBar() {
   const state = current(), key = `${state?.id || ''}:${state?.connected ? 1 : 0}`;
   // 切换会话或连接状态变化都视为新的起点，撤销上一次的手动展开。
   if (key !== commandBarKey) { commandBarKey = key; commandBarPinned = false; }
-  setCommandBarCollapsed(!!state?.connected && !commandBarPinned);
+  setCommandBarCollapsed((!!state?.connected || layout.conciseMode === true) && !commandBarPinned);
 }
 commandBarToggle.onclick = () => {
   if (commandBar.classList.contains('command-bar-collapsed')) { commandBarPinned = true; setCommandBarCollapsed(false); $('#command-input').focus(); }
@@ -1078,9 +1078,10 @@ function setWorkspaceVisible(visible, persist = true) {
 function setConciseMode(on) {
   layout.conciseMode = on; save('cloudshell.layout', layout);
   document.documentElement.dataset.concise = on ? 'true' : 'false';
+  reflectCommandBar();
   return (on ? chooseAppearance({ monitorVisible: false }) : chooseAppearance({ monitorVisible: true }))
     .then(() => setWorkspaceVisible(!on))
-    .catch(error => { toast(error.message); layout.conciseMode = !on; save('cloudshell.layout', layout); document.documentElement.dataset.concise = on ? 'false' : 'true'; });
+    .catch(error => { toast(error.message); layout.conciseMode = !on; save('cloudshell.layout', layout); document.documentElement.dataset.concise = on ? 'false' : 'true'; reflectCommandBar(); });
 }
 // Serialize native resize requests, including placement changes and rapid toggles.
 let rightPanelOpen = false, rightPanelResize = Promise.resolve();

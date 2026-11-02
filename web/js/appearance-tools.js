@@ -167,7 +167,7 @@ function initializeAppearanceTools() {
   const promptButton = node('button'); promptButton.id = 'manage-prompt-colors'; promptButton.type = 'button'; promptButton.setAttribute('role', 'menuitem'); promptButton.append(icon('terminal'), document.createTextNode('提示符颜色')); promptButton.onclick = openPromptColors; appearanceAnchor.before(promptButton);
   const settingsAnchor = $('#settings-main-view .scale-setting');
   const conciseRow = node('div', 'scale-setting placement-setting'), conciseLabel = node('label', '', '简洁模式'), conciseInput = node('input');
-  conciseLabel.htmlFor = conciseInput.id = 'concise-mode-setting'; conciseInput.type = 'checkbox'; conciseInput.title = '一键隐藏监控面板、SFTP 面板与终端标题栏；关闭开关即恢复';
+  conciseLabel.htmlFor = conciseInput.id = 'concise-mode-setting'; conciseInput.type = 'checkbox'; conciseInput.title = '一键隐藏监控面板、SFTP 面板与终端标题栏，并自动收起底部命令输入条；关闭开关即恢复';
   conciseInput.onchange = safe(() => setConciseMode(conciseInput.checked)); conciseRow.append(conciseLabel, conciseInput); settingsAnchor.before(conciseRow);
   for (const [id, key, title, options] of [['monitor-visible', 'monitorVisible', '监控面板', [['true', '显示'], ['false', '隐藏']]], ['files-position', 'filesPosition', 'SFTP面板', [['bottom', '终端下方'], ['right', '终端右侧'], ['top', '终端上方']]]]) {
     const row = node('div', 'scale-setting placement-setting'), label = node('label', '', title), select = node('select'); label.htmlFor = select.id = id; select.setAttribute('aria-label', title);
