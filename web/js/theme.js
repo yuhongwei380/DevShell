@@ -92,11 +92,12 @@
   window.addEventListener('focus', refreshNativeTheme);
   document.addEventListener('visibilitychange', refreshNativeTheme);
   document.addEventListener('DOMContentLoaded', () => {
-    const menu = document.getElementById('settings-main-view');
+    const menu = document.getElementById('settings-appearance-view');
     if (menu) {
       const row = document.createElement('label'); row.className = 'system-theme-setting'; row.htmlFor = 'follow-system-theme';
       row.innerHTML = '<span>明暗跟随系统<small id="follow-system-theme-hint"></small></span><input id="follow-system-theme" type="checkbox" role="switch" aria-describedby="follow-system-theme-hint">';
-      menu.prepend(row);
+      const heading = menu.querySelector('.settings-submenu-heading');
+      if (heading) heading.after(row); else menu.prepend(row);
       row.querySelector('input').addEventListener('change', event => set(event.target.checked ? 'system' : resolved()));
       reflectSetting();
     }

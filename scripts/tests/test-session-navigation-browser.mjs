@@ -42,7 +42,9 @@ try {
   await page.click('#settings-button');
   await page.waitForSelector('#settings-menu:not([hidden])');
   assert.equal(await page.$eval('#settings-main-view', el => !!el.querySelector('#manage-chart-styles')), false);
+  assert.equal(await page.$eval('#settings-main-view', el => !!el.querySelector('.system-theme-setting')), false);
   assert.equal(await page.$eval('#settings-appearance-view', el => !!el.querySelector('#manage-chart-styles')), true);
+  assert.equal(await page.$eval('#settings-appearance-view', el => el.querySelector('.settings-submenu-heading')?.nextElementSibling?.classList.contains('system-theme-setting')), true);
   await page.click('#manage-appearance-config');
   await page.waitForSelector('#settings-appearance-view:not([hidden])');
   await page.click('#manage-chart-styles');
