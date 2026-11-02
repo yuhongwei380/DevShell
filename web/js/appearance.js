@@ -1,6 +1,6 @@
 'use strict';
 
-let appearance = { uiFontId: 'builtin:ui-alibaba-puhuiti-3-55', uiTextColors: {}, fontId: 'builtin:jetbrains-mono', fontColors: {}, fontBold: {}, chartStyles: {}, backgroundId: 'builtin:none', backgroundOpacity: .42, backgroundVersion: 2, uiScale: Number(window.DEVSHELL?.uiScale) || 1, terminalFontSize: 14, ansiPalette: '' };
+let appearance = { uiFontId: 'builtin:ui-alibaba-puhuiti-3-55', uiTextColors: {}, fontId: 'builtin:jetbrains-mono', fontColors: {}, fontBold: {}, chartStyles: {}, backgroundId: 'builtin:none', backgroundOpacity: .42, backgroundVersion: 2, uiScale: Number(window.DEVSHELL?.uiScale) || 1, terminalFontSize: 14, ansiPalette: '', autoCommandsEnabled: true };
 const appearanceMapFields = new Set(['fontColors', 'fontBold', 'chartStyles', 'uiTextColors']);
 const appearanceOwnedElsewhere = new Set(['layout', 'windowWidth', 'windowHeight', 'windowMaximised', 'terminalBold']);
 let appearanceSaved = appearanceSnapshot(appearance);
@@ -363,16 +363,18 @@ function renderAppearanceControls() {
 }
 function setSettingsMenu(open) {
   if (open) showSettingsMenuView('main');
-  else $('#manage-appearance-config').setAttribute('aria-expanded', 'false');
+  else { $('#manage-appearance-config').setAttribute('aria-expanded', 'false'); $('#manage-other-features').setAttribute('aria-expanded', 'false'); }
   $('#settings-menu').hidden = !open; $('#settings-button').setAttribute('aria-expanded', String(open));
-  if (open) { positionSettings(); $('#manage-keys').focus(); }
+  if (open) { positionSettings(); $('#feature-auto-commands').value = appearance.autoCommandsEnabled !== false ? 'true' : 'false'; $('#manage-keys').focus(); }
 }
 function showSettingsMenuView(view) {
-  const appearanceView = view === 'appearance';
-  $('#settings-main-view').hidden = appearanceView;
+  const appearanceView = view === 'appearance', otherView = view === 'other';
+  $('#settings-main-view').hidden = appearanceView || otherView;
   $('#settings-appearance-view').hidden = !appearanceView;
+  $('#settings-other-view').hidden = !otherView;
   $('#manage-appearance-config').setAttribute('aria-expanded', String(appearanceView));
-  (appearanceView ? $('#manage-ui-appearance') : $('#manage-appearance-config')).focus();
+  $('#manage-other-features').setAttribute('aria-expanded', String(otherView));
+  (appearanceView ? $('#manage-ui-appearance') : otherView ? $('#feature-auto-commands') : $('#manage-appearance-config')).focus();
 }
 function positionSettings() {
   const menu = $('#settings-menu'), rect = $('#settings-button').getBoundingClientRect();
@@ -663,7 +665,7 @@ function initializeAppearance() {
     if (event.key === 'Escape' && !$('#monitor-backdrop').hidden) $('#monitor-backdrop').click();
     if (event.key === 'Escape' && !$('#settings-menu').hidden) {
       event.preventDefault();
-      if (!$('#settings-appearance-view').hidden) showSettingsMenuView('main');
+      if (!$('#settings-appearance-view').hidden || !$('#settings-other-view').hidden) showSettingsMenuView('main');
       else { setSettingsMenu(false); $('#settings-button').focus(); }
     }
   });
@@ -672,6 +674,11 @@ function initializeAppearance() {
   $('#switch-ui-fonts').onclick = safe(() => window.DengUIAppearance.open());
   $('#online-shell-fonts').onclick = safe(() => window.DengFontLibrary.open('font'));
   $('#manage-proxies').onclick = showProxies; $('#manage-profile-proxies').onclick = showProxies;
+  $('#feature-auto-commands').onchange = safe(async event => {
+    const enabled = event.target.value === 'true';
+    try { await chooseAppearance({ autoCommandsEnabled: enabled }); }
+    catch (error) { event.target.value = enabled ? 'false' : 'true'; toast(error?.message || String(error)); }
+  });
   $('#close-appearance').onclick = () => $('#appearance-dialog').close(); $('#import-asset').onclick = safe(importAsset);
   $('#asset-picker').onchange = safe(async event => {
     const file = event.target.files[0], kind = assetKind; event.target.value = ''; if (!file) return;

@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="css/style.css?v=20261102-hdrdot1">
   <link rel="stylesheet" href="css/theme.css?v=20261101-tabdot1">
   <link rel="stylesheet" href="css/workspace-tools.css?v=20261001-composer">
-  <link rel="stylesheet" href="css/appearance.css?v=20261101-hdrmerge1">
+  <link rel="stylesheet" href="css/appearance.css?v=20261102-autocmd3">
   <link rel="stylesheet" href="css/process-view.css?v=20260920-v002-b70">
   <link rel="stylesheet" href="css/workspace-refinements.css?v=20261025-cmdtab1">
   <link rel="stylesheet" href="css/file-browser.css?v=20260921-v002-b72">
@@ -40,7 +40,7 @@
   <link rel="stylesheet" href="css/security-lock.css?v=20260920-v002-b70">
   <link rel="stylesheet" href="css/soft-dark.css?v=20261101-hdrmerge1">
 <link rel="stylesheet" href="css/rdp.css?v=20260927-preview1">
-  <link rel="stylesheet" href="css/connection-form.css?v=20261019-serial1">
+  <link rel="stylesheet" href="css/connection-form.css?v=20261102-autocmd2">
   <link rel="stylesheet" href="css/upload-confirmation.css?v=20260928-overwrite1">
 </head>
 <body>
@@ -251,6 +251,12 @@
       <p class="proxy-note">直连跟随系统路由；使用代理时，由代理端解析域名。</p>
     </details>
     <label class="connection-notes-field">备注（可选）<textarea id="connection-notes" name="notes" rows="3" aria-describedby="connection-notes-hint" placeholder="续费网址、到期时间、用途等"></textarea><small id="connection-notes-hint" class="notes-input-hint" aria-live="polite">正文最多 3 行，每行最多 20 个中文或 40 个英文字符</small></label>
+    <details class="auto-command-settings" id="auto-command-settings">
+      <summary>连接后自动执行 <span id="auto-command-summary">未配置</span><svg><use href="#i-chevron"/></svg></summary>
+      <label class="checkbox-label"><input name="autoRun" type="checkbox" id="connection-auto-run">连接成功后自动执行下列命令</label>
+      <label>命令（每行一条，按顺序执行）<textarea name="autoCommands" id="connection-auto-commands" rows="4" spellcheck="false" autocomplete="off" placeholder="cd /data&#10;tmux attach -t dev || tmux new -s dev"></textarea></label>
+      <p class="proxy-note">命令会敲进这条连接的远端终端，Shell 就绪后按顺序执行；断开重连后会再次执行。全局开关在「设置 → 其他功能」。</p>
+    </details>
     </aside></div></div>
     <div class="connection-form-footer">
     <button type="button" id="reset-host-key" class="text-button" hidden>重置此服务器的主机指纹</button>
@@ -278,6 +284,7 @@
       <button role="menuitem" id="manage-keys"><svg><use href="#i-key"/></svg>密钥管理器<span>私钥与公钥</span></button>
       <button role="menuitem" id="manage-appearance-config" data-settings-view="appearance" aria-haspopup="menu" aria-controls="settings-appearance-view" aria-expanded="false"><svg><use href="#i-sun"/></svg>外观配置<span>字体与布局</span><svg class="settings-chevron"><use href="#i-chevron"/></svg></button>
       <button role="menuitem" id="manage-proxies"><svg><use href="#i-network"/></svg>代理管理器<span>连接路径</span></button>
+      <button role="menuitem" id="manage-other-features" data-settings-view="other" aria-haspopup="menu" aria-controls="settings-other-view" aria-expanded="false"><svg><use href="#i-settings"/></svg>其他功能<span>行为开关</span><svg class="settings-chevron"><use href="#i-chevron"/></svg></button>
       <button role="menuitem" id="help-button" aria-label="使用手册与功能引导" aria-haspopup="dialog"><svg><use href="#i-help-book"/></svg>使用手册与功能引导<span>帮助</span></button>
       <button role="menuitem" id="release-notes-button" aria-haspopup="dialog" aria-controls="release-notes-dialog"><svg><use href="#i-history"/></svg>更新日志<span>当前版本</span></button>
       <div class="scale-setting"><label for="ui-scale">界面缩放</label><select id="ui-scale" aria-label="界面缩放"><option value="0.75">75%</option><option value="0.9">90%</option><option value="1">100%</option><option value="1.1">110%</option><option value="1.25">125%</option><option value="1.5">150%</option><option value="1.75">175%</option><option value="2">200%</option></select></div>
@@ -291,6 +298,10 @@
       <button role="menuitem" id="manage-chart-styles"><svg><use href="#i-network"/></svg>曲线样式<span>网速与延迟</span></button>
       <div class="scale-setting"><label for="ansi-palette">终端 ANSI 颜色</label><select id="ansi-palette" aria-label="终端 ANSI 颜色预设"><option value="soft">柔和</option><option value="vivid">高饱和</option><option value="bright">鲜亮</option></select></div>
       <button role="menuitem" id="reset-layout" title="恢复默认布局与终端字号" aria-label="恢复默认布局"><svg><use href="#i-layout"/></svg>恢复默认布局<span>布局与字号</span></button>
+    </div>
+    <div class="settings-menu-view" id="settings-other-view" role="group" aria-label="其他功能" hidden>
+      <div class="settings-submenu-heading"><button type="button" role="menuitem" id="other-settings-back" data-settings-view="main"><svg><use href="#i-chevron"/></svg>返回设置</button><strong>其他功能</strong></div>
+      <div class="scale-setting placement-setting"><label for="feature-auto-commands">连接后自动执行命令</label><select id="feature-auto-commands" aria-label="连接后自动执行命令" title="SSH 连接按各自配置把命令敲进远端终端；关闭后所有连接都不再自动执行"><option value="true">开启</option><option value="false">关闭</option></select></div>
     </div>
   </div>
   <dialog id="about-dialog" aria-labelledby="about-title"><div class="dialog-heading"><h2 id="about-title">关于 DevShell</h2><button type="button" class="icon-button" id="close-about" aria-label="关闭版本信息"><svg><use href="#i-close"/></svg></button></div><dl class="about-versions"><dt>软件版本</dt><dd id="about-version"></dd><dt>构建版本</dt><dd id="about-build"></dd></dl></dialog>
@@ -365,7 +376,7 @@
   <script src="js/command-composer.js?v=20261001-composer"></script>
   <script src="js/workspace-tools.js?v=20260925-v002-b86"></script>
   <script src="js/release-note-tags.js?v=20261102-sectag1"></script>
-  <script src="js/appearance.js?v=20261101-hdrmerge1"></script>
+  <script src="js/appearance.js?v=20261102-autocmd2"></script>
   <script src="js/ui-appearance.js?v=20261025-devshell-rc1"></script>
   <script src="js/font-library.js?v=20261019-brand1"></script>
   <script src="js/path-history.js?v=20260925-v002-b86"></script>
@@ -375,7 +386,7 @@
   <script src="js/latency-chart.js?v=20260920-v002-b70"></script>
   <script src="js/workspace-refinements.js?v=20261021-center1"></script>
   <script src="js/themed-select.js?v=20260920-v002-b70"></script>
-  <script src="js/terminal-integration.js?v=20261018-follow3"></script>
+  <script src="js/terminal-integration.js?v=20261102-autocmd1"></script>
   <script src="js/mtr-installation.js?v=20261019-brand1"></script>
   <script src="js/config-document.js?v=20261102-mergetheme1"></script>
   <script src="js/startup-update.js?v=20261101-updmirror2"></script>
@@ -400,7 +411,7 @@
   <script src="js/serial.js?v=20261101-noicon1"></script>
   <script src="js/upload-confirmation.js?v=20260928-overwrite1"></script>
   <script src="js/shell-transfers.js?v=20261101-transferpill1"></script>
-  <script src="js/app.js?v=20261102-concise4"></script>
+  <script src="js/app.js?v=20261102-autocmd1"></script>
   <script src="js/quick-connect.js?v=20261101-save-menu1"></script>
   <script src="js/local-prompt.js?v=20261022-tabs1"></script>
   <script src="js/command-completion.js?v=20261025-cmdtab1"></script>

@@ -452,9 +452,13 @@ function createTerminal(state) {
     if (message.type === 'ready') {
       // The relay sends ready only after the remote shell starts, before its
       // first output. Window handoffs must not add text to a running shell.
+      const freshConnection = state.announceConnectionReady;
       if (state.announceConnectionReady) { state.announceConnectionReady = false; showConnectionProgress(state, state.serial ? '串口已打开！' : '连接主机成功！'); if (!state.serial && state.sftpAvailable === false && !state.sftpPending) showConnectionProgress(state, state.sftpDisabled ? 'Dropbear 连接默认关闭 SFTP，SSH 终端可正常使用。' : 'SFTP 文件服务不可用，SSH 终端可正常使用。'); }
       if (state.sftpPending) void refreshFileStatus(state);
       acceptShellIntegration(state, message.integration); state.ready = true; applyPendingFollow(state); state.handoffProvisional = false; state.ownershipUncertain = false; terminal.options.disableStdin = !!state.detaching || !state.connected; state.restoring = false; state.restoration = null;
+      // Fresh connects only: queued per-profile commands (issue #5) start
+      // typing once the remote shell exists. Handoffs never replay them.
+      if (freshConnection) scheduleAutoCommands(state);
       if (!state.terminalOutputStarted && !state.terminalBackgroundTimer) state.terminalBackgroundTimer = setTimeout(() => { state.terminalBackgroundTimer = null; if (!state.closed && state.connected && sessions.get(state.id) === state) { state.terminalBackgroundReady = true; if (current() === state) { pollStats(); pollLatency(); } } }, 1000);
       if (activeID === state.id) renderSessionInfo(); if (activeID === state.id) { fitActive(); terminal.focus(); }
     }
@@ -480,10 +484,44 @@ function sendInput(state, data) {
   for (let start = 0; start < data.length;) { let end = Math.min(start + 16000, data.length); if (end < data.length && /[\uD800-\uDBFF]/.test(data[end - 1])) end--; sendMessage(state, { type: 'input', data: data.slice(start, end) }); start = end; }
 }
 function fitActive() { const state = current(); if (state && !state.detaching && !state.restoring && !state.host.hidden && state.host.clientWidth > 0 && state.host.clientHeight > 0) { state.fit.fit(); if (state.ready) sendMessage(state, { type: 'resize', cols: state.term.cols, rows: state.term.rows }); } }
+// Connect-time auto commands (issue #5). The profile's list is snapshotted at
+// connect, then typed into this session's terminal one line at a time. With
+// shell integration the prompt/busy reports are authoritative: a line is sent
+// only while the shell sits at its prompt, so interactive programs never
+// receive the following line on their stdin. Shells without integration fall
+// back to a slow timed cadence after the initial delay.
+function scheduleAutoCommands(state) {
+  clearTimeout(state.autoCommandTimer); state.autoCommandTimer = null;
+  const profile = connectionProfile(state.profileId);
+  const lines = profile?.autoRun && !state.serial ? (profile.autoCommands || []).filter(line => typeof line === 'string' && line.trim()) : [];
+  state.autoCommands = lines.length ? lines : null;
+  state.autoIndex = 0;
+  if (state.autoCommands) armAutoCommandFallback(state, 2500);
+}
+function armAutoCommandFallback(state, delay) {
+  clearTimeout(state.autoCommandTimer);
+  state.autoCommandTimer = setTimeout(() => { state.autoCommandTimer = null; advanceAutoCommands(state); }, delay);
+}
+function advanceAutoCommands(state) {
+  clearTimeout(state.autoCommandTimer); state.autoCommandTimer = null;
+  const lines = state.autoCommands;
+  if (!lines || state.closed || !state.connected || state.ready === false || state.detaching || state.restoring) return;
+  if (state.autoIndex >= lines.length) { state.autoCommands = null; return; }
+  if (typeof appearance !== 'undefined' && appearance.autoCommandsEnabled === false) return;
+  const integration = state.shellIntegration;
+  // An integrated shell reports busy while a command runs; the next prompt
+  // event drives the queue, and this timer only acts as a watchdog.
+  if (integration?.ready && !integration.atPrompt) { armAutoCommandFallback(state, 15000); return; }
+  const line = lines[state.autoIndex++];
+  if (state.autoIndex >= lines.length) state.autoCommands = null; else armAutoCommandFallback(state, integration?.ready ? 15000 : 1500);
+  sendInput(state, `${line.replace(/[\r\n]+$/g, '')}\r`);
+}
 new ResizeObserver(() => requestAnimationFrame(fitActive)).observe($('#terminal-output'));
 function markSessionDisconnected(state) {
   if (state.closed || !state.connected) return;
   state.connected = false; state.ready = false; state.navGeneration++; state.navAbort?.abort();
+  // A disconnected session never continues its queued connect-time commands.
+  state.autoCommands = null; clearTimeout(state.autoCommandTimer); state.autoCommandTimer = null;
   state.term.options.disableStdin = true;
   if (state.serial) state.term.writeln('\r\n\x1b[38;5;245m串口已关闭，终端内容已保留。点击重新连接可重新打开串口。\x1b[0m');
   else state.term.writeln('\r\n\x1b[38;5;245m连接已断开，终端内容已保留。点击重新连接可建立新会话。\x1b[0m');
@@ -991,6 +1029,9 @@ function showConnectionForm(profile = null, groupID = '') {
   renderKeyChoices(); renderProxyChoices(); form.elements.proxyId.value = profile?.proxyId || '';
   for (const key of ['name', 'notes', 'host', 'user', 'port', 'auth', 'keyPath', 'keyId', 'protocol', 'domain', 'serialPort', 'baudRate', 'dataBits', 'parity', 'stopBits', 'flowControl']) if (profile?.[key] != null) form.elements[key].value = profile[key];
   form.elements.rdpClipboard.checked = !!profile?.rdpClipboard;
+  form.elements.autoRun.checked = !!profile?.autoRun;
+  form.elements.autoCommands.value = (profile?.autoCommands || []).join('\n');
+  $('#auto-command-settings').open = !!profile?.autoCommands?.length; updateAutoCommandSummary();
   window.DengProfileNotes.init(form.elements.notes, profile?.notes || '');
   form.elements.proxyType.value = profile?.proxy?.type || 'direct';
   for (const [field, key] of [['proxyHost', 'host'], ['proxyPort', 'port'], ['proxyUser', 'user']]) form.elements[field].value = profile?.proxy?.[key] || '';
@@ -1010,6 +1051,8 @@ function updateAuthFields() {
   // Serial profiles carry no address, login, or proxy fields; normalizeSerialProfile
   // clears them in Go, so hide the inputs and drop their required flags.
   $('#connection-address-row').hidden = serial; $('#connection-login-section').hidden = serial; $('#proxy-settings').hidden = serial;
+  // Connect-time command lists belong to SSH sessions only.
+  $('#auto-command-settings').hidden = rdp || serial;
   $('#serial-settings').hidden = !serial; $('#serial-params').hidden = !serial;
   form.elements.host.required = !serial; form.elements.port.required = !serial; form.elements.user.required = !serial; form.elements.serialPort.required = serial;
   $('#connection-auth-field').hidden = rdp; $('#rdp-domain-field').hidden = !rdp; $('#rdp-clipboard-field').hidden = !rdp; $('#rdp-connection-note').hidden = !rdp;
@@ -1022,6 +1065,11 @@ function updateAuthFields() {
   $('#secret-label').textContent = auth === 'key' ? '私钥口令' : '密码'; $('#choose-key').hidden = !native();
 }
 $('#connection-form').elements.auth.onchange = updateAuthFields;
+function updateAutoCommandSummary() {
+  const lines = String($('#connection-auto-commands').value || '').split(/\r?\n/).filter(line => line.trim());
+  $('#auto-command-summary').textContent = lines.length ? `已配置 ${lines.length} 条` : '未配置';
+}
+$('#connection-auto-commands').oninput = updateAutoCommandSummary;
 $('#connection-protocol').onchange = () => {
   const form = $('#connection-form'), protocol = form.elements.protocol.value, rdp = protocol === 'rdp', serial = protocol === 'serial';
   if (rdp) form.elements.auth.value = 'password';
@@ -1047,6 +1095,11 @@ $('#connection-form').onsubmit = safe(async event => {
   const serial = values.protocol === 'serial';
   if (serial) values.host = String(values.serialPort || '').trim();
   else for (const name of ['serialPort', 'baudRate', 'dataBits', 'parity', 'stopBits', 'flowControl']) delete values[name];
+  // Connect-time command list (issue #5): the textarea is one command per
+  // line; blank lines never reach the store. An empty list disables the run
+  // flag too, matching the Go normalizer's contract.
+  values.autoCommands = String(values.autoCommands || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  values.autoRun = form.elements.autoRun.checked && values.autoCommands.length > 0;
   const saved = await post('/api/profiles', { ...values, rdpClipboard: form.elements.rdpClipboard.checked, port: serial ? 0 : Number(values.port), baudRate: Number(values.baudRate) || 0, dataBits: Number(values.dataBits) || 0, stopBits: Number(values.stopBits) || 0, secret: remember ? secret : '', clearSecret: !remember, proxy });
   credentials.delete(saved.id);
   if (secret) credentials.set(saved.id, secret); else if (!remember) credentials.delete(saved.id);

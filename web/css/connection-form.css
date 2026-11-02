@@ -37,6 +37,16 @@
 #connection-form .proxy-settings { margin:0; padding:10px; border:1px solid var(--border); border-radius:9px; background:transparent; }
 #connection-form .connection-options > .proxy-settings { margin-top:6px; }
 #connection-form .connection-notes-field { margin-top:4px; }
+#connection-form .auto-command-settings { margin:0; padding:10px; border:1px solid var(--border); border-radius:9px; background:transparent; }
+#connection-form .connection-options > .auto-command-settings { margin-top:6px; }
+#connection-form .auto-command-settings summary { display:flex; align-items:center; gap:8px; min-height:20px; font-size:12px; list-style:none; cursor:pointer; border-radius:7px; }
+#connection-form .auto-command-settings summary::-webkit-details-marker { display:none; }
+#connection-form .auto-command-settings summary svg { width:12px; height:12px; }
+#connection-form .auto-command-settings[open] summary svg { transform:rotate(90deg); }
+#connection-form #auto-command-summary { max-width:45%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text); }
+#connection-form .auto-command-settings[open] summary { margin-bottom:12px; }
+#connection-form .auto-command-settings > label:not(.checkbox-label) { display:flex; flex-direction:column; gap:5px; margin:0 0 10px; }
+#connection-form #connection-auto-commands { height:96px; min-height:96px; max-height:192px; padding:8px 10px; font:inherit; font-size:12px; line-height:18px; }
 #connection-form .proxy-settings summary { min-height:20px; font-size:12px; }
 #connection-form #proxy-summary { max-width:55%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text); }
 #connection-form .proxy-settings[open] summary { margin-bottom:12px; }

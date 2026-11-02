@@ -45,6 +45,14 @@ type Profile struct {
 	// only while the session lives. An editing client that omits the field
 	// keeps the stored rules; an explicit empty list clears them.
 	Forwards []PortForward `json:"forwards,omitempty"`
+	// AutoRun and AutoCommands carry the "run after connect" feature: once the
+	// remote shell is ready, the web client types each line into that session's
+	// terminal in order (see issue #5). They persist with the saved connection;
+	// AutoRun=false keeps the lines without executing them. An editing client
+	// that omits the field keeps the stored lines; an explicit empty list clears
+	// them. Meaningful only for SSH profiles.
+	AutoRun      bool     `json:"autoRun,omitempty"`
+	AutoCommands []string `json:"autoCommands,omitempty"`
 	// Serial profile fields; only meaningful when Protocol == "serial".
 	SerialPort  string `json:"serialPort,omitempty"`
 	BaudRate    int    `json:"baudRate,omitempty"`
@@ -162,6 +170,9 @@ func (s *Store) saveProfile(p Profile, clearSecret, allowNewID bool) (Profile, e
 	if err := validateProfileForwards(p.Forwards); err != nil {
 		return Profile{}, err
 	}
+	if err := normalizeAutoCommands(&p); err != nil {
+		return Profile{}, err
+	}
 	if p.ProxyID != "" {
 		found := false
 		for _, proxy := range s.config.Proxies {
@@ -253,6 +264,13 @@ func (s *Store) saveProfile(p Profile, clearSecret, allowNewID bool) (Profile, e
 			// incoming profile without the field keeps the stored rules.
 			if p.Forwards == nil {
 				p.Forwards = entry.Forwards
+			}
+			// Same contract for the connect-time command list: omitting it
+			// keeps the stored lines and their run flag; an explicit empty
+			// list (normalized to nil) clears both.
+			if p.AutoCommands == nil && p.Protocol != "serial" && p.Protocol != "rdp" {
+				p.AutoCommands = entry.AutoCommands
+				p.AutoRun = entry.AutoRun
 			}
 			break
 		}

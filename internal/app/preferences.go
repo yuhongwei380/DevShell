@@ -40,12 +40,17 @@ type Appearance struct {
 	// UpdateMirror is the optional GitHub accelerator origin (ghproxy-style
 	// URL prefix) used for update manifest and artifact fetches. Empty means
 	// direct connections; signature, build and SHA-256 checks still apply.
-	UpdateMirror string                     `json:"updateMirror,omitempty"`
-	Layout       map[string]json.RawMessage `json:"layout"`
+	UpdateMirror string `json:"updateMirror,omitempty"`
+	// AutoCommandsEnabled gates the connect-time auto command feature (issue
+	// #5) for every profile. The per-profile autoRun flag only takes effect
+	// while this global switch stays on; it lives under Settings → Other
+	// features. Default on: profiles without commands behave as before.
+	AutoCommandsEnabled bool                       `json:"autoCommandsEnabled"`
+	Layout              map[string]json.RawMessage `json:"layout"`
 }
 
 func defaultAppearance() Appearance {
-	return Appearance{UIFontID: defaultUIFontID, UITextColors: map[string]string{}, FontID: "builtin:jetbrains-mono", FontColors: map[string]string{}, FontBold: map[string]bool{}, ChartStyles: map[string]ChartLineStyle{}, BackgroundID: "builtin:none", BackgroundOpacity: .42, BackgroundVersion: 2, UIScale: 1, TerminalFontSize: 14, Theme: "system", MonitorVisible: true, FilesPosition: "right", FollowTerminal: true, MinimizeAction: "ask", Layout: map[string]json.RawMessage{}}
+	return Appearance{UIFontID: defaultUIFontID, UITextColors: map[string]string{}, FontID: "builtin:jetbrains-mono", FontColors: map[string]string{}, FontBold: map[string]bool{}, ChartStyles: map[string]ChartLineStyle{}, BackgroundID: "builtin:none", BackgroundOpacity: .42, BackgroundVersion: 2, UIScale: 1, TerminalFontSize: 14, Theme: "system", MonitorVisible: true, FilesPosition: "right", FollowTerminal: true, MinimizeAction: "ask", AutoCommandsEnabled: true, Layout: map[string]json.RawMessage{}}
 }
 
 // Old releases combined 18% image opacity with a dark multiply tint. Keep
