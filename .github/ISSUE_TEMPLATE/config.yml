@@ -1,7 +1,7 @@
 # Issues 模板选择配置
-# blank_issues_enabled: false 可强制用户只能从下方模板新建
+# 已关闭空白 issue：用户必须从下方模板中选择一种填写
 
-blank_issues_enabled: true
+blank_issues_enabled: false
 
 contact_links:
   - name: 先看常见问题（FAQ）
