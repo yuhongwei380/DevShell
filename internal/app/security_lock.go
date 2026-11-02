@@ -26,7 +26,12 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-const securityLockFile = "dengshell.security-lock.enc"
+const securityLockFile = "devshell.security-lock.enc"
+
+// legacySecurityLockFile is the pre-rename name, migrated by migrateLegacyDataNames.
+const legacySecurityLockFile = "dengshell.security-lock.enc"
+
+// securityLockAAD is bound into existing payloads and cannot change.
 const securityLockAAD = "DengShell/security-lock/v1"
 
 type lockedError struct{}

@@ -16,8 +16,15 @@ import (
 )
 
 const (
-	EncryptedConfigName = "dengshell.config.enc"
-	ConfigKeyName       = "dengshell.config.key"
+	EncryptedConfigName = "devshell.config.enc"
+	ConfigKeyName       = "devshell.config.key"
+	configLockName      = ".devshell.config.lock"
+	// Names used up to v26.11.0-rc.9; migrated on startup, never overwritten.
+	legacyEncryptedConfigName = "dengshell.config.enc"
+	legacyConfigKeyName       = "dengshell.config.key"
+	legacyConfigLockName      = ".dengshell.config.lock"
+	// The AAD string is bound into every existing AES-GCM payload and can never
+	// change; it is not visible in saved files.
 	configEnvelopeAAD   = "DengShell/config/v1/AES-256-GCM"
 	maxConfigBytes      = 24 << 20
 )
@@ -47,7 +54,7 @@ func encryptConfig(key, plain []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return json.MarshalIndent(configEnvelope{Format: "DengShell", Version: 1, Algorithm: "AES-256-GCM", Payload: aead.Seal(nil, nil, plain, []byte(configEnvelopeAAD))}, "", "  ")
+	return json.MarshalIndent(configEnvelope{Format: "DevShell", Version: 1, Algorithm: "AES-256-GCM", Payload: aead.Seal(nil, nil, plain, []byte(configEnvelopeAAD))}, "", "  ")
 }
 
 func decryptConfig(key, data []byte) ([]byte, error) {
@@ -60,7 +67,8 @@ func decryptConfig(key, data []byte) ([]byte, error) {
 	if err := decoder.Decode(new(any)); err != io.EOF {
 		return nil, errors.New("加密配置包含多余内容，原文件未修改")
 	}
-	if envelope.Format != "DengShell" || envelope.Version != 1 || envelope.Algorithm != "AES-256-GCM" {
+	// "DengShell" is the pre-rename spelling still present in existing files.
+	if (envelope.Format != "DevShell" && envelope.Format != "DengShell") || envelope.Version != 1 || envelope.Algorithm != "AES-256-GCM" {
 		return nil, errors.New("加密配置版本或算法不受支持，请使用匹配版本；原文件未修改")
 	}
 	aead, err := configCipher(key)
@@ -74,8 +82,42 @@ func decryptConfig(key, data []byte) ([]byte, error) {
 	return plain, nil
 }
 
-func readConfigFile(path string, limit int64) ([]byte, error) {
-	f, err := os.Open(path)
+// migrateLegacyDataNames renames the pre-rename data file names in place. It
+// runs while the directory lock is held, renames the config/key pair together
+// with rollback on any failure, and never overwrites an existing target.
+func migrateLegacyDataNames(dir string) error {
+	type legacyRename struct{ from, to string }
+	renames := []legacyRename{
+		{legacyEncryptedConfigName, EncryptedConfigName},
+		{legacyConfigKeyName, ConfigKeyName},
+		{legacyEncryptedConfigName + ".bak", EncryptedConfigName + ".bak"},
+		{legacySecurityLockFile, securityLockFile},
+	}
+	done := make([]legacyRename, 0, len(renames))
+	rollback := func() {
+		for i := len(done) - 1; i >= 0; i-- {
+			_ = os.Rename(filepath.Join(dir, done[i].to), filepath.Join(dir, done[i].from))
+		}
+	}
+	for _, r := range renames {
+		if _, err := os.Lstat(filepath.Join(dir, r.from)); err != nil {
+			continue
+		}
+		if _, err := os.Lstat(filepath.Join(dir, r.to)); err == nil {
+			continue // Both spellings present: keep the new file, leave the old untouched.
+		}
+		if err := os.Rename(filepath.Join(dir, r.from), filepath.Join(dir, r.to)); err != nil {
+			rollback()
+			return fmt.Errorf("升级配置文件名失败，原文件未修改：%w", err)
+		}
+		done = append(done, r)
+	}
+	// The lock file is inert between runs; drop the pre-rename leftover.
+	_ = os.Remove(filepath.Join(dir, legacyConfigLockName))
+	return nil
+}
+
+func readConfigFile(path string, limit int64) ([]byte, error) {	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
@@ -107,6 +149,9 @@ func OpenStore(dir string) (*Store, error) {
 		return nil, err
 	}
 	defer unlock()
+	if err := migrateLegacyDataNames(dir); err != nil {
+		return nil, err
+	}
 	s := &Store{dir: dir, config: Config{Servers: []Profile{}, Groups: []string{"我的服务器"}, HostKeys: map[string]string{}, Appearance: defaultAppearance()}}
 	ciphertext, err := readConfigFile(filepath.Join(dir, EncryptedConfigName), maxConfigBytes)
 	var plain []byte
@@ -125,7 +170,7 @@ func OpenStore(dir string) (*Store, error) {
 	} else if os.IsNotExist(err) {
 		// Do not silently replace a deleted primary file when its backup remains.
 		if _, backupErr := os.Lstat(filepath.Join(dir, EncryptedConfigName+".bak")); !os.IsNotExist(backupErr) {
-			return nil, errors.New("主配置缺失，但检测到加密备份；请先将 dengshell.config.enc.bak 恢复为 dengshell.config.enc，原文件未修改")
+			return nil, fmt.Errorf("主配置缺失，但检测到加密备份；请先将 %s.bak 恢复为 %s，原文件未修改", EncryptedConfigName, EncryptedConfigName)
 		}
 		plain, err = readConfigFile(filepath.Join(dir, "config.json"), maxConfigBytes)
 		if err == nil {
@@ -267,7 +312,7 @@ func (s *Store) writeWithFileLock() error {
 }
 
 func atomicConfigFile(path string, data []byte) error {
-	f, err := os.CreateTemp(filepath.Dir(path), ".dengshell-write-*")
+	f, err := os.CreateTemp(filepath.Dir(path), ".devshell-write-*")
 	if err != nil {
 		return err
 	}

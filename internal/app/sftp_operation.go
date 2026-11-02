@@ -178,7 +178,7 @@ func (w sftpProgressWriter) Write(p []byte) (int, error) {
 // with the server's default mode. Chmod alone would leave a window in which
 // another user could open the empty file and retain access to subsequent data.
 func privateRemoteTemporary(c *sftp.Client, target, purpose string) (*sftp.File, string, func(), error) {
-	dir := path.Join(path.Dir(target), ".dengshell-"+purpose+"-"+randomID())
+	dir := path.Join(path.Dir(target), ".devshell-"+purpose+"-"+randomID())
 	if err := c.Mkdir(dir); err != nil {
 		return nil, "", nil, err
 	}

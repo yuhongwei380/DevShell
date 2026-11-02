@@ -11,7 +11,11 @@ import (
 )
 
 const detachedCacheMarker = "DengShell detached WebView cache v1\n"
-const detachedCacheLeaseName = ".dengshell-window-cache.lock"
+const detachedCacheLeaseName = ".devshell-window-cache.lock"
+
+// legacyDetachedCacheLeaseName is the pre-rename lease still present in
+// directories created by older versions; cleanup accepts both.
+const legacyDetachedCacheLeaseName = ".dengshell-window-cache.lock"
 
 func detachedCacheDirectory(configDir, nonce string) (string, error) {
 	if !filepath.IsAbs(configDir) || !detachedNoncePattern.MatchString(nonce) {
@@ -86,6 +90,11 @@ func removeDetachedWebviewCache(configDir, nonce string) bool {
 		return false
 	}
 	marker := filepath.Join(dir, detachedCacheLeaseName)
+	if _, e := os.Lstat(marker); os.IsNotExist(e) {
+		if _, e2 := os.Lstat(filepath.Join(dir, legacyDetachedCacheLeaseName)); e2 == nil {
+			marker = filepath.Join(dir, legacyDetachedCacheLeaseName)
+		}
+	}
 	info, err = os.Lstat(marker)
 	if err != nil || !info.Mode().IsRegular() {
 		return false
@@ -108,7 +117,7 @@ func removeDetachedWebviewCache(configDir, nonce string) bool {
 	entries, err := os.ReadDir(dir)
 	if err == nil {
 		for _, entry := range entries {
-			if entry.Name() != detachedCacheLeaseName {
+			if entry.Name() != filepath.Base(marker) {
 				if e := os.RemoveAll(filepath.Join(dir, entry.Name())); e != nil {
 					err = e
 				}

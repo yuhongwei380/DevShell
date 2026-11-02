@@ -552,7 +552,7 @@ func (a *App) DownloadSelectionArchiveTo(sessionID string, targets []string, loc
 	if e != nil {
 		return e
 	}
-	f, e := os.CreateTemp(filepath.Dir(local), ".dengshell-archive-")
+	f, e := os.CreateTemp(filepath.Dir(local), ".devshell-archive-")
 	if e != nil {
 		return e
 	}

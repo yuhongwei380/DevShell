@@ -55,7 +55,7 @@ func bundleExecutableIn(bundle string) string {
 // how a read-only volume (a DMG still mounted) or a root-owned /Applications
 // entry is detected before the running application quits.
 func directoryWritable(dir string) error {
-	probe := filepath.Join(dir, ".dengshell-write-test")
+	probe := filepath.Join(dir, ".devshell-write-test")
 	file, err := os.OpenFile(probe, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if err != nil {
 		return fmt.Errorf("无法写入安装位置：%w", err)

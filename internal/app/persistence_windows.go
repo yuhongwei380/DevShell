@@ -13,7 +13,7 @@ import (
 )
 
 func lockConfigDirectory(dir string) (func(), error) {
-	f, err := os.OpenFile(filepath.Join(dir, ".dengshell.config.lock"), os.O_CREATE|os.O_RDWR, 0600)
+	f, err := os.OpenFile(filepath.Join(dir, configLockName), os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		return nil, fmt.Errorf("配置目录不可写，请把完整程序文件夹移动到可写位置：%w", err)
 	}

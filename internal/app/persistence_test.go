@@ -77,7 +77,7 @@ func TestPortableEncryptedFreshRestartAndBackup(t *testing.T) {
 	}
 	entries, _ := os.ReadDir(dir)
 	for _, entry := range entries {
-		if strings.HasPrefix(entry.Name(), ".dengshell-write-") || strings.HasSuffix(entry.Name(), ".json") {
+		if strings.HasPrefix(entry.Name(), ".devshell-write-") || strings.HasPrefix(entry.Name(), ".dengshell-write-") || strings.HasSuffix(entry.Name(), ".json") {
 			t.Fatal("plaintext/temporary output retained", entry.Name())
 		}
 	}
@@ -477,5 +477,84 @@ func TestAppearancePortableLayoutAndNativeWindowIsolation(t *testing.T) {
 	}
 	if err := s.SaveWindowState(0, 0, false); err == nil {
 		t.Fatal("minimized zero dimensions persisted")
+	}
+}
+
+func TestLegacyDataFileNamesMigrateOnOpen(t *testing.T) {
+	dir := t.TempDir()
+	s, err := OpenStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Save(Profile{Name: "renamed data", Host: "example.com", User: "root", Port: 22}, false); err != nil {
+		t.Fatal(err)
+	}
+	envelope, err := os.ReadFile(filepath.Join(dir, EncryptedConfigName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(envelope), `"format": "DevShell"`) {
+		t.Fatal("encrypted envelope should write the DevShell format marker")
+	}
+	if err = os.WriteFile(filepath.Join(dir, securityLockFile), []byte("lock-bytes"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(dir, legacyConfigLockName), []byte("stale lock"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, pair := range [][2]string{
+		{EncryptedConfigName, legacyEncryptedConfigName},
+		{ConfigKeyName, legacyConfigKeyName},
+		{securityLockFile, legacySecurityLockFile},
+	} {
+		if err = os.Rename(filepath.Join(dir, pair[0]), filepath.Join(dir, pair[1])); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reopened, err := OpenStore(dir)
+	if err != nil {
+		t.Fatalf("legacy names must migrate, not fail: %v", err)
+	}
+	if got := reopened.List(); len(got.Servers) != 1 || got.Servers[0].Name != "renamed data" {
+		t.Fatal("connections lost after file name migration")
+	}
+	lockBytes, err := os.ReadFile(filepath.Join(dir, securityLockFile))
+	if err != nil || string(lockBytes) != "lock-bytes" {
+		t.Fatal("security lock file not migrated")
+	}
+	for _, name := range []string{legacyEncryptedConfigName, legacyConfigKeyName, legacySecurityLockFile, legacyConfigLockName} {
+		if _, err = os.Lstat(filepath.Join(dir, name)); !os.IsNotExist(err) {
+			t.Fatalf("legacy %s still present after migration", name)
+		}
+	}
+	for _, name := range []string{EncryptedConfigName, ConfigKeyName, securityLockFile, configLockName} {
+		if _, err = os.Lstat(filepath.Join(dir, name)); err != nil {
+			t.Fatalf("missing %s after migration: %v", name, err)
+		}
+	}
+}
+
+func TestLegacyNamesNeverOverwrittenWhenBothPresent(t *testing.T) {
+	dir := t.TempDir()
+	s, err := OpenStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Save(Profile{Name: "primary", Host: "example.com", User: "root", Port: 22}, false); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(dir, legacyEncryptedConfigName), []byte("do-not-touch"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := OpenStore(dir)
+	if err != nil {
+		t.Fatalf("coexisting legacy file must not break opening: %v", err)
+	}
+	if got := reopened.List(); len(got.Servers) != 1 || got.Servers[0].Name != "primary" {
+		t.Fatal("new-name config lost when legacy file coexists")
+	}
+	leftover, err := os.ReadFile(filepath.Join(dir, legacyEncryptedConfigName))
+	if err != nil || string(leftover) != "do-not-touch" {
+		t.Fatal("coexisting legacy file was modified")
 	}
 }

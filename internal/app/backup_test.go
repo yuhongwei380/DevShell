@@ -155,3 +155,45 @@ func TestSessionBackupExportImportRoundTrip(t *testing.T) {
 		t.Fatalf("foreign file accepted: %s", body)
 	}
 }
+
+func TestBackupImportAcceptsLegacySchema(t *testing.T) {
+	source, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer source.Close()
+	if _, err = source.store.Save(Profile{Name: "legacy schema", Host: "example.org", User: "root", Port: 22}, false); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(source.store.exportBackup(false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var generic map[string]json.RawMessage
+	if err = json.Unmarshal(raw, &generic); err != nil {
+		t.Fatal(err)
+	}
+	generic["backup"] = json.RawMessage(`"` + legacyBackupSchema + `"`)
+	raw, err = json.Marshal(generic)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var imported Backup
+	if err = json.Unmarshal(raw, &imported); err != nil {
+		t.Fatal(err)
+	}
+	target, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer target.Close()
+	if _, err = target.store.importBackup(imported); err != nil {
+		t.Fatalf("legacy backup schema must still import: %v", err)
+	}
+	if len(target.store.List().Servers) != 1 {
+		t.Fatal("connection not imported from legacy-schema backup")
+	}
+	if source.store.exportBackup(false).Backup != BackupSchema {
+		t.Fatal("export must write the current backup schema")
+	}
+}

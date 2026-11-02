@@ -82,7 +82,7 @@ func TestSelectionArchiveExactFilesAndAtomicFailure(t *testing.T) {
 	if !bytes.Equal(before, after) {
 		t.Fatal("failure replaced a previous download")
 	}
-	leftovers, _ := filepath.Glob(filepath.Join(filepath.Dir(target), ".dengshell-archive-*"))
+	leftovers, _ := filepath.Glob(filepath.Join(filepath.Dir(target), ".devshell-archive-*"))
 	if len(leftovers) != 0 {
 		t.Fatal(leftovers)
 	}

@@ -17,14 +17,13 @@ func MigratePortableData(destination string) error {
 		return nil
 	}
 	root := filepath.Dir(destination)
-	if _, err := os.Stat(filepath.Join(destination, EncryptedConfigName)); err == nil {
-		return nil
-	}
-	if _, err := os.Stat(filepath.Join(destination, "config.json")); err == nil {
-		return nil
+	for _, name := range []string{EncryptedConfigName, legacyEncryptedConfigName, "config.json"} {
+		if _, err := os.Stat(filepath.Join(destination, name)); err == nil {
+			return nil
+		}
 	}
 	found := false
-	for _, name := range []string{EncryptedConfigName, "config.json"} {
+	for _, name := range []string{EncryptedConfigName, legacyEncryptedConfigName, "config.json"} {
 		if _, err := os.Stat(filepath.Join(root, name)); err == nil {
 			found = true
 		}
@@ -36,7 +35,11 @@ func MigratePortableData(destination string) error {
 	if err != nil {
 		return err
 	}
-	defer func() { unlock(); _ = os.Remove(filepath.Join(root, ".dengshell.config.lock")) }()
+	defer func() {
+		unlock()
+		_ = os.Remove(filepath.Join(root, configLockName))
+		_ = os.Remove(filepath.Join(root, legacyConfigLockName))
+	}()
 	packaged, readErr := os.ReadDir(destination)
 	if readErr != nil && !os.IsNotExist(readErr) {
 		return readErr
@@ -46,7 +49,7 @@ func MigratePortableData(destination string) error {
 			return errors.New("发现旧版配置，但 data 目录已有用户数据。请先备份后迁移，避免覆盖现有文件")
 		}
 	}
-	stage, err := os.MkdirTemp(root, ".dengshell-migration-")
+	stage, err := os.MkdirTemp(root, ".devshell-migration-")
 	if err != nil {
 		return err
 	}
@@ -63,7 +66,7 @@ func MigratePortableData(destination string) error {
 	var moved []string
 	for _, entry := range entries {
 		n := entry.Name()
-		own := n == EncryptedConfigName || n == ConfigKeyName || n == EncryptedConfigName+".bak" || n == "config.json" || n == "assets" || n == "keys" || strings.HasPrefix(n, "config.pre-") && strings.HasSuffix(n, ".enc") || strings.HasPrefix(n, "runtime-success-v1-")
+		own := n == EncryptedConfigName || n == legacyEncryptedConfigName || n == ConfigKeyName || n == legacyConfigKeyName || n == EncryptedConfigName+".bak" || n == legacyEncryptedConfigName+".bak" || n == "config.json" || n == "assets" || n == "keys" || strings.HasPrefix(n, "config.pre-") && strings.HasSuffix(n, ".enc") || strings.HasPrefix(n, "runtime-success-v1-")
 		if !own {
 			continue
 		}

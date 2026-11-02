@@ -16,7 +16,10 @@ import (
 // host keys between installations. Secrets (saved passwords, proxy passwords,
 // private key files and key passphrases) are only included when explicitly
 // requested, because the backup file itself is plaintext JSON.
-const BackupSchema = "dengshell.backup.v1"
+const BackupSchema = "devshell.backup.v1"
+
+// legacyBackupSchema was written before the rename; imports keep accepting it.
+const legacyBackupSchema = "dengshell.backup.v1"
 
 const (
 	backupMaxConnections = 2000
@@ -112,7 +115,7 @@ func (s *Store) exportBackup(includeSecrets bool) Backup {
 }
 
 func validateBackup(backup Backup) error {
-	if backup.Backup != BackupSchema {
+	if backup.Backup != BackupSchema && backup.Backup != legacyBackupSchema {
 		return errors.New("文件不是 DevShell 会话备份")
 	}
 	if len(backup.Connections) > backupMaxConnections || len(backup.Keys) > backupMaxKeys || len(backup.Proxies) > backupMaxProxies || len(backup.HostKeys) > backupMaxHostKeys {

@@ -232,7 +232,7 @@ func LaunchUpdateHelper(job app.UpdateDownload, configDir string, progress func(
 		return e
 	}
 	dir := filepath.Dir(job.File)
-	helper := filepath.Join(dir, fmt.Sprintf("dengshell-updater-%d", time.Now().UnixNano()))
+	helper := filepath.Join(dir, fmt.Sprintf("devshell-updater-%d", time.Now().UnixNano()))
 	if runtime.GOOS == "windows" {
 		helper += ".exe"
 	}

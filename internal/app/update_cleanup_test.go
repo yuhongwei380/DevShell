@@ -40,7 +40,7 @@ func cleanupFixture(t *testing.T, config string, n int, build uint64) string {
 
 func TestUpdateCleanupMigratesLegacyAndBoundsRecovery(t *testing.T) {
 	config := t.TempDir()
-	for _, name := range []string{EncryptedConfigName, ConfigKeyName, "dengshell.security-lock.enc", "update-receipt.json"} {
+	for _, name := range []string{EncryptedConfigName, ConfigKeyName, securityLockFile, "update-receipt.json"} {
 		if err := os.WriteFile(filepath.Join(config, name), []byte("user data"), 0600); err != nil {
 			t.Fatal(err)
 		}
@@ -57,7 +57,7 @@ func TestUpdateCleanupMigratesLegacyAndBoundsRecovery(t *testing.T) {
 	if err != nil || string(b) != "old program 103" {
 		t.Fatalf("wrong retained backup: %q, %v", b, err)
 	}
-	for _, name := range []string{EncryptedConfigName, ConfigKeyName, "dengshell.security-lock.enc", "update-receipt.json"} {
+	for _, name := range []string{EncryptedConfigName, ConfigKeyName, securityLockFile, "update-receipt.json"} {
 		b, err := os.ReadFile(filepath.Join(config, name))
 		if err != nil || string(b) != "user data" {
 			t.Fatal("user file changed", name)

@@ -12,11 +12,16 @@ import (
 	"time"
 )
 
-const updateLeaseName = ".dengshell-update.lock"
+const updateLeaseName = ".devshell-update.lock"
+const legacyUpdateLeaseName = ".dengshell-update.lock"
+const updateCleanupLockName = ".devshell-update-cleanup.lock"
+const legacyUpdateCleanupLockName = ".dengshell-update-cleanup.lock"
+const updateCacheOwnershipFile = ".devshell-owned"
+const legacyUpdateCacheOwnershipFile = ".dengshell-owned"
 const updateCacheMarker = "DengShell update cache v1\n"
 
 var updateDirectoryName = regexp.MustCompile(`^\.update-[0-9]+$`)
-var updateHelperName = regexp.MustCompile(`^dengshell-updater-[0-9]+(?:\.exe)?$`)
+var updateHelperName = regexp.MustCompile(`^(?:dengshell|devshell)-updater-[0-9]+(?:\.exe)?$`)
 
 // Shared by the downloader and helper across the process handoff. A cleaner
 // must obtain an exclusive OS lock; crashes release leases automatically.
@@ -191,11 +196,14 @@ func cleanupUpdateDirectories(config string) {
 		return
 	}
 	// Serialize collectors, including separate main windows using one config.
-	guard, err := os.OpenFile(filepath.Join(config, ".dengshell-update-cleanup.lock"), os.O_CREATE|os.O_RDWR, 0600)
+	guard, err := os.OpenFile(filepath.Join(config, updateCleanupLockName), os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		return
 	}
 	defer guard.Close()
+	// The pre-rename lock file is inert once this instance holds the new one.
+	_ = os.Remove(filepath.Join(config, legacyUpdateCleanupLockName))
+	_ = os.Remove(filepath.Join(config, legacyUpdateLeaseName))
 	if lockUpdateFile(guard, true) != nil {
 		return
 	}
@@ -274,14 +282,18 @@ func updateRecoveryDirectory(config string) (string, error) {
 	dir := filepath.Join(config, "update-backup")
 	err := os.Mkdir(dir, 0700)
 	if err == nil {
-		err = os.WriteFile(filepath.Join(dir, ".dengshell-owned"), []byte(updateCacheMarker), 0600)
+		err = os.WriteFile(filepath.Join(dir, updateCacheOwnershipFile), []byte(updateCacheMarker), 0600)
 	} else if os.IsExist(err) {
 		info, e := os.Lstat(dir)
 		if e != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 			return "", errors.New("备份目录无效")
 		}
 		var b []byte
-		b, err = readUpdateCacheFile(filepath.Join(dir, ".dengshell-owned"), 128)
+		b, err = readUpdateCacheFile(filepath.Join(dir, updateCacheOwnershipFile), 128)
+		if os.IsNotExist(err) {
+			// Recovery directories created before the rename keep the old name.
+			b, err = readUpdateCacheFile(filepath.Join(dir, legacyUpdateCacheOwnershipFile), 128)
+		}
 		if err == nil && string(b) != updateCacheMarker {
 			err = errors.New("未知备份目录")
 		}
