@@ -41,6 +41,14 @@ try {
   assert.equal(await page.$eval('#settings-button use', el => el.getAttribute('href')), '#i-settings');
   await page.click('#settings-button');
   await page.waitForSelector('#settings-menu:not([hidden])');
+  assert.equal(await page.$eval('#settings-main-view', el => !!el.querySelector('#manage-chart-styles')), false);
+  assert.equal(await page.$eval('#settings-appearance-view', el => !!el.querySelector('#manage-chart-styles')), true);
+  await page.click('#manage-appearance-config');
+  await page.waitForSelector('#settings-appearance-view:not([hidden])');
+  await page.click('#manage-chart-styles');
+  await page.waitForSelector('#chart-style-dialog[open]');
+  if (process.env.DENGSHELL_CHART_MERGE_SCREENSHOT) await page.screenshot({ path: process.env.DENGSHELL_CHART_MERGE_SCREENSHOT });
+  await page.click('#cancel-chart-styles');
   assert.equal(await page.$eval('#about-dialog', el => el.open), false);
   await page.click('#about-button');
   await page.waitForSelector('#about-dialog[open]');
