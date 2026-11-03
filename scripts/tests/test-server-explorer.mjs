@@ -33,7 +33,7 @@ context.chooseServerFolder('deep',{toggle:true});assert(!context.manager.collaps
 context.chooseServerFolder('',{toggle:true});context.chooseServerFolder('',{toggle:true});assert(!context.manager.collapsed.has(''));
 context.chooseServerFolder('missing',{toggle:true});assert.equal(context.manager.selectedGroup,'');
 context.manager.selectedGroup='deep';
-context.manager.selectedProfiles.add('three');context.acceptServerManagerConfig({servers:profiles.filter(p=>p.id!=='three'),groupNodes:groups.filter(g=>g.id!=='deep')});assert.equal(context.manager.selectedGroup,'');assert.equal(context.manager.selectedProfiles.size,0,'deleted connections must leave the selection');
+context.manager.selectedProfiles.add('three');context.acceptServerManagerConfig({servers:profiles.filter(p=>p.id!=='three'),groupNodes:groups.filter(g=>g.id!=='deep')});assert.equal(context.manager.selectedGroup,'root','deleting the selected group lands on the first top-level group');assert.equal(context.manager.selectedProfiles.size,0,'deleted connections must leave the selection');
 const deepGroups=[];for(let n=0;n<1200;n++)deepGroups.push({id:`g${n}`,name:`目录 ${n}`,parentId:n?`g${n-1}`:''});context.profiles=[{id:'last',name:'末级连接',groupId:'g1199'}];context.acceptServerManagerConfig({servers:context.profiles,groupNodes:deepGroups});context.manager.selectedGroup='g0';context.manager.includeChildren=true;tree=context.serverGroupTree();assert.equal(tree.depths.get('g1199'),1199);assert.equal(tree.counts.get('g0'),1);assert.equal(context.serverFolderAncestors(tree,'g1199').length,1200);assert.deepEqual(list(),['last']);
 context.profiles=[];
 context.acceptServerManagerConfig({servers:[],groupNodes:[

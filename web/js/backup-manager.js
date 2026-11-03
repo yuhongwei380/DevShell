@@ -45,7 +45,7 @@
       if (file.size > 32 * 1024 * 1024) throw new Error('备份文件超过 32 MiB');
       const backup = JSON.parse(await file.text());
       const summary = await post('/api/backup/import', backup);
-      if (typeof refreshServerManagerHistory === 'function') await refreshServerManagerHistory();
+      await loadProfiles();
       toast(`导入完成：新增 ${summary.connectionsAdded} 个连接、${summary.keysAdded} 个密钥，跳过 ${summary.connectionsSkipped} 个重复`);
     } catch (error) {
       toast(`导入失败：${error?.message || error}`);

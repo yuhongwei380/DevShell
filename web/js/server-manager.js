@@ -1,11 +1,11 @@
-/* Hierarchical server groups, connection history and recoverable local deletion. */
+/* Hierarchical server groups and recoverable local deletion. */
 'use strict';
 
 // 目录树里的虚拟「未分组」节点：筛选 groupId 为空的连接，可直接拖入移出分组。
 const ungroupedFolderID = '__ungrouped__';
 
 const serverManager = {
-  nodes: [], trash: [], history: [], tab: 'servers', selectedGroup: '', collapsed: null,
+  nodes: [], trash: [], tab: 'servers', selectedGroup: '', collapsed: null,
   initialized: false, generation: 0, emoji: [], emojiMap: new Map(), menuGroup: '',
   selectedProfiles: new Set(), batch: null,
 };
@@ -33,21 +33,17 @@ function acceptServerManagerConfig(config) {
   serverManager.generation++;
   serverManager.nodes = config.groupNodes || [];
   serverManager.trash = config.trash || [];
-  serverManager.history = config.connectionHistory || [];
   const activeProfiles = new Set((config.servers || []).filter(profile => !profile.deletedAt).map(profile => profile.id));
   for (const id of serverManager.selectedProfiles) if (!activeProfiles.has(id)) serverManager.selectedProfiles.delete(id);
   initializeSavedGroupCollapse();
   const valid = new Set(serverManager.nodes.map(group => group.id));
   for (const id of serverManager.collapsed) if (!valid.has(id)) serverManager.collapsed.delete(id);
-  if (serverManager.selectedGroup !== ungroupedFolderID && !valid.has(serverManager.selectedGroup)) serverManager.selectedGroup = '';
+  if (serverManager.selectedGroup !== ungroupedFolderID && !valid.has(serverManager.selectedGroup)) {
+    // With no "all connections" view left, land on the first top-level group,
+    // falling back to the ungrouped filter when the tree is empty.
+    serverManager.selectedGroup = serverGroupTree().flat[0]?.id || ungroupedFolderID;
+  }
 }
-async function refreshServerManagerHistory() {
-  const generation = ++serverManager.generation, config = await api('/api/config');
-  if (generation !== serverManager.generation) return;
-  profiles = config.servers || [];
-  acceptServerManagerConfig(config); renderConnections();
-}
-
 // Flat traversal keeps arbitrary-depth groups out of both the JS and DOM call stacks.
 function serverGroupTree() {
   const byID = new Map(serverManager.nodes.map(group => [group.id, group]));
@@ -107,10 +103,9 @@ function toggleServerGroup(id, force) {
   persistGroupCollapse(); renderConnections();
 }
 function setServerManagerTab(tab) {
-  if (!['servers', 'history', 'trash'].includes(tab)) return;
+  if (!['servers', 'trash'].includes(tab)) return;
   if (serverManager.tab !== tab) serverManager.selectedProfiles.clear();
   serverManager.tab = tab; closeServerGroupMenu(); $('#connection-search').value = ''; renderConnections();
-  if (tab === 'history') safe(refreshServerManagerHistory)();
 }
 
 function reflectServerSelection() {
@@ -146,7 +141,7 @@ async function openSelectedServers() {
   async function openOne(id) {
     try {
       if (!profiles.some(profile => profile.id === id && !profile.deletedAt)) return;
-      const state = await connect(id, false, { background: true, refreshHistory: false });
+      const state = await connect(id, false, { background: true });
       if ((state?.connected && sessions.get(state.id) === state) || state?.protocol === 'rdp') batch.connected++;
     } catch (error) { toast(error.message || String(error)); }
     finally { batch.completed++; reflectServerSelection(); }
@@ -154,7 +149,7 @@ async function openSelectedServers() {
   // SSH opens are independent: a slow host or a credential prompt never occupies
   // a worker slot needed by another host. File uploads retain their own limit.
   try { await Promise.allSettled(ids.map(openOne)); }
-  finally { serverManager.batch = null; reflectServerSelection(); safe(refreshServerManagerHistory)(); toast(`连接请求完成：已打开 ${batch.connected} / ${batch.total} 台`); }
+  finally { serverManager.batch = null; reflectServerSelection(); toast(`连接请求完成：已打开 ${batch.connected} / ${batch.total} 台`); }
 }
 
 // Shared one-line address text for any connection protocol; serial profiles
@@ -162,7 +157,7 @@ async function openSelectedServers() {
 function profileAddressText(profile) {
   return profile.protocol === 'serial' ? `串口 · ${window.DengSerial.label(profile)}` : `${profile.protocol === 'rdp' ? 'RDP · ' : ''}${profile.user}@${profile.host}:${profile.port}`;
 }
-function renderServerProfile(profile, tree, mode = 'servers', history = null) {
+function renderServerProfile(profile, tree, mode = 'servers') {
   const row = node('div', 'server-profile-row'); row.dataset.profileId = profile.id;
   const deleted = mode === 'trash' || !!profile.deletedAt;
   const button = node('button', 'connection-card');
@@ -219,9 +214,9 @@ function renderServerProfile(profile, tree, mode = 'servers', history = null) {
   };
   row.append(button);
   const meta = node('div', 'server-profile-meta');
-  if (mode !== 'servers') {
+  if (mode === 'trash') {
     const path = node('span', 'server-profile-path', serverGroupPath(profile, tree)); path.title = path.textContent; meta.append(path);
-    meta.append(node('span', 'server-profile-date', mode === 'trash' ? `删除于 ${serverTimestamp(profile.deletedAt)}` : `${serverTimestamp(history.lastConnectedAt)} · ${history.count} 次连接${deleted ? ' · 已删除' : ''}`));
+    meta.append(node('span', 'server-profile-date', `删除于 ${serverTimestamp(profile.deletedAt)}`));
   }
   const actions = node('div', 'server-profile-actions');
   if (mode === 'trash') {
@@ -255,7 +250,7 @@ function renderServerManager() {
   const focusGroup = focused?.closest('[data-group-id]')?.dataset.groupId, focusAction = focused?.dataset.groupAction;
   const tree = serverGroupTree(), query = $('#connection-search').value.trim().toLocaleLowerCase();
   const fragment = document.createDocumentFragment();
-  const tabCounts = { servers: profiles.length, history: serverManager.history.length, trash: serverManager.trash.length };
+  const tabCounts = { servers: profiles.length, trash: serverManager.trash.length };
   for (const tab of document.querySelectorAll('[data-server-tab]')) {
     const selected = tab.dataset.serverTab === serverManager.tab;
     tab.setAttribute('aria-selected', String(selected)); tab.tabIndex = selected ? 0 : -1;
@@ -268,16 +263,8 @@ function renderServerManager() {
     for (const profile of serverExplorerProfiles(tree, query)) fragment.append(renderServerProfile(profile, tree));
     if (!fragment.childNodes.length) fragment.append(node('p', 'server-manager-empty', query ? '没有匹配的连接；可搜索名称、地址或分组。' : '此分组暂无连接，可新建连接或选择包含子分组。'));
   } else {
-    const allProfiles = new Map([...profiles, ...serverManager.trash].map(profile => [profile.id, profile]));
-    if (serverManager.tab === 'trash') {
-      for (const profile of [...serverManager.trash].sort((a, b) => new Date(b.deletedAt) - new Date(a.deletedAt))) if (serverMatches(profile, query, tree)) fragment.append(renderServerProfile(profile, tree, 'trash'));
-    } else {
-      for (const history of [...serverManager.history].sort((a, b) => new Date(b.lastConnectedAt) - new Date(a.lastConnectedAt))) {
-        const profile = allProfiles.get(history.profileId);
-        if (profile && serverMatches(profile, query, tree)) fragment.append(renderServerProfile(profile, tree, 'history', history));
-      }
-    }
-    if (!fragment.childNodes.length) fragment.append(node('p', 'server-manager-empty', query ? '没有匹配的连接' : serverManager.tab === 'trash' ? '暂无已删除的连接' : '连接成功后会显示在这里。'));
+    for (const profile of [...serverManager.trash].sort((a, b) => new Date(b.deletedAt) - new Date(a.deletedAt))) if (serverMatches(profile, query, tree)) fragment.append(renderServerProfile(profile, tree, 'trash'));
+    if (!fragment.childNodes.length) fragment.append(node('p', 'server-manager-empty', query ? '没有匹配的连接' : '暂无已删除的连接'));
   }
   target.replaceChildren(fragment); target.scrollTop = scroll; reflectServerSelection();
   if (focusGroup !== undefined && focusAction) [...$('#server-manager-body').querySelectorAll('[data-group-id]')].find(row => row.dataset.groupId === focusGroup)?.querySelector(`[data-group-action="${focusAction}"]`)?.focus({ preventScroll: true });

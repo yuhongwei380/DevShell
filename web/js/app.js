@@ -198,7 +198,7 @@ async function persistRunCredential(profile, secret, { replaceStored = false } =
   if (index >= 0) profiles[index] = saved; else profiles.push(saved);
   return saved.hasSecret === true;
 }
-async function connectProfile(profileID, { background = false, refreshHistory = true, previous = null, requestKey } = {}) {
+async function connectProfile(profileID, { background = false, previous = null, requestKey } = {}) {
   const profile = connectionProfile(profileID); if (!profile) return;
   if (profile.auth === 'key' && !profile.keyId && !profile.keyPath) {
     toast(`🔑  「${profile.name}」未找到私钥，请重新配置密钥。`);
@@ -310,7 +310,6 @@ async function connectProfile(profileID, { background = false, refreshHistory = 
     // A slow or failed SFTP listing must not block any other SSH connection.
     if (state.sftpPending) void refreshFileStatus(state, true);
     else if (state.sftpAvailable !== false) navigate(info.home, state).catch(error => { if (!state.closed) toast(`⚠️  ${profile.name} 已连接，目录读取失败：${error.message}`); });
-    if (refreshHistory) safe(refreshServerManagerHistory)();
     return state;
   } catch (error) {
     if (alive()) {
@@ -1025,7 +1024,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) { po
 
 // Connection groups and credentials are persisted by Go, never in browser storage.
 let drawerTrigger;
-function setDrawer(open) { if (open) drawerTrigger = document.activeElement; $('#connections-drawer').hidden = !open; $('#drawer-backdrop').hidden = !open; if (open) { renderConnections(); $('#connection-search').focus(); safe(refreshServerManagerHistory)(); } else { closeServerGroupMenu(); drawerTrigger?.focus(); } }
+function setDrawer(open) { if (open) drawerTrigger = document.activeElement; $('#connections-drawer').hidden = !open; $('#drawer-backdrop').hidden = !open; if (open) { renderConnections(); $('#connection-search').focus(); } else { closeServerGroupMenu(); drawerTrigger?.focus(); } }
 for (const id of ['connection-button', 'welcome-connect']) $(`#${id}`).onclick = () => setDrawer(true);
 // “+”：本地 Shell 开关（设置 → 其他功能，仅支持的平台可见）打开时直接新开本机
 // 终端标签，关闭时保持原有的新选项卡页行为。Windows 上功能已移除，恒走新会话页。
