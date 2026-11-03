@@ -40,9 +40,9 @@ body { transform-origin:0 0; }
 .terminal-grid-metrics .terminal-box-glyph { font-size:0; }
 .terminal-grid-metrics .terminal-box-glyph > svg { position:absolute; inset:0; display:block; width:100%; height:100%; overflow:visible; fill:none; stroke:currentColor; stroke-linecap:square; stroke-linejoin:round; pointer-events:none; }
 .workspace { grid-template-rows:minmax(130px,1fr) 8px var(--files-height); }
-.settings-menu { position:fixed; z-index:20; width:282px; max-width:calc(var(--view-width) - 16px); max-height:calc(var(--view-height) - 54px); overflow:auto; background:var(--surface,#fff); border-radius:16px; padding:8px; box-shadow:0 12px 44px #152c4329; color:var(--text,#43576b); scrollbar-width:thin; scrollbar-color:#a4b6c350 transparent; }
-.settings-caption { font-size:10px; color:var(--muted); padding:9px 10px 11px; }
-.settings-menu-view > button { display:flex; align-items:center; gap:10px; width:100%; padding:12px 10px; border-radius:10px; text-align:left; font-size:12px; }
+.settings-menu { position:fixed; z-index:20; width:282px; max-width:calc(var(--view-width) - 16px); max-height:calc(var(--view-height) - 54px); overflow:auto; background:var(--surface,#fff); border-radius:16px; padding:6px; box-shadow:0 12px 44px #152c4329; color:var(--text,#43576b); scrollbar-width:thin; scrollbar-color:#a4b6c350 transparent; }
+.settings-caption { font-size:10px; color:var(--muted); padding:6px 10px 8px; }
+.settings-menu-view > button { display:flex; align-items:center; gap:10px; width:100%; padding:9px 10px; border-radius:10px; text-align:left; font-size:12px; }
 .settings-menu-view > button svg { width:16px; height:16px; color:var(--muted); }
 .settings-menu-view > button span { margin-left:auto; font-size:10px; color:var(--muted); }
 .settings-menu-view > button:hover { background:var(--surface-hover,#edf3f7); }
@@ -54,9 +54,11 @@ body { transform-origin:0 0; }
 .settings-submenu-heading strong { font-size:12px; font-weight:600; }
 .scale-setting { display:flex; align-items:center; justify-content:space-between; gap:15px; font-size:12px; margin:8px 10px; padding-top:12px; border-top:1px solid var(--border); }
 .scale-setting select { border:0; background:var(--surface-inset,#f0f4f7); border-radius:8px; color:inherit; padding:6px 9px; font:inherit; }
-/* The submenu heading already draws its own divider; a lone first row must not
-   stack a second border-top directly beneath it. */
-#settings-other-view .scale-setting { border-top:0; padding-top:2px; }
+/* Rows inside the settings menu read as one list with the plain menu buttons;
+   divider borders would cut through that list, so none are drawn there. */
+.settings-menu-view .scale-setting { border-top:0; padding-top:0; margin:4px 10px; }
+.settings-menu-view .scale-setting select { padding:4px 9px; }
+.settings-menu-view .scale-setting .themed-select-trigger { min-height:27px; padding:4px 9px; }
 .placement-setting input[type=checkbox] { width:15px; height:15px; margin:0; flex:none; accent-color:var(--accent,#658daf); }
 dialog { max-width:calc(var(--view-width) - 24px); max-height:calc(var(--view-height) - 24px); }
 .connections-drawer { max-width:calc(var(--view-width) - 24px); bottom:12px; }
