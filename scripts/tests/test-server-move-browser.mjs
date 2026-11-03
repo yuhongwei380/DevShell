@@ -88,8 +88,8 @@ try {
   // The profile menu also clones a connection under the same name — the stored
   // credential travels with the clone inside the store — and pins connections
   // straight into the links bar.
-  const openMenu = async id => {
-    await page.click(folder(target.id));
+  const openMenu = async (id, folderId = target.id) => {
+    await page.click(folder(folderId));
     await page.waitForSelector(card(id));
     await page.click(card(id), { button: 'right' });
     await page.waitForSelector('#server-group-menu:not([hidden])');
@@ -98,6 +98,17 @@ try {
   const items = await openMenu(nested.id);
   assert(items.includes('复制到同名连接') && items.includes('固定到链接栏'), `menu items: ${items}`);
   await page.evaluate(() => [...document.querySelectorAll('#server-group-menu button')].find(button => button.textContent === '复制到同名连接').click());
+  // Duplicating now asks first: generate as-is, or generate and edit the clone.
+  await page.waitForSelector('#action-dialog[open]');
+  const dialogButtons = await page.$$eval('#action-dialog .dialog-buttons button', els => els.filter(el => !el.hidden).map(el => el.textContent.trim()));
+  assert.deepEqual(dialogButtons, ['生成后修改', '取消', '直接生成'], `duplicate prompt: ${dialogButtons}`);
+  await page.evaluate(() => document.getElementById('action-alt').click());
+  await page.waitForSelector('#connection-dialog[open]');
+  const editing = await page.evaluate(() => ({ id: document.getElementById('connection-form').elements.id.value, name: document.getElementById('connection-form').elements.name.value, secretNote: !document.getElementById('saved-secret-note').hidden }));
+  assert(editing.id && editing.id !== nested.id && editing.name === '子组连接', `editor prefilled: ${JSON.stringify(editing)}`);
+  assert(editing.secretNote, 'the clone editor must show the stored-credential hint');
+  // Closing the editor without saving still keeps the generated clone.
+  await page.evaluate(() => document.getElementById('cancel-connection').click());
   await page.waitForFunction(name => profiles.filter(entry => entry.name === name && !entry.deletedAt).length === 2, {}, '子组连接');
   const clones = (await api('/api/config')).servers.filter(entry => entry.name === '子组连接');
   assert.equal(clones.length, 2);
@@ -105,10 +116,67 @@ try {
   assert.equal(clones[0].host, clones[1].host); assert.equal(clones[0].groupId, clones[1].groupId);
   assert.equal(clones.filter(entry => entry.hasSecret).length, 2, 'the clone must carry the stored credential');
   assert(!JSON.stringify(clones).includes('test-secret'), 'the duplicate must never expose the secret in plaintext');
-  await openMenu(nested.id);
+  // 直接生成 creates immediately; 取消 creates nothing.
+  await openMenu(kept.id, source.id);
+  await page.evaluate(() => [...document.querySelectorAll('#server-group-menu button')].find(button => button.textContent === '复制到同名连接').click());
+  await page.waitForSelector('#action-dialog[open]');
+  await page.evaluate(() => document.getElementById('action-confirm').click());
+  await page.waitForFunction(name => profiles.filter(entry => entry.name === name && !entry.deletedAt).length === 2, {}, '留在原组');
+  await new Promise(resolve => setTimeout(resolve, 250)); // let the list re-render settle
+  await openMenu(kept.id, source.id);
+  await page.evaluate(() => [...document.querySelectorAll('#server-group-menu button')].find(button => button.textContent === '复制到同名连接').click());
+  await page.waitForSelector('#action-dialog[open]');
+  await page.evaluate(() => document.getElementById('action-cancel').click());
+  await new Promise(resolve => setTimeout(resolve, 300));
+  assert.equal((await api('/api/config')).servers.filter(entry => entry.name === '留在原组' && !entry.deletedAt).length, 2, 'cancel must not create a clone');
+  // A connection card can be dragged straight onto a left folder row to move it.
+  await page.click(folder(target.id));
+  await page.waitForSelector(card(nested.id));
+  const dragStart = await page.evaluate(id => {
+    const cardButton = document.querySelector(`#connection-groups [data-profile-id="${id}"] .connection-card`);
+    const draggable = cardButton.draggable;
+    cardButton.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer() }));
+    return { draggable, dragging: (serverManager.profileDrag || { ids: [] }).ids };
+  }, nested.id);
+  assert(dragStart.draggable, 'saved connection cards must be draggable');
+  assert.deepEqual(dragStart.dragging, [nested.id]);
+  const dropVisual = await page.evaluate(groupId => {
+    const wrap = document.querySelector(`#server-folder-list [data-group-id="${groupId}"]`);
+    const transfer = new DataTransfer();
+    wrap.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+    const highlighted = wrap.classList.contains('server-folder-drop-into');
+    wrap.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+    return highlighted;
+  }, other.id);
+  assert(dropVisual, 'the folder row must highlight while a connection is dragged over it');
+  await page.waitForFunction((id, groupId) => profiles.find(entry => entry.id === id)?.groupId === groupId, {}, nested.id, other.id);
+  assert.equal((await api('/api/config')).servers.find(entry => entry.id === nested.id).groupId, other.id);
+  // Dragging a card inside the multi-selection moves the whole selection.
+  await new Promise(resolve => setTimeout(resolve, 250)); // let the folder re-render settle
+  await page.click(folder(source.id));
+  await page.waitForSelector(card(kept.id));
+  const multiDrag = await page.evaluate(ids => {
+    for (const id of ids) serverManager.selectedProfiles.add(id);
+    reflectServerSelection();
+    const cardButton = document.querySelector(`#connection-groups [data-profile-id="${ids[0]}"] .connection-card`);
+    cardButton.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer() }));
+    return (serverManager.profileDrag || { ids: [] }).ids.length;
+  }, [kept.id, editing.id]);
+  assert.equal(multiDrag, 2, 'dragging a selected card must carry the whole selection');
+  await page.evaluate(groupId => {
+    const wrap = document.querySelector(`#server-folder-list [data-group-id="${groupId}"]`);
+    const transfer = new DataTransfer();
+    wrap.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+    wrap.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+  }, parent.id);
+  await page.waitForFunction(args => args.ids.every(id => profiles.find(entry => entry.id === id)?.groupId === args.groupId), {}, { ids: [kept.id, editing.id], groupId: parent.id });
+  const afterDrag = (await api('/api/config')).servers.filter(entry => [kept.id, editing.id].includes(entry.id));
+  assert(afterDrag.length === 2 && afterDrag.every(entry => entry.groupId === parent.id), `multi drag: ${JSON.stringify(afterDrag.map(entry => entry.groupId))}`);
+  await new Promise(resolve => setTimeout(resolve, 250)); // let the list re-render settle
+  await openMenu(nested.id, other.id);
   await page.evaluate(() => [...document.querySelectorAll('#server-group-menu button')].find(button => button.textContent === '固定到链接栏').click());
   await page.waitForFunction(id => (appearance.layout['dengshell.pinned.v1'] || []).includes(id), {}, nested.id);
-  const flipItems = await openMenu(nested.id);
+  const flipItems = await openMenu(nested.id, other.id);
   assert(flipItems.includes('从链接栏取消固定') && !flipItems.includes('固定到链接栏'), `flip items: ${flipItems}`);
   await page.evaluate(() => [...document.querySelectorAll('#server-group-menu button')].find(button => button.textContent === '从链接栏取消固定').click());
   await page.waitForFunction(id => !(appearance.layout['dengshell.pinned.v1'] || []).includes(id), {}, nested.id);

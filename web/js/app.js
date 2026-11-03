@@ -93,16 +93,21 @@ const parentPath = path => normalizePath('..', path);
 
 // Consistent in-app dialogs; serialised so multiple transfer errors cannot overlap.
 let dialogQueue = Promise.resolve();
-function ask({ title, description = '', input = false, value = '', secret = false, confirm = '确定', signal }) {
+function ask({ title, description = '', input = false, value = '', secret = false, confirm = '确定', alt = '', signal }) {
   const result = dialogQueue.then(() => new Promise(resolve => {
     if (signal?.aborted) return resolve(null);
     const dialog = $('#action-dialog');
     $('#action-title').textContent = title; $('#action-description').textContent = description;
     $('#action-input-label').hidden = !input; $('#action-input').type = secret ? 'password' : 'text'; $('#action-input').value = value;
     $('#action-confirm').textContent = confirm;
+    // Optional third action; resolve('alt') lets callers branch (e.g. duplicate
+    // a connection then edit the clone instead of keeping it as-is).
+    const altButton = $('#action-alt');
+    altButton.hidden = !alt; altButton.textContent = alt;
+    altButton.onclick = () => finish('alt');
     let done = false;
     const cancel = () => finish(null);
-    const finish = answer => { if (done) return; done = true; signal?.removeEventListener('abort', cancel); dialog.close(); resolve(answer); };
+    const finish = answer => { if (done) return; done = true; altButton.onclick = null; signal?.removeEventListener('abort', cancel); dialog.close(); resolve(answer); };
     signal?.addEventListener('abort', cancel, { once: true });
     $('#action-form').onsubmit = event => { event.preventDefault(); finish(input ? $('#action-input').value : true); };
     $('#action-cancel').onclick = () => finish(null);

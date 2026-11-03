@@ -21,7 +21,7 @@
   <link rel="stylesheet" href="css/config-document.css?v=20260920-v002-b70">
   <link rel="stylesheet" href="css/startup-update.css?v=20261102-sectag1">
   <link rel="stylesheet" href="css/desktop-polish.css?v=20261101-hdrmerge5">
-  <link rel="stylesheet" href="css/server-manager.css?v=20261101-backup1">
+  <link rel="stylesheet" href="css/server-manager.css?v=20261103-dragmove1">
   <link rel="stylesheet" href="css/connection-extras.css?v=20260920-v002-b70">
   <link rel="stylesheet" href="css/help-guide.css?v=20261101-hdrmerge1">
   <link rel="stylesheet" href="css/appearance-tools.css?v=20261031-sftp-close">
@@ -264,7 +264,7 @@
     </div>
   </form></dialog>
   <dialog id="rdp-sessions-dialog" class="manager-dialog"><div class="dialog-heading"><div><h2>远程桌面</h2><p>内置 RDP · 标签页</p></div><button type="button" class="icon-button" id="close-rdp-sessions" aria-label="关闭远程桌面列表"><svg><use href="#i-close"/></svg></button></div><p class="rdp-session-help">首次连接时请核对证书窗口中的服务器地址和指纹。安全锁定会断开 RDP。</p><div id="rdp-session-list" aria-live="polite"></div><p id="rdp-session-empty" class="empty-state">还没有远程桌面会话。新建连接时选择 RDP。</p><button type="button" id="new-rdp-connection" class="primary-button">新建 RDP 连接</button></dialog>
-  <dialog id="action-dialog"><form id="action-form"><h2 id="action-title"></h2><p id="action-description"></p><label id="action-input-label"><input id="action-input" autocomplete="off"></label><div class="dialog-buttons"><button type="button" id="action-cancel">取消</button><button type="submit" class="primary-button" id="action-confirm">确定</button></div></form></dialog>
+  <dialog id="action-dialog"><form id="action-form"><h2 id="action-title"></h2><p id="action-description"></p><label id="action-input-label"><input id="action-input" autocomplete="off"></label><div class="dialog-buttons"><button type="button" id="action-alt" hidden></button><button type="button" id="action-cancel">取消</button><button type="submit" class="primary-button" id="action-confirm">确定</button></div></form></dialog>
   <dialog id="command-dialog"><form id="quick-command-form">
     <div class="dialog-heading"><h2 id="command-dialog-title">新建快捷命令</h2><button type="button" class="icon-button" id="cancel-command" aria-label="关闭命令编辑器"><svg><use href="#i-close"/></svg></button></div>
     <input name="id" type="hidden"><div class="form-row"><label>名称<input name="name" required maxlength="100" placeholder="例如：查看容器"></label><div class="command-group-field"><label for="quick-command-group">分组</label><div class="command-group-choice"><select id="quick-command-group" name="group" required aria-label="命令分组"></select><button type="button" class="icon-button" id="new-command-group" title="新建命令分组" aria-label="新建命令分组"><svg><use href="#i-plus"/></svg></button></div></div></div>
@@ -392,10 +392,10 @@
   <script src="js/config-document.js?v=20261102-mergetheme1"></script>
   <script src="js/startup-update.js?v=20261101-updmirror2"></script>
   <script src="js/portable-preferences.js?v=20261025-devshell-rc1"></script>
-  <script src="js/server-manager.js?v=20261019-serial1"></script>
+  <script src="js/server-manager.js?v=20261103-dragmove1"></script>
   <script src="js/backup-manager.js?v=20261101-backup1"></script>
-  <script src="js/server-explorer.js?v=20261103-servermenu2"></script>
-  <script src="js/help-guide.js?v=20261103-servermenu2"></script>
+  <script src="js/server-explorer.js?v=20261103-dragmove1"></script>
+  <script src="js/help-guide.js?v=20261103-dragmove1"></script>
   <script src="js/chart-styles.js?v=20260920-v002-b70"></script>
   <script src="js/appearance-tools.js?v=20261102-concise4"></script>
   <script src="js/terminal-snapshot.js?v=20260920-v002-b70"></script>
@@ -413,7 +413,7 @@
   <script src="js/local-shell.js?v=20261102-localshell2"></script>
   <script src="js/upload-confirmation.js?v=20260928-overwrite1"></script>
   <script src="js/shell-transfers.js?v=20261101-transferpill1"></script>
-  <script src="js/app.js?v=20261102-localshell2"></script>
+  <script src="js/app.js?v=20261103-dupask1"></script>
   <script src="js/quick-connect.js?v=20261102-localshell1"></script>
   <script src="js/local-prompt.js?v=20261022-tabs1"></script>
   <script src="js/command-completion.js?v=20261025-cmdtab1"></script>

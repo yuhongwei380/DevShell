@@ -58,8 +58,50 @@ function finishServerGroupDrag() {
   clearServerGroupDropHint();
   for (const row of document.querySelectorAll('#server-folder-list .server-folder-dragging')) row.classList.remove('server-folder-dragging');
 }
-function enableServerGroupDrag(group, heading, select) {
-  select.draggable = true;
+function clearServerProfileDropHint() {
+  for (const wrap of document.querySelectorAll('#server-folder-list .server-folder-wrap')) wrap.classList.remove('server-folder-drop-into');
+}
+function finishServerProfileDrag() {
+  serverManager.profileDrag = null;
+  clearServerProfileDropHint();
+}
+async function moveServerProfiles(ids, groupId) {
+  const tree = serverGroupTree(), target = tree.byID.get(groupId);
+  if (!target) return;
+  let moved = 0;
+  for (const id of ids) {
+    const current = profiles.find(item => item.id === id && !item.deletedAt);
+    if (!current || current.groupId === groupId) continue;
+    try { await post(`/api/profiles/${encodeURIComponent(id)}/group`, { groupId }); moved++; } catch (error) { toast(error.message); }
+  }
+  await loadProfiles();
+  renderConnections();
+  serverManager.selectedProfiles = new Set(ids.filter(id => profiles.some(item => item.id === id && !item.deletedAt)));
+  reflectServerSelection();
+  if (moved === 1) toast(`已移动到分组「${target.name}」`);
+  else if (moved > 1) toast(`已将 ${moved} 个连接移动到分组「${target.name}」`);
+}
+// 连接卡片可直接拖到左侧目录行：整行高亮，落下即移动到该分组（多选时整组带走）。
+function enableServerProfileDropOnFolder(group, wrap) {
+  wrap.ondragover = event => {
+    if (!serverManager.profileDrag || serverManager.groupDrag) return;
+    event.preventDefault(); event.dataTransfer.dropEffect = 'move';
+    clearServerProfileDropHint();
+    wrap.classList.add('server-folder-drop-into');
+    const folders = $('#server-folder-list'), pane = folders.getBoundingClientRect();
+    if (event.clientY < pane.top + 24) folders.scrollTop -= 16;
+    else if (event.clientY > pane.bottom - 24) folders.scrollTop += 16;
+  };
+  wrap.ondragleave = event => { if (!wrap.contains(event.relatedTarget)) wrap.classList.remove('server-folder-drop-into'); };
+  wrap.ondrop = safe(async event => {
+    if (!serverManager.profileDrag || serverManager.groupDrag) return;
+    event.preventDefault(); event.stopPropagation();
+    const ids = serverManager.profileDrag.ids;
+    finishServerProfileDrag();
+    await moveServerProfiles(ids, group.id);
+  });
+}
+function enableServerGroupDrag(group, heading, select) {  select.draggable = true;
   select.title += '\n拖动调整同级分组顺序；Alt + ↑ / ↓ 调整顺序';
   select.ondragstart = event => {
     if (serverManager.groupOrderSaving) { event.preventDefault(); return; }
@@ -143,6 +185,7 @@ function renderServerExplorer(tree, query) {
     heading.append(caret, select);
     if (!all) {
       if (!query) enableServerGroupDrag(group, heading, select);
+      enableServerProfileDropOnFolder(group, row);
       const more = serverManagerButton('⋯', event => openServerGroupMenu(group.id, event.currentTarget), 'server-group-more'); more.dataset.groupAction = 'menu'; more.setAttribute('aria-label', `管理分组 ${group.name}`); more.setAttribute('aria-haspopup', 'menu'); heading.append(more);
       row.oncontextmenu = event => { event.preventDefault(); openServerGroupMenu(group.id, heading); };
     }
@@ -192,14 +235,22 @@ function openServerProfileMenu(profile, actions, anchor) {
   if (profile.notes) buttons.push(serverManagerButton('查看备注', () => window.DengProfileNotes.open(profile)));
   for (const button of actions.children) buttons.push(button);
   // 复制走后端 duplicate：名称与全部配置照抄，已保存的密码/私钥口令/代理口令
-  // 在存储内随副本带走，明文不经过前端。
+  // 在存储内随副本带走，明文不经过前端。先询问是否改配置：直接生成，或生成后
+  // 立即打开编辑页（副本此时已落盘，关掉编辑页也保留）。
   if (!profile.deletedAt) buttons.push(serverManagerButton('复制到同名连接', async () => {
     closeServerGroupMenu();
+    const answer = await ask({ title: `复制连接「${profile.name}」`, description: '副本将照抄名称与全部配置，已保存的密码、私钥口令与代理口令一并带走。要先生成，还是生成后修改配置？', confirm: '直接生成', alt: '生成后修改' });
+    if (answer === null) return;
     try {
       const saved = await post(`/api/profiles/${profile.id}/duplicate`);
       await loadProfiles();
       renderConnections();
-      toast(`已复制为「${saved.name}」，已保存的凭据一并拷贝`);
+      if (answer === 'alt') {
+        const clone = profiles.find(entry => entry.id === saved.id);
+        if (clone) showConnectionForm(clone);
+      } else {
+        toast(`已复制为「${saved.name}」，已保存的凭据一并拷贝`);
+      }
     } catch (error) { toast(error.message); }
   }));
   if (!profile.deletedAt && window.DengPinnedNav) buttons.push(serverManagerButton(window.DengPinnedNav.isPinnedFor(profile) ? '从链接栏取消固定' : '固定到链接栏', async () => {

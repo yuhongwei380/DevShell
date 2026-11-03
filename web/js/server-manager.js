@@ -183,6 +183,21 @@ function renderServerProfile(profile, tree, mode = 'servers', history = null) {
   // History metadata and card padding are part of the connection target too.
   // Keep the separate management button out of selection/connection gestures.
   row.dataset.selectable = String(!button.disabled);
+  // 服务器列表里的连接卡片可直接拖到左侧分组行完成移动；已选中的卡片
+  // 整组一起拖走。历史/已删除视图不提供拖拽。
+  if (mode === 'servers' && !deleted) {
+    button.draggable = true;
+    button.title += '\n拖到左侧分组可移动该连接';
+    button.ondragstart = event => {
+      closeServerGroupMenu();
+      const ids = serverManager.selectedProfiles.has(profile.id) && serverManager.selectedProfiles.size > 1 ? [...serverManager.selectedProfiles] : [profile.id];
+      serverManager.profileDrag = { ids };
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', ids.join(','));
+      button.classList.add('connection-card-dragging');
+    };
+    button.ondragend = () => { button.classList.remove('connection-card-dragging'); finishServerProfileDrag(); };
+  }
   const isConnectionTarget = event => {
     const control = event.target.closest('button,a,input,textarea,select,[contenteditable="true"]');
     return !button.disabled && (!control || control === button);
