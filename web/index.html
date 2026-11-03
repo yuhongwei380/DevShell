@@ -284,7 +284,7 @@
       <button role="menuitem" id="manage-keys"><svg><use href="#i-key"/></svg>密钥管理器<span>私钥与公钥</span></button>
       <button role="menuitem" id="manage-appearance-config" data-settings-view="appearance" aria-haspopup="menu" aria-controls="settings-appearance-view" aria-expanded="false"><svg><use href="#i-sun"/></svg>外观配置<span>字体与布局</span><svg class="settings-chevron"><use href="#i-chevron"/></svg></button>
       <button role="menuitem" id="manage-proxies"><svg><use href="#i-network"/></svg>代理管理器<span>连接路径</span></button>
-      <button role="menuitem" id="manage-other-features" data-settings-view="other" aria-haspopup="menu" aria-controls="settings-other-view" aria-expanded="false"><svg><use href="#i-settings"/></svg>其他功能<span>行为开关</span><svg class="settings-chevron"><use href="#i-chevron"/></svg></button>
+      <button role="menuitem" id="manage-other-features" data-settings-view="other" aria-haspopup="menu" aria-controls="settings-other-view" aria-expanded="false"><svg><use href="#i-settings"/></svg>其他功能<svg class="settings-chevron"><use href="#i-chevron"/></svg></button>
       <button role="menuitem" id="help-button" aria-label="使用手册与功能引导" aria-haspopup="dialog"><svg><use href="#i-help-book"/></svg>使用手册与功能引导<span>帮助</span></button>
       <button role="menuitem" id="release-notes-button" aria-haspopup="dialog" aria-controls="release-notes-dialog"><svg><use href="#i-history"/></svg>更新日志<span>当前版本</span></button>
       <div class="scale-setting"><label for="ui-scale">界面缩放</label><select id="ui-scale" aria-label="界面缩放"><option value="0.75">75%</option><option value="0.9">90%</option><option value="1">100%</option><option value="1.1">110%</option><option value="1.25">125%</option><option value="1.5">150%</option><option value="1.75">175%</option><option value="2">200%</option></select></div>
@@ -302,7 +302,7 @@
     <div class="settings-menu-view" id="settings-other-view" role="group" aria-label="其他功能" hidden>
       <div class="settings-submenu-heading"><button type="button" role="menuitem" id="other-settings-back" data-settings-view="main"><svg><use href="#i-chevron"/></svg>返回设置</button><strong>其他功能</strong></div>
       <div class="scale-setting placement-setting"><label for="feature-auto-commands">连接后自动执行命令</label><select id="feature-auto-commands" aria-label="连接后自动执行命令" title="SSH 连接按各自配置把命令敲进远端终端；关闭后所有连接都不再自动执行"><option value="true">开启</option><option value="false">关闭</option></select></div>
-      <div class="scale-setting placement-setting"><label for="feature-local-shell">本地终端</label><select id="feature-local-shell" aria-label="本地终端" title="开启后点“+”直接新开本机终端（Windows 命令提示符、macOS 登录 Shell 于家目录）；关闭时保持新会话起始页"><option value="true">开启</option><option value="false">关闭</option></select></div>
+      <div class="scale-setting placement-setting"><label for="feature-local-shell">本地终端（仅限 macOS）</label><select id="feature-local-shell" aria-label="本地终端（仅限 macOS）" title="开启后点“+”直接新开本机终端（登录 bash/zsh 于家目录）；关闭时保持新会话起始页"><option value="true">开启</option><option value="false">关闭</option></select></div>
     </div>
   </div>
   <dialog id="about-dialog" aria-labelledby="about-title"><div class="dialog-heading"><h2 id="about-title">关于 DevShell</h2><button type="button" class="icon-button" id="close-about" aria-label="关闭版本信息"><svg><use href="#i-close"/></svg></button></div><dl class="about-versions"><dt>软件版本</dt><dd id="about-version"></dd><dt>构建版本</dt><dd id="about-build"></dd></dl></dialog>
@@ -417,7 +417,7 @@
   <script src="js/quick-connect.js?v=20261102-localshell1"></script>
   <script src="js/local-prompt.js?v=20261022-tabs1"></script>
   <script src="js/command-completion.js?v=20261025-cmdtab1"></script>
-  <script src="js/pinned-nav.js?v=20261102-rename1"></script>
+  <script src="js/pinned-nav.js?v=20261103-savegroup1"></script>
   <script src="js/process-view.js?v=20261019-serial1"></script>
   <script src="js/common-apps.js?v=20261019-brand1"></script>
   <script src="js/text-model.js?v=20260920-v002-b70"></script>

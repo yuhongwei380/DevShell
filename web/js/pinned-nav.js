@@ -10,8 +10,10 @@
 // backend layout validator (validSavedLayoutKey in preferences.go).
 window.DengPinnedNav = (() => {
   const LAYOUT_KEY = 'dengshell.pinned.v1';
+  const NEW_GROUP = '__new__';
   let bar, toggle, pinButton, pinned = [];
   let cancelDrag, reorderPending = false, reorderSave = Promise.resolve(), suppressClickUntil = 0, expanded = false;
+  let itemMenuCleanup, saveDialog, savingID = '';
   function readPinned() {
     const raw = appearance.layout?.[LAYOUT_KEY];
     pinned = Array.isArray(raw) ? raw.filter(id => typeof id === 'string') : [];
@@ -169,14 +171,93 @@ window.DengPinnedNav = (() => {
     render(); reflect();
     toast(`已重命名为「${saved.name}」`);
   }
-  const itemTitle = profile => `${profile.name} · ${profileSubtitle(profile)}\n拖拽调整顺序 · 左键新建会话 · 右键重命名 · × 关闭（取消固定需确认）`;
+  // 右键菜单：复用标签菜单样式，重命名与“保存到服务器管理”两个入口。
+  function openItemMenu(event, item, profile) {
+    itemMenuCleanup?.();
+    const menu = node('div', 'session-tab-menu');
+    menu.id = 'pinned-item-menu';
+    menu.setAttribute('role', 'menu');
+    const close = () => { menu.remove(); document.removeEventListener('pointerdown', dismiss); if (itemMenuCleanup === close) itemMenuCleanup = null; };
+    const dismiss = e => { if (!menu.contains(e.target)) close(); };
+    itemMenuCleanup = close;
+    const rename = node('button', '', '重命名连接');
+    rename.type = 'button'; rename.setAttribute('role', 'menuitem'); rename.title = '修改该连接的名称，与服务器管理同步';
+    rename.onclick = safe(() => { close(); return renameProfile(profile); });
+    const save = node('button', '', '保存到服务器管理');
+    save.type = 'button'; save.setAttribute('role', 'menuitem'); save.title = '把这个连接保存到服务器管理的指定分组（可选择或新建分组）';
+    save.onclick = safe(() => { close(); return openSaveDialog(profile); });
+    menu.append(rename, save);
+    document.documentElement.append(menu);
+    const rect = item.getBoundingClientRect();
+    menu.style.left = Math.max(8, Math.min(logicalWidth() - menu.offsetWidth - 8, (event.clientX || rect.left) / effectiveScale)) + 'px';
+    menu.style.top = Math.min(logicalHeight() - menu.offsetHeight - 8, (event.clientY || rect.bottom) / effectiveScale + 5) + 'px';
+    rename.focus();
+    document.addEventListener('pointerdown', dismiss);
+    menu.onkeydown = e => { if (e.key === 'Escape') { close(); item.querySelector('.pinned-item-open')?.focus(); } };
+  }
+  // “保存到服务器管理”：下拉列出既有分组（完整路径，与快速连接保存一致），
+  // 选“新建分组…”提交新名称；POST /api/profiles 按名称绑定既有分组或创建
+  // 顶层分组（assignProfileGroupLocked），凭据按 public-view 往返保留。
+  function ensureSaveDialog() {
+    if (saveDialog) return saveDialog;
+    saveDialog = node('dialog');
+    saveDialog.id = 'pinned-save-group-dialog';
+    saveDialog.setAttribute('aria-labelledby', 'pinned-save-group-title');
+    saveDialog.innerHTML = `<form><div class="dialog-heading"><h2 id="pinned-save-group-title">保存到服务器管理</h2><button type="button" class="icon-button" data-close aria-label="关闭"><svg><use href="#i-close"/></svg></button></div><p id="pinned-save-target"></p><label>保存到分组<select name="group" id="pinned-save-group"></select></label><input name="groupNew" id="pinned-save-group-new" placeholder="新分组名称" hidden maxlength="100"><p id="pinned-save-error" role="alert"></p><button type="button" id="pinned-save-confirm" class="primary-button">保存</button></form>`;
+    document.body.append(saveDialog);
+    saveDialog.querySelector('[data-close]').onclick = () => saveDialog.close();
+    const select = saveDialog.querySelector('#pinned-save-group'), extra = saveDialog.querySelector('#pinned-save-group-new');
+    select.onchange = () => { extra.hidden = select.value !== NEW_GROUP; };
+    saveDialog.querySelector('#pinned-save-confirm').onclick = safe(commitSaveToGroup);
+    return saveDialog;
+  }
+  function openSaveDialog(profile) {
+    if (profile.temporary) { toast('请先保存这个快速连接，再选择分组'); return; }
+    const dialog = ensureSaveDialog();
+    savingID = profile.id;
+    const select = dialog.querySelector('#pinned-save-group'), extra = dialog.querySelector('#pinned-save-group-new');
+    const tree = serverGroupTree(), names = new Set();
+    for (const group of tree.flat) { const path = tree.paths.get(group.id); if (path) names.add(path); }
+    const existing = [...names].sort(compareServerNames);
+    select.replaceChildren(...existing.map(name => new Option(name, name)), new Option('＋ 新建分组…', NEW_GROUP));
+    select.value = profile.group && names.has(profile.group) ? profile.group : existing[0] || NEW_GROUP;
+    extra.hidden = select.value !== NEW_GROUP; extra.value = '';
+    dialog.querySelector('#pinned-save-target').textContent = `${profile.name} · ${profile.user}@${profile.host}:${profile.port}`;
+    dialog.querySelector('#pinned-save-error').textContent = '';
+    dialog.querySelector('#pinned-save-confirm').disabled = false;
+    dialog.showModal();
+    select.focus();
+  }
+  async function commitSaveToGroup() {
+    const profile = profiles.find(entry => entry.id === savingID) || connectionProfile(savingID);
+    if (!profile) { saveDialog.close(); return; }
+    const select = saveDialog.querySelector('#pinned-save-group'), extra = saveDialog.querySelector('#pinned-save-group-new');
+    const group = select.value === NEW_GROUP ? extra.value.trim() : select.value;
+    if (!group) { saveDialog.querySelector('#pinned-save-error').textContent = '请填写新分组名称'; return; }
+    if (group === profile.group) { saveDialog.close(); return; }
+    const confirm = saveDialog.querySelector('#pinned-save-confirm');
+    confirm.disabled = true;
+    try {
+      const saved = await post('/api/profiles', { ...profile, groupId: '', group, clearSecret: false });
+      const index = profiles.findIndex(entry => entry.id === saved.id);
+      if (index >= 0) profiles[index] = saved; else profiles.push(saved);
+      await loadProfiles();
+      renderConnections(); renderTabs(); renderSessionInfo();
+      saveDialog.close();
+      toast(`已保存到服务器管理分组「${saved.group}」`);
+    } catch (error) {
+      saveDialog.querySelector('#pinned-save-error').textContent = error.message;
+      confirm.disabled = false;
+    }
+  }
+  const itemTitle = profile => `${profile.name} · ${profileSubtitle(profile)}\n拖拽调整顺序 · 左键新建会话 · 右键菜单（重命名 / 保存到服务器管理） · × 关闭（取消固定需确认）`;
   function itemFor(profile) {
     const item = node('span', 'pinned-item');
     const open = node('button', 'pinned-item-open');
     open.type = 'button';
     open.append(icon('server'), node('span', '', profile.name));
     open.onclick = () => { setExpanded(false); openConnection(profile); };
-    item.oncontextmenu = event => { event.preventDefault(); safe(() => renameProfile(profile))(); };
+    item.oncontextmenu = event => { event.preventDefault(); safe(() => openItemMenu(event, item, profile))(); };
     item.append(open, removeButtonFor(profile));
     item.title = itemTitle(profile);
     bindSorting(item, open, profile);

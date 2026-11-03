@@ -237,11 +237,14 @@ try {
   await page.waitForFunction(() => appearance.layout['dengshell.pinned.v1'].length === 7 && document.querySelectorAll('.pinned-item').length === 7);
   assert.deepEqual(await page.evaluate(() => appearance.layout['dengshell.pinned.v1']), reordered.filter(id => id !== removedId));
   checks.push('Confirming removes the pin and persists the layout');
-  // Right-click opens the rename dialog prefilled with the current name;
-  // cancelling changes nothing anywhere.
+  // Right-click drops a small menu (rename / save into the server manager).
+  // Cancelling the rename changes nothing anywhere.
   const renameTarget = await page.$eval('.pinned-item', el => el.dataset.pinnedId);
   const firstName = await page.$eval('.pinned-item .pinned-item-open span', el => el.textContent);
   await page.evaluate(() => document.querySelector('.pinned-item').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })));
+  await page.waitForSelector('#pinned-item-menu[role=menu]');
+  assert.deepEqual(await page.$$eval('#pinned-item-menu button', els => els.map(b => b.textContent)), ['重命名连接', '保存到服务器管理']);
+  await page.click('#pinned-item-menu button');
   await page.waitForSelector('#action-dialog[open]');
   assert((await page.$eval('#action-title', e => e.textContent)).includes('重命名连接'));
   assert.equal(await page.$eval('#action-input', e => e.value), firstName);
@@ -252,6 +255,8 @@ try {
   // (the same name the server manager edits) and the persisted config update.
   const renamed = '改名后的连接';
   await page.evaluate(() => document.querySelector('.pinned-item').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })));
+  await page.waitForSelector('#pinned-item-menu[role=menu]');
+  await page.click('#pinned-item-menu button');
   await page.waitForSelector('#action-dialog[open]');
   await page.$eval('#action-input', (el, value) => { el.value = value; }, renamed);
   await page.click('#action-confirm');
@@ -259,7 +264,30 @@ try {
   assert.equal(await page.evaluate(id => profiles.find(profile => profile.id === id)?.name, renameTarget), renamed);
   assert.equal((await api('/api/config')).data.servers.find(profile => profile.id === renameTarget).name, renamed);
   assert.deepEqual(await page.evaluate(() => appearance.layout['dengshell.pinned.v1']), reordered.filter(id => id !== removedId));
-  checks.push('Right-click renames the shared profile name and the persisted config; pins stay put');
+  checks.push('Right-click menu renames the shared profile name and the persisted config; pins stay put');
+  // “保存到服务器管理” offers the existing groups plus a new-group field, and
+  // moving the connection re-binds its group without touching credentials.
+  const beforeGroup = await page.evaluate(id => profiles.find(profile => profile.id === id)?.group, renameTarget);
+  await api('/api/group-nodes', { name: '浏览器分组' });
+  await page.evaluate(() => document.querySelector('.pinned-item').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })));
+  await page.waitForSelector('#pinned-item-menu[role=menu]');
+  await page.evaluate(() => [...document.querySelectorAll('#pinned-item-menu button')].find(b => b.textContent === '保存到服务器管理').click());
+  await page.waitForSelector('#pinned-save-group-dialog[open]');
+  const choices = await page.$$eval('#pinned-save-group option', els => els.map(o => o.value));
+  assert(choices.includes('浏览器分组'), `group dropdown must list existing groups: ${choices}`);
+  assert.equal(choices[choices.length - 1], '__new__', 'new-group entry must be last');
+  const newGroupName = '浏览器新建组';
+  await page.select('#pinned-save-group', '__new__');
+  assert(!(await page.$eval('#pinned-save-group-new', el => el.hidden)), 'new-group input must appear');
+  await page.type('#pinned-save-group-new', newGroupName);
+  await page.click('#pinned-save-confirm');
+  await page.waitForSelector('#pinned-save-group-dialog:not([open])');
+  const afterGroup = await page.evaluate(id => profiles.find(profile => profile.id === id)?.group, renameTarget);
+  assert.equal(afterGroup, newGroupName);
+  assert.notEqual(afterGroup, beforeGroup);
+  const stored = (await api('/api/config')).data.servers.find(profile => profile.id === renameTarget);
+  assert(stored.groupId, 'profile must bind the new group node');
+  checks.push('Save-to-server-manager dialog lists groups, creates the new one and re-binds the pinned profile');
   // Clicking a row always opens a fresh session, even when one for that
   // profile is already open and active.
   const clickCalls = await page.evaluate(() => {
