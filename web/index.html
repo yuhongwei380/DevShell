@@ -185,6 +185,13 @@
     <p id="server-move-error" role="alert" hidden></p>
     <button type="submit" id="save-server-move" class="primary-button">移动</button>
   </form></dialog>
+  <dialog id="server-group-keep-dialog" aria-labelledby="server-group-keep-title"><form id="server-group-keep-form">
+    <div class="dialog-heading"><h2 id="server-group-keep-title">删除分组（保留连接）</h2><button type="button" id="cancel-server-group-keep" class="icon-button" aria-label="取消删除"><svg><use href="#i-close"/></svg></button></div>
+    <p id="server-group-keep-scope"></p>
+    <label>连接与子分组移交给<select name="targetGroupId" id="server-group-keep-target" required></select></label>
+    <p id="server-group-keep-error" role="alert" hidden></p>
+    <button type="submit" id="save-server-group-keep" class="primary-button">删除分组</button>
+  </form></dialog>
   <dialog id="server-group-dialog"><form id="server-group-form">
     <div class="dialog-heading"><h2 id="server-group-editor-title">新建分组</h2><button type="button" id="cancel-server-group" class="icon-button" aria-label="取消分组编辑"><svg><use href="#i-close"/></svg></button></div>
     <input name="id" type="hidden"><label>分组名称<input name="name" required maxlength="100" placeholder="例如：生产环境"></label>
@@ -392,10 +399,10 @@
   <script src="js/config-document.js?v=20261102-mergetheme1"></script>
   <script src="js/startup-update.js?v=20261101-updmirror2"></script>
   <script src="js/portable-preferences.js?v=20261025-devshell-rc1"></script>
-  <script src="js/server-manager.js?v=20261103-dragmove1"></script>
+  <script src="js/server-manager.js?v=20261103-keeponly1"></script>
   <script src="js/backup-manager.js?v=20261101-backup1"></script>
   <script src="js/server-explorer.js?v=20261103-dragmove1"></script>
-  <script src="js/help-guide.js?v=20261103-dragmove1"></script>
+  <script src="js/help-guide.js?v=20261103-keeponly1"></script>
   <script src="js/chart-styles.js?v=20260920-v002-b70"></script>
   <script src="js/appearance-tools.js?v=20261102-concise4"></script>
   <script src="js/terminal-snapshot.js?v=20260920-v002-b70"></script>

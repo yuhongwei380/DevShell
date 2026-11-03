@@ -180,6 +180,24 @@ try {
   assert(flipItems.includes('从链接栏取消固定') && !flipItems.includes('固定到链接栏'), `flip items: ${flipItems}`);
   await page.evaluate(() => [...document.querySelectorAll('#server-group-menu button')].find(button => button.textContent === '从链接栏取消固定').click());
   await page.waitForFunction(id => !(appearance.layout['dengshell.pinned.v1'] || []).includes(id), {}, nested.id);
+  // 删除分组（保留连接）：连接与子分组移交给选定的接管分组。
+  await page.click(`#server-folder-list [data-group-id="${parent.id}"] .server-group-more`);
+  await page.waitForSelector('#server-group-menu:not([hidden])');
+  const groupItems = await page.$$eval('#server-group-menu button', els => els.map(button => button.textContent.trim()));
+  assert(groupItems.includes('删除分组（保留连接）') && groupItems.includes('删除分组及全部连接'), `group menu: ${groupItems}`);
+  await page.evaluate(() => [...document.querySelectorAll('#server-group-menu button')].find(button => button.textContent === '删除分组（保留连接）').click());
+  await page.waitForSelector('#server-group-keep-dialog[open]');
+  const keepScope = await page.$eval('#server-group-keep-scope', element => element.textContent);
+  assert(keepScope.includes('仅删除分组本身') && keepScope.includes('子分组'), `keep-connections scope: ${keepScope}`);
+  const keepOptions = await page.$$eval('#server-group-keep-target option', options => options.map(option => option.value));
+  assert(!keepOptions.includes(parent.id) && !keepOptions.includes(target.id) && keepOptions.includes(other.id), `handover options: ${keepOptions}`);
+  await page.select('#server-group-keep-target', other.id);
+  await page.click('#save-server-group-keep');
+  await page.waitForFunction(groupId => !serverManager.nodes.some(node => node.id === groupId), {}, parent.id);
+  const afterKeepDelete = await api('/api/config');
+  assert(!afterKeepDelete.groupNodes.some(entry => entry.id === parent.id), 'group node must be gone');
+  assert(afterKeepDelete.servers.filter(entry => [kept.id, editing.id].includes(entry.id)).every(entry => entry.groupId === other.id), 'profiles must move into the handover group');
+  assert(afterKeepDelete.groupNodes.find(entry => entry.id === target.id).parentId === other.id, 'child group must follow into the handover group');
   assert.deepEqual(errors, []);
   console.log('PASS: group filtering, descendant switch, duplicate group paths, move/cancel/error recovery, refreshed counts, selected destination and reload persistence; duplicate-same-name clone (credential-carrying) and links-bar pin/unpin from the profile menu.');
 } finally {

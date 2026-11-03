@@ -331,6 +331,38 @@ async function deleteServerGroupTree(id) {
     toast(`已删除 ${plan.groups} 个分组及 ${removed.size} 个连接配置`);
   } finally { serverManager.deletingGroup = ''; }
 }
+function deleteServerGroupKeepConnections(id) {
+  const tree = serverGroupTree(), group = tree.byID.get(id);
+  if (!group) return;
+  const subtree = new Set([id]);
+  for (const entry of tree.flat) { if (subtree.has(entry.parentId)) subtree.add(entry.id); }
+  const candidates = tree.flat.filter(entry => !subtree.has(entry.id));
+  closeServerGroupMenu();
+  if (!candidates.length) { toast('没有其他分组可以接管连接与子分组，请先创建另一个分组'); return; }
+  const direct = profiles.filter(p => p.groupId === id && !p.deletedAt).length;
+  const trashed = profiles.filter(p => p.groupId === id && p.deletedAt).length;
+  const childCount = (tree.children.get(id) || []).length;
+  $('#server-group-keep-scope').textContent = `仅删除分组本身：组内 ${direct} 个连接${trashed ? `（另有 ${trashed} 个回收站连接）` : ''}${childCount ? `，${childCount} 个子分组连同其内容一并移交` : ''}。连接配置、已保存凭据与连接历史不受影响。`;
+  $('#server-group-keep-error').hidden = true;
+  renderServerGroupChoices(group.parentId, $('#server-group-keep-target'), id);
+  $('#server-group-keep-form').dataset.groupId = id;
+  $('#server-group-keep-dialog').showModal();
+}
+async function submitServerGroupKeepDelete(event) {
+  event.preventDefault();
+  const form = event.currentTarget, id = form.dataset.groupId, groupId = $('#server-group-keep-target').value;
+  const error = $('#server-group-keep-error'), submit = $('#save-server-group-keep');
+  submit.disabled = true; error.hidden = true;
+  try {
+    await post(`/api/group-nodes/${encodeURIComponent(id)}/delete-keep-connections`, { targetGroupId: groupId });
+    serverManager.selectedProfiles.delete(id);
+    $('#server-group-keep-dialog').close();
+    await loadProfiles();
+    serverManager.generation++;
+    renderConnections();
+    toast(`已删除分组，连接已移入分组「${serverGroupTree().byID.get(groupId)?.name || ''}」`);
+  } catch (failure) { error.textContent = failure.message; error.hidden = false; } finally { submit.disabled = false; }
+}
 function updateGroupColorPreview() {
   const color = $('#server-group-form').elements.backgroundColor.value;
   const preview = $('#group-color-preview');
@@ -345,10 +377,12 @@ function openServerGroupMenu(id, anchor) {
   const menu = $('#server-group-menu');
   const erase = serverManagerButton('删除分组及全部连接', () => deleteServerGroupTree(id), 'server-danger');
   erase.title = '永久删除此分组、子分组及其连接，需要三次确认';
+  const keep = serverManagerButton('删除分组（保留连接）', () => deleteServerGroupKeepConnections(id));
+  keep.title = '只删除此分组：组内连接移入上级分组（或顶层），子分组一并上移，连接与凭据不受影响';
   menu.replaceChildren(
     serverManagerButton('添加服务器', () => { closeServerGroupMenu(); showConnectionForm(null, id); }),
     serverManagerButton('新建子分组', () => openServerGroupEditor('', id)),
-    serverManagerButton('名称、背景色与层级', () => openServerGroupEditor(id)), erase,
+    serverManagerButton('名称、背景色与层级', () => openServerGroupEditor(id)), keep, erase,
   );
   for (const button of menu.children) button.setAttribute('role', 'menuitem');
   menu.hidden = false;

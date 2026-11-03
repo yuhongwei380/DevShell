@@ -314,6 +314,8 @@ function initializeServerExplorer() {
   $('#cancel-server-move').onclick = () => $('#server-move-dialog').close();
   $('#server-move-dialog').oncancel = event => { if ($('#cancel-server-move').disabled) event.preventDefault(); };
   $('#server-move-form').onsubmit = safe(submitServerMove);
+  $('#cancel-server-group-keep').onclick = () => $('#server-group-keep-dialog').close();
+  $('#server-group-keep-form').onsubmit = safe(submitServerGroupKeepDelete);
   const saved = readSaved('dengshell.server-manager', {});
   serverManager.treeWidth = Number.isFinite(saved?.treeWidth) ? Math.max(145, Math.min(520, saved.treeWidth)) : 320;
   serverManager.includeChildren = saved?.includeChildren !== false;

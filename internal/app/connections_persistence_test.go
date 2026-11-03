@@ -187,6 +187,92 @@ func TestHierarchicalGroupsPreserveIdentityAndPreventCycles(t *testing.T) {
 		t.Fatal("restore lost secret")
 	}
 }
+func TestDeleteGroupKeepConnectionsRelocatesProfilesAndChildren(t *testing.T) {
+	dir := t.TempDir()
+	s, err := OpenStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent, err := s.SaveGroup(ServerGroup{Name: "生产"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, err := s.SaveGroup(ServerGroup{Name: "API", ParentID: parent.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	grand, err := s.SaveGroup(ServerGroup{Name: "v2", ParentID: child.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	keep, err := s.Save(Profile{Name: "keep", Host: "localhost", User: "root", GroupID: child.ID, Secret: "s3cret"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gone, err := s.Save(Profile{Name: "gone", Host: "localhost", User: "root", GroupID: child.ID}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Delete(gone.ID); err != nil {
+		t.Fatal(err)
+	}
+	moved, err := s.DeleteGroupKeepConnections(child.ID, "")
+	if err != nil || moved != 2 {
+		t.Fatalf("delete keeping connections: moved=%d err=%v", moved, err)
+	}
+	byID := groupIndex(s.config.GroupNodes)
+	if _, found := byID[child.ID]; found {
+		t.Fatal("group node survived")
+	}
+	if g := byID[grand.ID]; g.ParentID != parent.ID {
+		t.Fatalf("grandchild re-parented to %q", g.ParentID)
+	}
+	if p, _ := s.Get(keep.ID); p.GroupID != parent.ID || p.Group != "生产" || p.Secret != "s3cret" {
+		t.Fatalf("profile relocated wrong: %+v", p)
+	}
+	trashedEntry := Profile{}
+	for _, entry := range s.config.Servers {
+		if entry.ID == gone.ID {
+			trashedEntry = entry
+		}
+	}
+	if trashedEntry.GroupID != parent.ID || trashedEntry.DeletedAt == nil {
+		t.Fatalf("trashed profile relocated wrong: %+v", trashedEntry)
+	}
+	if _, err := s.Restore(gone.ID); err != nil {
+		t.Fatal(err)
+	}
+	top, err := s.SaveGroup(ServerGroup{Name: "顶层"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	orphanProfile, err := s.Save(Profile{Name: "top", Host: "localhost", User: "root", GroupID: top.ID}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DeleteGroupKeepConnections(top.ID, ""); err == nil {
+		t.Fatal("top-level group without a target must be refused")
+	}
+	if _, err := s.DeleteGroupKeepConnections(parent.ID, grand.ID); err == nil {
+		t.Fatal("target inside the deleted subtree must be refused")
+	}
+	if moved, err = s.DeleteGroupKeepConnections(top.ID, parent.ID); err != nil || moved != 1 {
+		t.Fatalf("top-level delete into target: moved=%d err=%v", moved, err)
+	}
+	if p, _ := s.Get(orphanProfile.ID); p.GroupID != parent.ID {
+		t.Fatalf("top-level profile should move into the target group: %+v", p)
+	}
+	reopened, err := OpenStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, found := groupIndex(reopened.config.GroupNodes)[child.ID]; found {
+		t.Fatal("deletion not persisted")
+	}
+	if p, _ := reopened.Get(keep.ID); p.GroupID != parent.ID || p.Secret != "s3cret" {
+		t.Fatalf("reopen lost relocation or credential: %+v", p)
+	}
+}
 func TestGroupHierarchyHasNoFixedDepthLimit(t *testing.T) {
 	groups := make([]ServerGroup, 1200)
 	parent := ""

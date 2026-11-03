@@ -184,6 +184,16 @@ func (a *App) registerConnectionManagementHTTP(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/group-nodes/{id}", func(w http.ResponseWriter, r *http.Request) {
 		respond(w, map[string]bool{"ok": true}, a.store.DeleteGroup(r.PathValue("id")))
 	})
+	mux.HandleFunc("POST /api/group-nodes/{id}/delete-keep-connections", func(w http.ResponseWriter, r *http.Request) {
+		var input struct {
+			TargetGroupID string `json:"targetGroupId"`
+		}
+		if !decode(w, r, &input) {
+			return
+		}
+		moved, err := a.store.DeleteGroupKeepConnections(r.PathValue("id"), input.TargetGroupID)
+		respond(w, map[string]any{"ok": err == nil, "moved": moved}, err)
+	})
 	mux.HandleFunc("POST /api/profiles/{id}/group", func(w http.ResponseWriter, r *http.Request) {
 		var input struct {
 			GroupID string `json:"groupId"`
