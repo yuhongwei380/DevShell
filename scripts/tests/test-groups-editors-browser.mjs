@@ -44,7 +44,10 @@ try{
  assert.equal(await page.$eval('#server-group-menu',e=>e.hidden),false);
  await page.screenshot({path:stage+'/groups-short-window.png'});
  await page.evaluate(()=>closeServerGroupMenu());
- await page.setViewport({width:1280,height:900});
+ // applyUIScale clamps the effective scale to min(innerWidth/1100, innerHeight/420),
+ // so 1.6 only fully applies from 1760px wide up; at 1280 the drawer never reaches
+ // the compact breakpoint. Use a viewport where the requested scale survives.
+ await page.setViewport({width:1800,height:900});
  await page.evaluate(()=>{appearance.uiScale=1.6;applyUIScale()});
  await page.waitForFunction(()=>document.querySelector('#connections-drawer').classList.contains('server-manager-compact'));
  assert(await page.$eval('#connection-groups',e=>e.getBoundingClientRect().height)>=120);
