@@ -191,6 +191,22 @@ function openServerProfileMenu(profile, actions, anchor) {
   if (!profile.deletedAt) buttons.push(serverManagerButton([...sessions.values()].some(s => s.profileId === profile.id && s.connected) ? profile.protocol === 'serial' ? '新建串口会话' : '新建 SSH 会话' : '连接', () => { closeServerGroupMenu(); return connect(profile.id); }));
   if (profile.notes) buttons.push(serverManagerButton('查看备注', () => window.DengProfileNotes.open(profile)));
   for (const button of actions.children) buttons.push(button);
+  // 复制走后端 duplicate：名称与全部配置照抄，已保存的密码/私钥口令/代理口令
+  // 在存储内随副本带走，明文不经过前端。
+  if (!profile.deletedAt) buttons.push(serverManagerButton('复制到同名连接', async () => {
+    closeServerGroupMenu();
+    try {
+      const saved = await post(`/api/profiles/${profile.id}/duplicate`);
+      await loadProfiles();
+      renderConnections();
+      toast(`已复制为「${saved.name}」，已保存的凭据一并拷贝`);
+    } catch (error) { toast(error.message); }
+  }));
+  if (!profile.deletedAt && window.DengPinnedNav) buttons.push(serverManagerButton(window.DengPinnedNav.isPinnedFor(profile) ? '从链接栏取消固定' : '固定到链接栏', async () => {
+    closeServerGroupMenu();
+    if (window.DengPinnedNav.isPinnedFor(profile)) await window.DengPinnedNav.unpinProfile(profile.id);
+    else { await window.DengPinnedNav.pinProfile(profile.id); toast('已固定到链接栏'); }
+  }));
   if (!profile.deletedAt) buttons.push(serverManagerButton('移动到…', () => openServerMoveDialog(profile)));
   if (!profile.deletedAt) buttons.push(serverManagerButton('定位所属分组', () => { closeServerGroupMenu(); serverManager.tab = 'servers'; chooseServerFolder(profile.groupId); serverManager.selectedProfiles.add(profile.id); reflectServerSelection(); const row = [...$('#server-folder-list').querySelectorAll('[data-group-id]')].find(row => row.dataset.groupId === profile.groupId); row?.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }));
   buttons.push(serverManagerButton('复制地址', async () => { await copyText(profile.protocol === 'serial' ? profile.serialPort || profile.host : `${profile.user}@${profile.host}:${profile.port}`); closeServerGroupMenu(); toast('地址已复制'); }));

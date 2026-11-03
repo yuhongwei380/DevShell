@@ -3,15 +3,15 @@
 // server-manager button) drops a vertical list of the pinned connections
 // under it. Nothing is tiled in the header, so the shell fills the window
 // from the top; opening a connection closes the list, like any menu.
-// Pin the current session (saving a quick-connect session first) and it
-// appears in the list; each click opens a fresh session tab, like
-// double-clicking the server list.
+// Pinning lives in the session tab's right-click menu (“保存到链接栏” /
+// “取消固定”); a quick-connect session is persisted first. Each list click
+// opens a fresh session tab, like double-clicking the server list.
 // The id list lives in appearance.layout under one key, whitelisted by the
 // backend layout validator (validSavedLayoutKey in preferences.go).
 window.DengPinnedNav = (() => {
   const LAYOUT_KEY = 'dengshell.pinned.v1';
   const NEW_GROUP = '__new__';
-  let bar, toggle, pinButton, pinned = [];
+  let bar, toggle, pinned = [];
   let cancelDrag, reorderPending = false, reorderSave = Promise.resolve(), suppressClickUntil = 0, expanded = false;
   let itemMenuCleanup, saveDialog, savingID = '';
   function readPinned() {
@@ -300,11 +300,13 @@ window.DengPinnedNav = (() => {
   }
   async function pin(id) { await reorderSave.catch(() => {}); pinned = [...pinned, id]; await writePinned(); render(); reflect(); }
   async function unpin(id) { await reorderSave.catch(() => {}); pinned = pinned.filter(x => x !== id); await writePinned(); render(); reflect(); toast('已从链接栏取消固定'); }
-  async function toggleCurrent() {
-    const state = current(), profile = profileFor(state);
-    if (!state || !profile) return;
-    if (isPinned(profile.id)) { await unpin(profile.id); return; }
-    let note = '已固定到链接栏';
+  // 会话标签右键菜单入口：“保存到链接栏”对已保存连接直接固定；快速连接先按
+  // “保存连接”的方式持久化（凭据随本次会话带走），再固定。
+  async function pinCurrent(state = current()) {
+    const profile = state && profileFor(state);
+    if (!profile) return;
+    if (isPinned(profile.id)) { toast('这个连接已在链接栏'); return; }
+    let note = '已保存到链接栏';
     if (temporaryProfiles.has(profile.id)) {
       // Pinning a quick-connect session persists it first, like "保存连接",
       // carrying the credentials used this run so the pin reconnects silently.
@@ -316,24 +318,17 @@ window.DengPinnedNav = (() => {
       profiles = profiles.filter(p => p.id !== saved.id);
       profiles.push(saved);
       renderConnections(); renderTabs();
-      // The session is no longer temporary even if pinning below fails; the
-      // session tab menu rebuilds its "保存连接" entry on every open.
-      if (!saved.hasSecret) note = '已固定到链接栏；这个连接没有保存凭据（本窗口未输入过密码），下次连接仍需输入';
+      if (!saved.hasSecret) note = '已保存到链接栏；这个连接没有保存凭据（本窗口未输入过密码），下次连接仍需输入';
     }
     await pin(profile.id);
     toast(note);
   }
-  function reflect() {
+  async function unpinCurrent(state = current()) {
+    const profile = state && profileFor(state);
+    if (profile && isPinned(profile.id)) await unpin(profile.id);
+  }  function reflect() {
     readPinned();
     if (toggle) toggle.hidden = false;
-    if (!pinButton) return;
-    const state = current(), profile = profileFor(state);
-    pinButton.hidden = !state || !profile;
-    if (!state || !profile) return;
-    const on = isPinned(profile.id);
-    pinButton.setAttribute('aria-pressed', String(on));
-    pinButton.classList.toggle('active', on);
-    pinButton.title = on ? '从链接栏取消固定' : temporaryProfiles.has(profile.id) ? '保存并固定到链接栏' : '固定到链接栏';
   }
   document.addEventListener('DOMContentLoaded', () => {
     bar = $('#pinned-bar');
@@ -345,12 +340,6 @@ window.DengPinnedNav = (() => {
         event.preventDefault(); event.stopImmediatePropagation();
       }
     }, true);
-    pinButton = node('button', 'terminal-popout');
-    pinButton.id = 'pin-session';
-    pinButton.hidden = true;
-    pinButton.append(icon('bookmark'), node('span', '', '固定'));
-    pinButton.onclick = () => safe(toggleCurrent)();
-    $('#toggle-sftp').before(pinButton);
     render(); reflect();
     let frame;
     const scheduleLayout = () => {
@@ -371,5 +360,5 @@ window.DengPinnedNav = (() => {
       if (expanded && !cancelDrag) { setExpanded(false); toggle.focus(); }
     });
   }, { once: true });
-  return { render, reflect, renameProfile };
+  return { render, reflect, renameProfile, isPinnedFor: profile => isPinned(profile.id), pinCurrent, unpinCurrent, pinProfile: pin, unpinProfile: unpin };
 })();

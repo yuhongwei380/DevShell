@@ -85,8 +85,35 @@ try {
   await page.evaluate(async () => { await loadProfiles(); setDrawer(true); });
   await page.click(folder(parent.id)); await page.click(folder(target.id));
   assert.deepEqual(await listed(), [moved.id, nested.id].sort());
+  // The profile menu also clones a connection under the same name — the stored
+  // credential travels with the clone inside the store — and pins connections
+  // straight into the links bar.
+  const openMenu = async id => {
+    await page.click(folder(target.id));
+    await page.waitForSelector(card(id));
+    await page.click(card(id), { button: 'right' });
+    await page.waitForSelector('#server-group-menu:not([hidden])');
+    return page.$$eval('#server-group-menu button', els => els.map(b => b.textContent.trim()));
+  };
+  const items = await openMenu(nested.id);
+  assert(items.includes('复制到同名连接') && items.includes('固定到链接栏'), `menu items: ${items}`);
+  await page.evaluate(() => [...document.querySelectorAll('#server-group-menu button')].find(button => button.textContent === '复制到同名连接').click());
+  await page.waitForFunction(name => profiles.filter(entry => entry.name === name && !entry.deletedAt).length === 2, {}, '子组连接');
+  const clones = (await api('/api/config')).servers.filter(entry => entry.name === '子组连接');
+  assert.equal(clones.length, 2);
+  assert.notEqual(clones[0].id, clones[1].id);
+  assert.equal(clones[0].host, clones[1].host); assert.equal(clones[0].groupId, clones[1].groupId);
+  assert.equal(clones.filter(entry => entry.hasSecret).length, 2, 'the clone must carry the stored credential');
+  assert(!JSON.stringify(clones).includes('test-secret'), 'the duplicate must never expose the secret in plaintext');
+  await openMenu(nested.id);
+  await page.evaluate(() => [...document.querySelectorAll('#server-group-menu button')].find(button => button.textContent === '固定到链接栏').click());
+  await page.waitForFunction(id => (appearance.layout['dengshell.pinned.v1'] || []).includes(id), {}, nested.id);
+  const flipItems = await openMenu(nested.id);
+  assert(flipItems.includes('从链接栏取消固定') && !flipItems.includes('固定到链接栏'), `flip items: ${flipItems}`);
+  await page.evaluate(() => [...document.querySelectorAll('#server-group-menu button')].find(button => button.textContent === '从链接栏取消固定').click());
+  await page.waitForFunction(id => !(appearance.layout['dengshell.pinned.v1'] || []).includes(id), {}, nested.id);
   assert.deepEqual(errors, []);
-  console.log('PASS: group filtering, descendant switch, duplicate group paths, move/cancel/error recovery, refreshed counts, selected destination and reload persistence.');
+  console.log('PASS: group filtering, descendant switch, duplicate group paths, move/cancel/error recovery, refreshed counts, selected destination and reload persistence; duplicate-same-name clone (credential-carrying) and links-bar pin/unpin from the profile menu.');
 } finally {
   if (browser) await browser.close();
   child.kill();

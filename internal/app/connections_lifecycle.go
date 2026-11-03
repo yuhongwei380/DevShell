@@ -194,6 +194,10 @@ func (a *App) registerConnectionManagementHTTP(mux *http.ServeMux) {
 		profile, err := a.store.MoveProfileGroup(r.PathValue("id"), input.GroupID)
 		respond(w, profile, err)
 	})
+	mux.HandleFunc("POST /api/profiles/{id}/duplicate", func(w http.ResponseWriter, r *http.Request) {
+		profile, err := a.store.Duplicate(r.PathValue("id"))
+		respond(w, profile, err)
+	})
 	mux.HandleFunc("POST /api/trash/{id}/restore", func(w http.ResponseWriter, r *http.Request) {
 		profile, err := a.store.Restore(r.PathValue("id"))
 		respond(w, profile, err)

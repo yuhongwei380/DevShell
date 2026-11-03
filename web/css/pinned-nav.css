@@ -24,8 +24,6 @@
 [data-theme="dark"] .pinned-item-remove:hover { background: #f28b8226; color: #f28b82; }
 .pinned-empty { flex: none; padding: 7px 9px 8px; color: #7d8b96; font-size: 12px; line-height: 1.55; }
 [data-theme="dark"] .pinned-empty { color: #8296a8; }
-#pin-session.active svg { color: #8fc0b0; }
-#pin-session.active { background: #78a99b4d; border-color: #78a99b80; }
 
 /* Reordering happens inside the list itself: a thin accent line marks the gap. */
 .pinned-drag-source { opacity: .45; }

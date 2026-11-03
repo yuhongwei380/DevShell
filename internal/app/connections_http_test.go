@@ -72,6 +72,7 @@ func TestConnectionManagementHTTPContract(t *testing.T) {
 	request("DELETE", "/api/trash/"+profile.ID, nil)
 	request("DELETE", "/api/group-nodes/"+group.ID, nil)
 }
+
 // The UI promotes a credential typed at connect time by re-posting the public
 // profile view together with the secret. That round trip has to persist the
 // secret while keeping the inline proxy password the public view never reveals.
@@ -167,5 +168,76 @@ func TestConfigMigrationRefusesToProceedWithoutBackup(t *testing.T) {
 	current, err := os.ReadFile(path)
 	if err != nil || !bytes.Equal(current, original) {
 		t.Fatal("migration modified original after backup failure", err)
+	}
+}
+
+func TestProfileDuplicateCarriesStoredCredentials(t *testing.T) {
+	a, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	handler := a.Handler(fstest.MapFS{"index.html": {Data: []byte("fixture")}})
+	request := func(method, path string, input any) *httptest.ResponseRecorder {
+		t.Helper()
+		body, _ := json.Marshal(input)
+		req := httptest.NewRequest(method, "http://wails.localhost"+path, bytes.NewReader(body))
+		req.Header.Set("X-CloudShell-Token", a.Token())
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, req)
+		if response.Code != 200 {
+			t.Fatalf("%s %s: %d %s", method, path, response.Code, response.Body)
+		}
+		return response
+	}
+	response := request("POST", "/api/group-nodes", ServerGroup{Name: "Duplicate parent"})
+	var group ServerGroup
+	if err := json.Unmarshal(response.Body.Bytes(), &group); err != nil {
+		t.Fatal(err)
+	}
+	response = request("POST", "/api/profiles", Profile{
+		Name:    "Duplicate source",
+		Host:    "localhost",
+		User:    "root",
+		GroupID: group.ID,
+		Secret:  "dup-login-secret",
+		Proxy:   ProxyConfig{Type: "http", Host: "proxy.invalid", Port: 8080, User: "proxy-user", Password: "dup-proxy-secret"},
+	})
+	var source Profile
+	if err := json.Unmarshal(response.Body.Bytes(), &source); err != nil {
+		t.Fatal(err)
+	}
+	if !source.HasSecret || !source.Proxy.HasPassword {
+		t.Fatalf("source credential metadata lost: %+v", source)
+	}
+	response = request("POST", "/api/profiles/"+source.ID+"/duplicate", struct{}{})
+	if bytes.Contains(response.Body.Bytes(), []byte("dup-login-secret")) || bytes.Contains(response.Body.Bytes(), []byte("dup-proxy-secret")) {
+		t.Fatal("duplicate response disclosed credentials")
+	}
+	var clone Profile
+	if err := json.Unmarshal(response.Body.Bytes(), &clone); err != nil {
+		t.Fatal(err)
+	}
+	if clone.ID == "" || clone.ID == source.ID || clone.Name != source.Name || clone.GroupID != group.ID {
+		t.Fatalf("unexpected clone identity: %+v", clone)
+	}
+	if !clone.HasSecret || !clone.Proxy.HasPassword {
+		t.Fatalf("clone lost credential metadata: %+v", clone)
+	}
+	stored, err := a.store.Get(clone.ID)
+	if err != nil || stored.Secret != "dup-login-secret" || stored.Proxy.Password != "dup-proxy-secret" {
+		t.Fatalf("clone did not carry the stored credentials: %+v err=%v", stored, err)
+	}
+	if _, err := a.store.Get(source.ID); err != nil {
+		t.Fatalf("source must survive the duplicate: %v", err)
+	}
+	request("DELETE", "/api/profiles/"+source.ID, nil)
+	body, _ := json.Marshal(struct{}{})
+	req := httptest.NewRequest("POST", "http://wails.localhost/api/profiles/"+source.ID+"/duplicate", bytes.NewReader(body))
+	req.Header.Set("X-CloudShell-Token", a.Token())
+	trashed := httptest.NewRecorder()
+	handler.ServeHTTP(trashed, req)
+	if trashed.Code == 200 {
+		t.Fatalf("duplicating a trashed profile succeeded: %s", trashed.Body)
 	}
 }

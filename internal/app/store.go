@@ -314,6 +314,22 @@ func (s *Store) saveProfile(p Profile, clearSecret, allowNewID bool) (Profile, e
 	return publicProfile(p), nil
 }
 
+// Duplicate clones a saved connection under a fresh ID inside the store, so
+// the stored login secret and proxy password travel with the copy without
+// ever crossing the HTTP boundary.
+func (s *Store) Duplicate(id string) (Profile, error) {
+	p, err := s.Get(id)
+	if err != nil {
+		return Profile{}, err
+	}
+	if p.Temporary {
+		return Profile{}, errors.New("临时连接不能复制")
+	}
+	p.ID = ""
+	p.Verbose = 0
+	return s.saveProfile(p, false, true)
+}
+
 func (s *Store) hostKey(hostname string, _ net.Addr, key ssh.PublicKey) error {
 	return s.hostKeyWithApproval(hostname, key, nil)
 }
