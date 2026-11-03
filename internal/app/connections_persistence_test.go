@@ -216,7 +216,7 @@ func TestDeleteGroupKeepConnectionsRelocatesProfilesAndChildren(t *testing.T) {
 	if err := s.Delete(gone.ID); err != nil {
 		t.Fatal(err)
 	}
-	moved, err := s.DeleteGroupKeepConnections(child.ID, "")
+	moved, err := s.DeleteGroupKeepConnections(child.ID, "", true)
 	if err != nil || moved != 2 {
 		t.Fatalf("delete keeping connections: moved=%d err=%v", moved, err)
 	}
@@ -250,17 +250,20 @@ func TestDeleteGroupKeepConnectionsRelocatesProfilesAndChildren(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.DeleteGroupKeepConnections(top.ID, ""); err == nil {
-		t.Fatal("top-level group without a target must be refused")
+	if moved, err = s.DeleteGroupKeepConnections(top.ID, "", true); err != nil || moved != 1 {
+		t.Fatalf("top-level delete into ungrouped: moved=%d err=%v", moved, err)
 	}
-	if _, err := s.DeleteGroupKeepConnections(parent.ID, grand.ID); err == nil {
+	if p, _ := s.Get(orphanProfile.ID); p.GroupID != "" || p.Group != "" {
+		t.Fatalf("top-level profile should become ungrouped: %+v", p)
+	}
+	if _, err := s.DeleteGroupKeepConnections(parent.ID, grand.ID, false); err == nil {
 		t.Fatal("target inside the deleted subtree must be refused")
 	}
-	if moved, err = s.DeleteGroupKeepConnections(top.ID, parent.ID); err != nil || moved != 1 {
-		t.Fatalf("top-level delete into target: moved=%d err=%v", moved, err)
+	if _, err := s.DeleteGroupKeepConnections(grand.ID, "missing-target", false); err == nil {
+		t.Fatal("named missing target must be refused")
 	}
-	if p, _ := s.Get(orphanProfile.ID); p.GroupID != parent.ID {
-		t.Fatalf("top-level profile should move into the target group: %+v", p)
+	if p, _ := s.Get(orphanProfile.ID); p.GroupID != "" {
+		t.Fatalf("refused deletions must not relocate: %+v", p)
 	}
 	reopened, err := OpenStore(dir)
 	if err != nil {
@@ -271,6 +274,37 @@ func TestDeleteGroupKeepConnectionsRelocatesProfilesAndChildren(t *testing.T) {
 	}
 	if p, _ := reopened.Get(keep.ID); p.GroupID != parent.ID || p.Secret != "s3cret" {
 		t.Fatalf("reopen lost relocation or credential: %+v", p)
+	}
+}
+func TestUngroupedProfilePersistsAcrossReopen(t *testing.T) {
+	dir := t.TempDir()
+	s, err := OpenStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := s.Save(Profile{Name: "free", Host: "localhost", User: "root", Auth: "password", Secret: "abc"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.GroupID != "" {
+		t.Fatalf("new profile without a group landed in %q", p.GroupID)
+	}
+	group, err := s.SaveGroup(ServerGroup{Name: "组"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p, err = s.MoveProfileGroup(p.ID, group.ID); err != nil || p.GroupID != group.ID {
+		t.Fatalf("move into group: %+v %v", p, err)
+	}
+	if p, err = s.MoveProfileGroup(p.ID, ""); err != nil || p.GroupID != "" || p.Group != "" {
+		t.Fatalf("move to ungrouped: %+v %v", p, err)
+	}
+	reopened, err := OpenStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q, _ := reopened.Get(p.ID); q.GroupID != "" || q.Secret != "abc" {
+		t.Fatalf("reopen lost ungrouped state or credential: %+v", q)
 	}
 }
 func TestGroupHierarchyHasNoFixedDepthLimit(t *testing.T) {

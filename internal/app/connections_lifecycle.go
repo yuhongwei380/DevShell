@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -186,12 +187,16 @@ func (a *App) registerConnectionManagementHTTP(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("POST /api/group-nodes/{id}/delete-keep-connections", func(w http.ResponseWriter, r *http.Request) {
 		var input struct {
-			TargetGroupID string `json:"targetGroupId"`
+			TargetGroupID *string `json:"targetGroupId"`
 		}
 		if !decode(w, r, &input) {
 			return
 		}
-		moved, err := a.store.DeleteGroupKeepConnections(r.PathValue("id"), input.TargetGroupID)
+		target, useParent := "", true
+		if input.TargetGroupID != nil {
+			target, useParent = strings.TrimSpace(*input.TargetGroupID), false
+		}
+		moved, err := a.store.DeleteGroupKeepConnections(r.PathValue("id"), target, useParent)
 		respond(w, map[string]any{"ok": err == nil, "moved": moved}, err)
 	})
 	mux.HandleFunc("POST /api/profiles/{id}/group", func(w http.ResponseWriter, r *http.Request) {

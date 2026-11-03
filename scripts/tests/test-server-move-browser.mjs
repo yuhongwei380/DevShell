@@ -54,7 +54,8 @@ try {
   };
   await openMove();
   const options = await page.$$eval('#server-move-group option', options => options.map(option => ({ id: option.value, text: option.textContent })));
-  assert.equal(options.length, (await api('/api/config')).groupNodes.length);
+  assert.equal(options.length, (await api('/api/config')).groupNodes.length + 1);
+  assert(options.some(option => option.id === '' && option.text === '未分组'), 'move dialog must offer the ungrouped destination');
   assert(options.find(option => option.id === target.id).text.includes('生产'), 'duplicate names show ancestor path');
   assert.equal(await page.$eval('#server-move-group', element => element.value), source.id);
   await page.keyboard.press('Escape'); assert.equal(await page.$('#server-move-dialog[open]'), null);
@@ -198,8 +199,33 @@ try {
   assert(!afterKeepDelete.groupNodes.some(entry => entry.id === parent.id), 'group node must be gone');
   assert(afterKeepDelete.servers.filter(entry => [kept.id, editing.id].includes(entry.id)).every(entry => entry.groupId === other.id), 'profiles must move into the handover group');
   assert(afterKeepDelete.groupNodes.find(entry => entry.id === target.id).parentId === other.id, 'child group must follow into the handover group');
+  // 未分组筛选：新建无分组连接合法；目录虚拟行筛选它们；拖入该行即移出分组。
+  const free = await create('未分组连接', '');
+  await page.evaluate(async () => { await loadProfiles(); });
+  await page.waitForFunction(id => profiles.some(profile => profile.id === id), {}, free.id);
+  const ungroupedCount = await page.$eval(`#server-folder-list [data-group-id="__ungrouped__"] .server-folder-count`, element => Number(element.textContent));
+  assert(ungroupedCount >= 1, `ungrouped row count: ${ungroupedCount}`);
+  await page.click(`#server-folder-list [data-group-id="__ungrouped__"] .server-folder-select`);
+  assert.deepEqual(await listed(), [free.id], 'ungrouped filter must list only ungrouped connections');
+  await page.click(`#server-folder-list [data-group-id="${other.id}"] .server-folder-select`);
+  await page.waitForFunction(() => [...document.querySelectorAll('#connection-groups [data-profile-id]')].length >= 1);
+  await page.evaluate(([cardId, dropId]) => {
+    const transfer = new DataTransfer();
+    const card = document.querySelector(`#connection-groups [data-profile-id="${cardId}"] .connection-card`);
+    card.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+    const wrap = document.querySelector(`#server-folder-list [data-group-id="${dropId}"]`);
+    wrap.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+    wrap.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+  }, [kept.id, '__ungrouped__']);
+  await page.waitForFunction(id => { const found = profiles.find(profile => profile.id === id); return found && !found.groupId; }, {}, kept.id);
+  const afterUngrouped = await api('/api/config');
+  assert(afterUngrouped.servers.find(entry => entry.id === kept.id).groupId === '', 'drag to ungrouped must clear groupId');
+  assert(afterUngrouped.servers.find(entry => entry.id === kept.id).group === '', 'drag to ungrouped must clear legacy group path');
+  await page.click(`#server-folder-list [data-group-id="__ungrouped__"] .server-folder-select`);
+  const ungroupedList = await listed();
+  assert(ungroupedList.length === 2 && ungroupedList.includes(free.id) && ungroupedList.includes(kept.id), `ungrouped filter after drag: ${ungroupedList}`);
   assert.deepEqual(errors, []);
-  console.log('PASS: group filtering, descendant switch, duplicate group paths, move/cancel/error recovery, refreshed counts, selected destination and reload persistence; duplicate-same-name clone (credential-carrying) and links-bar pin/unpin from the profile menu.');
+  console.log('PASS: group filtering, descendant switch, duplicate group paths, move/cancel/error recovery, refreshed counts, selected destination and reload persistence; duplicate-same-name clone (credential-carrying) and links-bar pin/unpin from the profile menu; ungrouped filter row with drag-to-ungroup.');
 } finally {
   if (browser) await browser.close();
   child.kill();

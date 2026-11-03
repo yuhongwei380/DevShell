@@ -9,7 +9,7 @@ function saveServerExplorer() {
   save('dengshell.server-manager', { treeWidth: serverManager.treeWidth, includeChildren: serverManager.includeChildren, selectedGroup: serverManager.selectedGroup });
 }
 function chooseServerFolder(id, { toggle = false } = {}) {
-  if (id && !serverManager.nodes.some(group => group.id === id)) return;
+  if (id && id !== ungroupedFolderID && !serverManager.nodes.some(group => group.id === id)) return;
   if (toggle && id && id === serverManager.selectedGroup && !$('#connection-search').value.trim() && serverManager.nodes.some(group => group.parentId === id)) {
     toggleServerGroup(id); return;
   }
@@ -25,6 +25,7 @@ function chooseServerFolder(id, { toggle = false } = {}) {
 function serverExplorerProfiles(tree, query) {
   if (query) return profiles.filter(profile => serverMatches(profile, query, tree)).sort(compareServerNames);
   if (!serverManager.selectedGroup) return [...profiles].sort(compareServerNames);
+  if (serverManager.selectedGroup === ungroupedFolderID) return profiles.filter(profile => !profile.groupId).sort(compareServerNames);
   if (!serverManager.includeChildren) return [...(tree.members.get(serverManager.selectedGroup) || [])];
   const included = new Set([serverManager.selectedGroup]);
   for (const group of tree.flat) if (included.has(group.parentId)) included.add(group.id);
@@ -66,20 +67,22 @@ function finishServerProfileDrag() {
   clearServerProfileDropHint();
 }
 async function moveServerProfiles(ids, groupId) {
-  const tree = serverGroupTree(), target = tree.byID.get(groupId);
-  if (!target) return;
+  const tree = serverGroupTree(), ungrouped = groupId === ungroupedFolderID, target = ungrouped ? null : tree.byID.get(groupId);
+  if (!ungrouped && !target) return;
+  const targetGroupID = ungrouped ? '' : groupId;
   let moved = 0;
   for (const id of ids) {
     const current = profiles.find(item => item.id === id && !item.deletedAt);
-    if (!current || current.groupId === groupId) continue;
-    try { await post(`/api/profiles/${encodeURIComponent(id)}/group`, { groupId }); moved++; } catch (error) { toast(error.message); }
+    if (!current || current.groupId === targetGroupID) continue;
+    try { await post(`/api/profiles/${encodeURIComponent(id)}/group`, { groupId: targetGroupID }); moved++; } catch (error) { toast(error.message); }
   }
   await loadProfiles();
   renderConnections();
   serverManager.selectedProfiles = new Set(ids.filter(id => profiles.some(item => item.id === id && !item.deletedAt)));
   reflectServerSelection();
-  if (moved === 1) toast(`已移动到分组「${target.name}」`);
-  else if (moved > 1) toast(`已将 ${moved} 个连接移动到分组「${target.name}」`);
+  const destination = ungrouped ? '未分组' : `分组「${target.name}」`;
+  if (moved === 1) toast(`已移动到${destination}`);
+  else if (moved > 1) toast(`已将 ${moved} 个连接移动到${destination}`);
 }
 // 连接卡片可直接拖到左侧目录行：整行高亮，落下即移动到该分组（多选时整组带走）。
 function enableServerProfileDropOnFolder(group, wrap) {
@@ -165,7 +168,7 @@ function renderServerExplorer(tree, query) {
     const select = serverManagerButton('', () => {
       chooseServerFolder(group.id, { toggle: true });
       [...folders.querySelectorAll('[data-group-id]')].find(row => row.dataset.groupId === group.id)?.querySelector('[data-group-action="select"]')?.focus({ preventScroll: true });
-    }, 'server-folder-select'); select.dataset.groupAction = 'select'; select.title = all ? '显示所有分组的连接' : tree.paths.get(group.id); select.setAttribute('aria-current', String(group.id === serverManager.selectedGroup));
+    }, 'server-folder-select'); select.dataset.groupAction = 'select'; select.title = all ? '显示所有分组的连接' : group.id === ungroupedFolderID ? '显示不属于任何分组的连接' : tree.paths.get(group.id); select.setAttribute('aria-current', String(group.id === serverManager.selectedGroup));
     select.append(serverGroupIcon(group.emoji), node('strong', 'server-folder-name', group.name));
     select.append(node('span', 'server-folder-count', String(total)));
     select.setAttribute('aria-label', `${all ? '' : `${depth + 1}级目录，`}${group.name}，${total}个连接`);
@@ -184,14 +187,18 @@ function renderServerExplorer(tree, query) {
     };
     heading.append(caret, select);
     if (!all) {
-      if (!query) enableServerGroupDrag(group, heading, select);
+      const virtual = group.id === ungroupedFolderID;
+      if (!query && !virtual) enableServerGroupDrag(group, heading, select);
       enableServerProfileDropOnFolder(group, row);
-      const more = serverManagerButton('⋯', event => openServerGroupMenu(group.id, event.currentTarget), 'server-group-more'); more.dataset.groupAction = 'menu'; more.setAttribute('aria-label', `管理分组 ${group.name}`); more.setAttribute('aria-haspopup', 'menu'); heading.append(more);
-      row.oncontextmenu = event => { event.preventDefault(); openServerGroupMenu(group.id, heading); };
+      if (!virtual) {
+        const more = serverManagerButton('⋯', event => openServerGroupMenu(group.id, event.currentTarget), 'server-group-more'); more.dataset.groupAction = 'menu'; more.setAttribute('aria-label', `管理分组 ${group.name}`); more.setAttribute('aria-haspopup', 'menu'); heading.append(more);
+        row.oncontextmenu = event => { event.preventDefault(); openServerGroupMenu(group.id, heading); };
+      }
     }
     row.append(heading); return row;
   }
   fragment.append(rowFor({ id: '', name: '全部连接' }, 0, profiles.length, true));
+  fragment.append(rowFor({ id: ungroupedFolderID, name: '未分组' }, 0, (tree.members.get('') || []).filter(profile => !profile.deletedAt).length, false));
   let hiddenBelow = Infinity;
   for (const group of tree.flat) {
     const depth = tree.depths.get(group.id);
@@ -201,8 +208,8 @@ function renderServerExplorer(tree, query) {
     if (!query && serverManager.collapsed.has(group.id)) hiddenBelow = depth;
   }
   folders.replaceChildren(fragment); folders.scrollTop = top; folders.scrollLeft = left;
-  const selected = tree.byID.get(serverManager.selectedGroup), chain = serverFolderAncestors(tree, serverManager.selectedGroup), items = serverExplorerProfiles(tree, query);
-  $('#server-explorer-title').textContent = query ? '搜索结果' : selected?.name || '全部连接';
+  const selected = tree.byID.get(serverManager.selectedGroup), ungroupedView = serverManager.selectedGroup === ungroupedFolderID, chain = serverFolderAncestors(tree, serverManager.selectedGroup), items = serverExplorerProfiles(tree, query);
+  $('#server-explorer-title').textContent = query ? '搜索结果' : ungroupedView ? '未分组' : selected?.name || '全部连接';
   $('#server-explorer-count').textContent = `${items.length} 个连接`;
   $('#server-include-children').checked = serverManager.includeChildren; $('#server-descendants-label').hidden = !!query || !selected;
   const path = $('#server-explorer-path'); path.replaceChildren();
@@ -212,7 +219,7 @@ function renderServerExplorer(tree, query) {
     const visible = chain.length > 7 ? [...chain.slice(0, 1), null, ...chain.slice(-5)] : chain;
     for (const group of visible) { path.append(node('span', 'server-path-separator', '›')); if (group) { const button = serverManagerButton(group.name, () => chooseServerFolder(group.id), 'server-path-part'); button.title = tree.paths.get(group.id); path.append(button); } else path.append(node('span', '', '…')); }
   }
-  path.title = selected ? tree.paths.get(selected.id) : '全部分组';
+  path.title = ungroupedView ? '不属于任何分组的连接' : selected ? tree.paths.get(selected.id) : '全部分组';
   fitServerExplorer();
 }
 function reflectServerExplorerDetails() {
@@ -319,7 +326,7 @@ function initializeServerExplorer() {
   const saved = readSaved('dengshell.server-manager', {});
   serverManager.treeWidth = Number.isFinite(saved?.treeWidth) ? Math.max(145, Math.min(520, saved.treeWidth)) : 320;
   serverManager.includeChildren = saved?.includeChildren !== false;
-  if (typeof saved?.selectedGroup === 'string' && serverManager.nodes.some(g => g.id === saved.selectedGroup)) serverManager.selectedGroup = saved.selectedGroup;
+  if (typeof saved?.selectedGroup === 'string' && (saved.selectedGroup === ungroupedFolderID || serverManager.nodes.some(g => g.id === saved.selectedGroup))) serverManager.selectedGroup = saved.selectedGroup;
   const body = node('div', 'server-manager-body'); body.id = 'server-manager-body';
   const folders = node('aside', 'server-folder-pane'); folders.id = 'server-folder-pane'; folders.setAttribute('aria-label', '分组目录');
   folders.innerHTML = '<div class="server-folder-heading"><strong>分组目录</strong><div><button type="button" id="server-expand-all" aria-label="展开全部分组" title="展开全部分组">展开</button><button type="button" id="server-collapse-all" aria-label="折叠全部分组" title="折叠全部分组">折叠</button></div></div><div id="server-folder-list" class="server-folder-list"></div>';

@@ -1,6 +1,9 @@
 /* Hierarchical server groups, connection history and recoverable local deletion. */
 'use strict';
 
+// 目录树里的虚拟「未分组」节点：筛选 groupId 为空的连接，可直接拖入移出分组。
+const ungroupedFolderID = '__ungrouped__';
+
 const serverManager = {
   nodes: [], trash: [], history: [], tab: 'servers', selectedGroup: '', collapsed: null,
   initialized: false, generation: 0, emoji: [], emojiMap: new Map(), menuGroup: '',
@@ -36,7 +39,7 @@ function acceptServerManagerConfig(config) {
   initializeSavedGroupCollapse();
   const valid = new Set(serverManager.nodes.map(group => group.id));
   for (const id of serverManager.collapsed) if (!valid.has(id)) serverManager.collapsed.delete(id);
-  if (!valid.has(serverManager.selectedGroup)) serverManager.selectedGroup = '';
+  if (serverManager.selectedGroup !== ungroupedFolderID && !valid.has(serverManager.selectedGroup)) serverManager.selectedGroup = '';
 }
 async function refreshServerManagerHistory() {
   const generation = ++serverManager.generation, config = await api('/api/config');
@@ -285,6 +288,7 @@ function renderServerGroupChoices(selected = '', target = $('#profile-group'), e
   if (exclude) for (const group of tree.flat) if (group.id === exclude || excluded.has(group.parentId)) excluded.add(group.id);
   const options = [];
   if (target.id === 'group-parent') { const top = node('option', '', '顶层分组'); top.value = ''; options.push(top); }
+  else if (target.id === 'profile-group' || target.id === 'server-move-group' || target.id === 'server-group-keep-target') { const none = node('option', '', '未分组'); none.value = ''; none.title = '不属于任何分组的连接'; options.push(none); }
   for (const group of tree.flat) if (!excluded.has(group.id)) {
     const parent = tree.paths.get(group.parentId);
     const option = node('option', '', `${parent ? '↳ ' : ''}${group.emoji ? group.emoji + ' ' : ''}${group.name}${parent ? ' · ' + parent : ''}`);
@@ -295,7 +299,7 @@ function renderServerGroupChoices(selected = '', target = $('#profile-group'), e
   window.DengSelect?.refresh(target);
 }
 function chooseConnectionGroup(profile, preferred = '') {
-  renderServerGroupChoices(profile?.groupId || preferred || serverManager.selectedGroup);
+  renderServerGroupChoices(profile ? profile.groupId || '' : preferred || serverManager.selectedGroup);
 }
 function openServerGroupEditor(id = '', parentID = '') {
   closeServerGroupMenu();
@@ -334,11 +338,7 @@ async function deleteServerGroupTree(id) {
 function deleteServerGroupKeepConnections(id) {
   const tree = serverGroupTree(), group = tree.byID.get(id);
   if (!group) return;
-  const subtree = new Set([id]);
-  for (const entry of tree.flat) { if (subtree.has(entry.parentId)) subtree.add(entry.id); }
-  const candidates = tree.flat.filter(entry => !subtree.has(entry.id));
   closeServerGroupMenu();
-  if (!candidates.length) { toast('没有其他分组可以接管连接与子分组，请先创建另一个分组'); return; }
   const direct = profiles.filter(p => p.groupId === id && !p.deletedAt).length;
   const trashed = profiles.filter(p => p.groupId === id && p.deletedAt).length;
   const childCount = (tree.children.get(id) || []).length;
@@ -360,7 +360,7 @@ async function submitServerGroupKeepDelete(event) {
     await loadProfiles();
     serverManager.generation++;
     renderConnections();
-    toast(`已删除分组，连接已移入分组「${serverGroupTree().byID.get(groupId)?.name || ''}」`);
+    toast(`已删除分组，连接已移入${groupId ? `分组「${serverGroupTree().byID.get(groupId)?.name || ''}」` : '未分组'}`);
   } catch (failure) { error.textContent = failure.message; error.hidden = false; } finally { submit.disabled = false; }
 }
 function updateGroupColorPreview() {
