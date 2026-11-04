@@ -213,6 +213,12 @@ func (d *Desktop) OpenSerialTerminal(sessionID string) error {
 func (d *Desktop) OpenLocalShellTerminal(sessionID string) error {
 	return d.openTerminalSocketPath(sessionID, "/api/local-shell/sessions/"+url.PathEscape(sessionID)+"/terminal", "")
 }
+
+// OpenTcpTerminal bridges a telnet session terminal WebSocket through the
+// same native IPC path, mirroring serial and local shell.
+func (d *Desktop) OpenTcpTerminal(sessionID string) error {
+	return d.openTerminalSocketPath(sessionID, "/api/tcp-sessions/"+url.PathEscape(sessionID)+"/terminal", "")
+}
 func (d *Desktop) openTerminalSocket(sessionID, nonce string) error {
 	return d.openTerminalSocketPath(sessionID, "/api/sessions/"+url.PathEscape(sessionID)+"/terminal", nonce)
 }

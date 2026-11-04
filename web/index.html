@@ -310,6 +310,7 @@
       <div class="settings-submenu-heading"><button type="button" role="menuitem" id="other-settings-back" data-settings-view="main"><svg><use href="#i-chevron"/></svg>返回设置</button><strong>其他功能</strong></div>
       <div class="scale-setting placement-setting"><label for="feature-auto-commands">连接后自动执行命令</label><select id="feature-auto-commands" aria-label="连接后自动执行命令" title="SSH 连接按各自配置把命令敲进远端终端；关闭后所有连接都不再自动执行"><option value="true">开启</option><option value="false">关闭</option></select></div>
       <div class="scale-setting placement-setting"><label for="feature-local-shell">本地终端（仅限 macOS）</label><select id="feature-local-shell" aria-label="本地终端（仅限 macOS）" title="开启后点“+”直接新开本机终端（登录 bash/zsh 于家目录）；关闭时保持新会话起始页"><option value="true">开启</option><option value="false">关闭</option></select></div>
+      <div class="scale-setting placement-setting"><label for="feature-tcp-tools">候选栏 TCP 工具</label><select id="feature-tcp-tools" aria-label="候选栏 TCP 工具" title="本机提示符与 Tab 候选中的 tcping（TCP 连通探测）与 telnet（本标签 TCP 会话）；关闭后不再提供这两个命令"><option value="true">开启</option><option value="false">关闭</option></select></div>
     </div>
   </div>
   <dialog id="about-dialog" aria-labelledby="about-title"><div class="dialog-heading"><h2 id="about-title">关于 DevShell</h2><button type="button" class="icon-button" id="close-about" aria-label="关闭版本信息"><svg><use href="#i-close"/></svg></button></div><dl class="about-versions"><dt>软件版本</dt><dd id="about-version"></dd><dt>构建版本</dt><dd id="about-build"></dd></dl></dialog>
@@ -384,7 +385,7 @@
   <script src="js/command-composer.js?v=20261001-composer"></script>
   <script src="js/workspace-tools.js?v=20260925-v002-b86"></script>
   <script src="js/release-note-tags.js?v=20261102-sectag1"></script>
-  <script src="js/appearance.js?v=20261102-localshell2"></script>
+  <script src="js/appearance.js?v=20261104-tcptools1"></script>
   <script src="js/ui-appearance.js?v=20261025-devshell-rc1"></script>
   <script src="js/font-library.js?v=20261019-brand1"></script>
   <script src="js/path-history.js?v=20260925-v002-b86"></script>
@@ -402,7 +403,7 @@
   <script src="js/server-manager.js?v=20261103-nohistory1"></script>
   <script src="js/backup-manager.js?v=20261103-nohistory1"></script>
   <script src="js/server-explorer.js?v=20261103-nohistory1"></script>
-  <script src="js/help-guide.js?v=20261103-nohistory1"></script>
+  <script src="js/help-guide.js?v=20261104-tcptools1"></script>
   <script src="js/chart-styles.js?v=20260920-v002-b70"></script>
   <script src="js/appearance-tools.js?v=20261102-concise4"></script>
   <script src="js/terminal-snapshot.js?v=20260920-v002-b70"></script>
@@ -418,12 +419,13 @@
   <script src="js/rdp.js?v=20261101-tabdot1"></script>
   <script src="js/serial.js?v=20261103-nohistory1"></script>
   <script src="js/local-shell.js?v=20261102-localshell2"></script>
+  <script src="js/tcp-session.js?v=20261104-tcptools1"></script>
   <script src="js/upload-confirmation.js?v=20260928-overwrite1"></script>
   <script src="js/shell-transfers.js?v=20261101-transferpill1"></script>
-  <script src="js/app.js?v=20261103-nohistory1"></script>
+  <script src="js/app.js?v=20261104-tcptools1"></script>
   <script src="js/quick-connect.js?v=20261102-localshell1"></script>
-  <script src="js/local-prompt.js?v=20261022-tabs1"></script>
-  <script src="js/command-completion.js?v=20261025-cmdtab1"></script>
+  <script src="js/local-prompt.js?v=20261104-tcptools1"></script>
+  <script src="js/command-completion.js?v=20261104-tcptools1"></script>
   <script src="js/pinned-nav.js?v=20261103-servermenu1"></script>
   <script src="js/process-view.js?v=20261019-serial1"></script>
   <script src="js/common-apps.js?v=20261019-brand1"></script>

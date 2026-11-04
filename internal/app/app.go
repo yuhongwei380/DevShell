@@ -21,6 +21,7 @@ type App struct {
 	rdp              rdpState
 	serial           serialState
 	local            localShellState
+	tcp              tcpSessionState
 	securityLock     securityLockState
 	sshDiagnostics   sshDiagnosticLog
 	uiFontMu         sync.Mutex
@@ -101,6 +102,7 @@ func (a *App) Close() {
 	a.closeRDP()
 	a.closeSerial()
 	a.closeLocalShells()
+	a.closeTcpSessions()
 	a.updateCleanup.Wait()
 	a.updateCheck.mu.Lock()
 	if job := a.updateCheck.job; job != nil && job.Status != "downloading" && job.releaseLease != nil {
@@ -218,6 +220,7 @@ func (a *App) Handler(assets fs.FS) http.Handler {
 	a.registerRDPHTTP(mux)
 	a.registerSerialHTTP(mux)
 	a.registerLocalShellHTTP(mux)
+	a.registerTcpSessionHTTP(mux)
 	mux.HandleFunc("POST /api/sessions", func(w http.ResponseWriter, r *http.Request) {
 		var input struct {
 			ProfileID       string           `json:"profileId"`

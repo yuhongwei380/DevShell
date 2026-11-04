@@ -232,7 +232,26 @@ func (a *App) localShellTerminal(w http.ResponseWriter, r *http.Request) {
 func (s *localShellSession) runTerminal(peer *terminalPeer) {
 	// Closing the terminal ends the shell process; the tab and the shell share
 	// one lifetime, matching the serial behaviour users already know.
-	defer s.Close()
+	runTerminalStream(s.app, s.ctx, peer, s.pty, "本地 Shell 已退出", s.Close)
+}
+
+// terminalStream abstracts the byte pipe behind a terminal relay. The local
+// shell's PTY and a telnet session's TCP connection share runTerminalStream;
+// Resize is a no-op for streams without geometry.
+type terminalStream interface {
+	Read(buffer []byte) (int, error)
+	Write(data []byte) (int, error)
+	Resize(cols, rows int) error
+	Wait() error
+	Close() error
+}
+
+// runTerminalStream relays one terminal WebSocket (the same xterm.js protocol
+// as SSH and serial) against an arbitrary stream. The relay closes the session
+// through onClose when either side ends, and reports exitNote when the stream
+// closes on its own.
+func runTerminalStream(app *App, ctx context.Context, peer *terminalPeer, stream terminalStream, exitNote string, onClose func()) {
+	defer onClose()
 	// A hijacked websocket connection outlives the handler, so close it
 	// explicitly when the relay ends — the browser only sees onclose then.
 	defer peer.ws.Close()
@@ -244,7 +263,7 @@ func (s *localShellSession) runTerminal(peer *terminalPeer) {
 		data, _ := json.Marshal(map[string]string{"type": kind, "message": message})
 		return write(websocket.TextMessage, data)
 	}
-	stopWatch := context.AfterFunc(s.ctx, func() { peer.ws.Close() })
+	stopWatch := context.AfterFunc(ctx, func() { peer.ws.Close() })
 	defer stopWatch()
 	if err := status("ready", ""); err != nil {
 		return
@@ -263,7 +282,7 @@ func (s *localShellSession) runTerminal(peer *terminalPeer) {
 			}
 			select {
 			case controls <- m:
-			case <-s.ctx.Done():
+			case <-ctx.Done():
 				return
 			}
 		}
@@ -271,19 +290,19 @@ func (s *localShellSession) runTerminal(peer *terminalPeer) {
 	go func() {
 		buffer := make([]byte, 4096)
 		for {
-			n, err := s.pty.Read(buffer)
+			n, err := stream.Read(buffer)
 			if n > 0 {
 				frame := append([]byte(nil), buffer[:n]...)
 				select {
 				case output <- frame:
-				case <-s.ctx.Done():
+				case <-ctx.Done():
 					return
 				}
 			}
 			if err != nil {
 				select {
 				case readErr <- err:
-				case <-s.ctx.Done():
+				case <-ctx.Done():
 				}
 				return
 			}
@@ -293,14 +312,13 @@ func (s *localShellSession) runTerminal(peer *terminalPeer) {
 		for {
 			select {
 			case data := <-inputs:
-				if s.app.RequireUnlocked() != nil {
+				if app.RequireUnlocked() != nil {
 					continue
 				}
-				if _, err := s.pty.Write([]byte(data)); err != nil {
-					s.cancel()
+				if _, err := stream.Write([]byte(data)); err != nil {
 					return
 				}
-			case <-s.ctx.Done():
+			case <-ctx.Done():
 				return
 			}
 		}
@@ -312,16 +330,17 @@ func (s *localShellSession) runTerminal(peer *terminalPeer) {
 			outputCh = output
 		}
 		select {
-		case <-s.ctx.Done():
+		case <-ctx.Done():
 			return
 		case <-peerClosed:
 			return
 		case <-readErr:
 			// The PTY closes when the shell exits (EIO/EOF on unix, broken
-			// pipe on Windows). Report the exit status when it can be read.
-			if s.ctx.Err() == nil {
-				note := "本地 Shell 已退出"
-				if waitErr := s.pty.Wait(); waitErr != nil {
+			// pipe on Windows); a TCP peer closing reads as EOF. Report the
+			// exit status when it can be read.
+			if ctx.Err() == nil {
+				note := exitNote
+				if waitErr := stream.Wait(); waitErr != nil {
 					note += fmt.Sprintf("（%s）", waitErr)
 				}
 				_ = status("exit", note)
@@ -339,7 +358,7 @@ func (s *localShellSession) runTerminal(peer *terminalPeer) {
 					credits--
 				}
 			case "input":
-				if s.app.RequireUnlocked() != nil {
+				if app.RequireUnlocked() != nil {
 					continue
 				}
 				if len(m.Data) > 65536 {
@@ -354,7 +373,7 @@ func (s *localShellSession) runTerminal(peer *terminalPeer) {
 				}
 			case "resize":
 				if m.Cols >= 2 && m.Rows >= 2 && m.Cols <= 9999 && m.Rows <= 9999 {
-					_ = s.pty.Resize(m.Cols, m.Rows)
+					_ = stream.Resize(m.Cols, m.Rows)
 				}
 			}
 		}

@@ -376,6 +376,86 @@ func (a *App) registerLocalProbeHTTP(mux *http.ServeMux) {
 		fmt.Fprintf(&out, "\n\n;; 本机 DNS · 用时 %dms", time.Since(started).Milliseconds())
 		writeJSON(w, map[string]any{"output": out.String(), "ok": true})
 	})
+	// tcping: repeated TCP connect attempts against host:port, timing each
+	// handshake. Implemented in-app (Windows has no built-in tcping), and the
+	// same endpoint drives the frontend's -t loop with count=1.
+	mux.HandleFunc("POST /api/local-probe/tcping", func(w http.ResponseWriter, r *http.Request) {
+		var input struct {
+			Host  string `json:"host"`
+			Port  int    `json:"port"`
+			Count int    `json:"count"`
+			Brief bool   `json:"brief"`
+		}
+		if !decode(w, r, &input) {
+			return
+		}
+		if !a.Appearance().TcpToolsEnabled {
+			respond(w, nil, errors.New("tcping 与 telnet 已关闭，请在「设置 → 其他功能」开启"))
+			return
+		}
+		host := strings.Trim(strings.TrimSpace(input.Host), "[]")
+		if !validQuickHost(host) {
+			respond(w, nil, errors.New("tcping 后只接受主机名或 IP"))
+			return
+		}
+		if input.Port < 1 || input.Port > 65535 {
+			respond(w, nil, errors.New("tcping 需要 1–65535 的端口（如 tcping 主机 80）"))
+			return
+		}
+		count := input.Count
+		if count <= 0 {
+			count = 4
+		}
+		if count > 8 {
+			count = 8
+		}
+		release, err := acquireLocalProbe()
+		if err != nil {
+			respond(w, nil, err)
+			return
+		}
+		defer release()
+		ctx, cancel := context.WithTimeout(r.Context(), time.Duration(count)*3*time.Second+5*time.Second)
+		defer cancel()
+		dialer := net.Dialer{Timeout: 3 * time.Second}
+		address := net.JoinHostPort(host, strconv.Itoa(input.Port))
+		var out strings.Builder
+		if !input.Brief {
+			resolved := host
+			if net.ParseIP(host) == nil {
+				if addrs, lookupErr := net.DefaultResolver.LookupIPAddr(ctx, host); lookupErr == nil && len(addrs) > 0 {
+					resolved = addrs[0].IP.String()
+				}
+			}
+			fmt.Fprintf(&out, "本机 TCP → %s (%s) 端口 %d\n", host, resolved, input.Port)
+		}
+		sent, connected := 0, 0
+		for attempt := 1; attempt <= count; attempt++ {
+			if ctx.Err() != nil {
+				break
+			}
+			sent++
+			began := time.Now()
+			probe, dialErr := dialer.DialContext(ctx, "tcp", address)
+			elapsed := time.Since(began).Milliseconds()
+			if probe != nil {
+				connected++
+				_ = probe.Close()
+			}
+			if dialErr == nil {
+				fmt.Fprintf(&out, "%d  已连接 · time=%dms\n", attempt, elapsed)
+				continue
+			}
+			if ctx.Err() != nil {
+				break // cancelled mid-dial by Ctrl+C: skip the final noise
+			}
+			fmt.Fprintf(&out, "%d  连接失败 · %s\n", attempt, tcpFailureNote(dialErr))
+		}
+		if !input.Brief {
+			fmt.Fprintf(&out, "成功 %d / %d 次连接", connected, sent)
+		}
+		writeJSON(w, map[string]any{"output": strings.TrimRight(out.String(), "\n"), "ok": connected > 0})
+	})
 	mux.HandleFunc("POST /api/local-probe/traceroute", func(w http.ResponseWriter, r *http.Request) {
 		host, ok := localProbeHost(w, r, "traceroute")
 		if !ok {

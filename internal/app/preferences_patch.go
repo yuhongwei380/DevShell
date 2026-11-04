@@ -31,7 +31,7 @@ func (s *Store) PatchAppearance(patch map[string]json.RawMessage) (Appearance, e
 		"filesPosition": &value.FilesPosition, "followTerminal": &value.FollowTerminal, "promptUsernameColor": &value.PromptUsernameColor,
 		"promptHostnameColor": &value.PromptHostnameColor, "minimizeAction": &value.MinimizeAction,
 		"externalEditor": &value.ExternalEditor, "updateMirror": &value.UpdateMirror,
-		"autoCommandsEnabled": &value.AutoCommandsEnabled,
+		"autoCommandsEnabled": &value.AutoCommandsEnabled, "tcpToolsEnabled": &value.TcpToolsEnabled,
 	}
 	for key, raw := range patch {
 		var err error

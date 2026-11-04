@@ -45,18 +45,23 @@ type Appearance struct {
 	// #5) for every profile. The per-profile autoRun flag only takes effect
 	// while this global switch stays on; it lives under Settings → Other
 	// features. Default on: profiles without commands behave as before.
-	AutoCommandsEnabled bool                       `json:"autoCommandsEnabled"`
+	AutoCommandsEnabled bool `json:"autoCommandsEnabled"`
 	// LocalShellEnabled gates the local shell feature (issue #4 slice A):
 	// when on, the session tab “+” opens a local terminal with the user's
 	// login shell at home instead of the start-tab page. macOS only — the
 	// feature was removed on Windows, where enabling it is rejected. Lives
 	// under Settings → Other features. Default off on supported platforms.
-	LocalShellEnabled bool                       `json:"localShellEnabled"`
-	Layout              map[string]json.RawMessage `json:"layout"`
+	LocalShellEnabled bool `json:"localShellEnabled"`
+	// TcpToolsEnabled gates the candidate-bar TCP tools: the tcping probe and
+	// telnet terminal sessions (both implemented in-app, Windows and macOS).
+	// Lives under Settings → Other features. Default on: the commands extend
+	// the existing local-prompt command set rather than changing behaviour.
+	TcpToolsEnabled bool                       `json:"tcpToolsEnabled"`
+	Layout          map[string]json.RawMessage `json:"layout"`
 }
 
 func defaultAppearance() Appearance {
-	return Appearance{UIFontID: defaultUIFontID, UITextColors: map[string]string{}, FontID: "builtin:jetbrains-mono", FontColors: map[string]string{}, FontBold: map[string]bool{}, ChartStyles: map[string]ChartLineStyle{}, BackgroundID: "builtin:none", BackgroundOpacity: .42, BackgroundVersion: 2, UIScale: 1, TerminalFontSize: 14, Theme: "system", MonitorVisible: true, FilesPosition: "right", FollowTerminal: true, MinimizeAction: "ask", AutoCommandsEnabled: true, Layout: map[string]json.RawMessage{}}
+	return Appearance{UIFontID: defaultUIFontID, UITextColors: map[string]string{}, FontID: "builtin:jetbrains-mono", FontColors: map[string]string{}, FontBold: map[string]bool{}, ChartStyles: map[string]ChartLineStyle{}, BackgroundID: "builtin:none", BackgroundOpacity: .42, BackgroundVersion: 2, UIScale: 1, TerminalFontSize: 14, Theme: "system", MonitorVisible: true, FilesPosition: "right", FollowTerminal: true, MinimizeAction: "ask", AutoCommandsEnabled: true, TcpToolsEnabled: true, Layout: map[string]json.RawMessage{}}
 }
 
 // Old releases combined 18% image opacity with a dark multiply tint. Keep

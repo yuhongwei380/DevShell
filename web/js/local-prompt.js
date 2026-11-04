@@ -4,11 +4,14 @@
 // into the terminal area instead of opening the quick-connect dialog. Supported:
 // ping 主机 [-t], traceroute 主机 (hops appear live, one per line), nslookup 主机,
 // dig 主机 [类型], curl [-I] 网址 (scheme-less targets default to http, like the
-// real curl). Every command is interruptible: Ctrl+C (without a text selection)
-// aborts the request, and the backend cancels the child process or lookup.
+// real curl), tcping 主机 端口 [-t] (TCP handshake probe). telnet 主机 [端口] is
+// recognized here only for usage help; call sites dial it as a tab session
+// before reaching this module. Every command is interruptible: Ctrl+C (without
+// a text selection) aborts the request, and the backend cancels the child
+// process or lookup.
 window.DengLocalPrompt = (() => {
   let view = null, generation = 0;
-  const commands = /^(ping|traceroute|tracert|nslookup|dig|curl)(?:\s|$)/i;
+  const commands = /^(ping|traceroute|tracert|nslookup|dig|curl|tcping|telnet)(?:\s|$)/i;
   function ensure() {
     if (view?.isConnected) return view;
     view = node('pre', 'local-prompt-output');
@@ -126,6 +129,13 @@ window.DengLocalPrompt = (() => {
     if (verb === 'nslookup') { await runHostProbe('nslookup', trimmed, sink); return; }
     if (verb === 'dig') { await runDig(trimmed, sink); return; }
     if (verb === 'curl') { await runCurl(trimmed, sink); return; }
+    if (verb === 'tcping') { await runTcping(trimmed, sink, runId); return; }
+    if (verb === 'telnet') {
+      const target = window.DengTcpSession.parse(trimmed);
+      if (!target) sink('telnet 用法：telnet 主机 [端口，默认 23]，将在本标签拨号。\n\n');
+      else if (runId === generation) window.DengTcpSession.open(target);
+      return;
+    }
     sink('未知本机命令。\n\n');
   }
   async function runPing(command, sink, runId) {
@@ -269,6 +279,84 @@ window.DengLocalPrompt = (() => {
     }
     if (!header) setStatus(`本机 ICMP → ${host}\n`);
     sink(`收到 ${received} / ${sent} 个响应（已停止）\n\n`);
+  }
+  function parseTcping(command) {
+    const tokens = command.trim().replace(/^tcping(?:\s+|$)/i, '').trim().split(/\s+/).filter(Boolean);
+    let continuous = false;
+    const targets = [];
+    for (const token of tokens) {
+      if (token === '-t' || token === '-T') continuous = true;
+      else targets.push(token);
+    }
+    if (targets.length !== 2 || targets[0].startsWith('-')) return null;
+    const port = Number(targets[1]);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) return null;
+    return { host: targets[0], port, continuous };
+  }
+  async function runTcping(command, sink, runId) {
+    const target = parseTcping(command);
+    if (!target) { sink('tcping 用法：tcping 主机 端口，可加 -t 连续拨号，按 Ctrl+C 停止。\n\n'); return; }
+    if (runId !== generation) return;
+    if (target.continuous) {
+      const stopped = await runTcpingContinuous(sink, target.host, target.port, runId);
+      if (runId !== generation) return;
+      if (!stopped) sink('\n\n');
+      return;
+    }
+    const pending = sink('正在 TCP 探测…\n');
+    const write = text => { if (pending) pending(text); else sink(text); };
+    await withInterrupt(async signal => {
+      try {
+        const payload = await postWithSignal('/api/local-probe/tcping', { host: target.host, port: target.port }, signal);
+        write(`${(payload?.output || '').trimEnd()}\n\n`);
+      } catch (error) {
+        write(error?.name === 'AbortError' ? '^C 已停止。\n\n' : `${error.message || error}\n\n`);
+      }
+    });
+  }
+  // -t 模式复用 ping 连续探测的循环语义：每 500ms 一次 TCP 握手，Ctrl+C 停止并汇总。
+  async function runTcpingContinuous(sink, host, port, runId) {
+    const status = sink(`连续 TCP 拨号 ${host}:${port}，按 Ctrl+C 停止…\n`);
+    const setStatus = text => { if (status) status(text); else sink(text); };
+    let stopped = false, inflight = null, headerShown = false;
+    const onKey = event => {
+      if (!isInterruptKey(event) || window.getSelection()?.toString()) return;
+      event.preventDefault();
+      stopped = true;
+      inflight?.abort();
+    };
+    document.addEventListener('keydown', onKey);
+    let sent = 0, connected = 0;
+    try {
+      for (;;) {
+        let payload = null, failure = null;
+        const controller = new AbortController();
+        inflight = controller;
+        try { payload = await postWithSignal('/api/local-probe/tcping', { host, port, count: 1, brief: true }, controller.signal); }
+        catch (error) { failure = error; }
+        finally { inflight = null; }
+        if (runId !== generation) return; // a newer command owns the scratchpad
+        if (failure) {
+          if (failure.name === 'AbortError') break;
+          sent++;
+          sink(`${sent}  ${failure.message || failure}\n`);
+        } else {
+          if (!headerShown) { headerShown = true; setStatus(`本机 TCP → ${host}:${port}\n`); }
+          sent++;
+          if (payload?.ok) connected++;
+          sink(`${sent}  ${(payload?.output || '').split('\n').filter(Boolean).pop() || '无输出'}\n`);
+        }
+        if (stopped) break;
+        await new Promise(resolve => setTimeout(resolve, 500));
+        if (stopped || runId !== generation) break;
+      }
+    } finally {
+      document.removeEventListener('keydown', onKey);
+      inflight?.abort();
+    }
+    if (!headerShown) setStatus(`本机 TCP → ${host}:${port}\n`);
+    sink(`已连接 ${connected} / ${sent} 次 TCP 拨号（已停止）\n\n`);
+    return stopped;
   }
   function reflect() {
     if (!view?.isConnected) return;

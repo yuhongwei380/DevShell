@@ -1,6 +1,6 @@
 'use strict';
 
-let appearance = { uiFontId: 'builtin:ui-alibaba-puhuiti-3-55', uiTextColors: {}, fontId: 'builtin:jetbrains-mono', fontColors: {}, fontBold: {}, chartStyles: {}, backgroundId: 'builtin:none', backgroundOpacity: .42, backgroundVersion: 2, uiScale: Number(window.DEVSHELL?.uiScale) || 1, terminalFontSize: 14, ansiPalette: '', autoCommandsEnabled: true, localShellEnabled: false };
+let appearance = { uiFontId: 'builtin:ui-alibaba-puhuiti-3-55', uiTextColors: {}, fontId: 'builtin:jetbrains-mono', fontColors: {}, fontBold: {}, chartStyles: {}, backgroundId: 'builtin:none', backgroundOpacity: .42, backgroundVersion: 2, uiScale: Number(window.DEVSHELL?.uiScale) || 1, terminalFontSize: 14, ansiPalette: '', autoCommandsEnabled: true, localShellEnabled: false, tcpToolsEnabled: true };
 const appearanceMapFields = new Set(['fontColors', 'fontBold', 'chartStyles', 'uiTextColors']);
 const appearanceOwnedElsewhere = new Set(['layout', 'windowWidth', 'windowHeight', 'windowMaximised', 'terminalBold']);
 let appearanceSaved = appearanceSnapshot(appearance);
@@ -365,7 +365,7 @@ function setSettingsMenu(open) {
   if (open) showSettingsMenuView('main');
   else { $('#manage-appearance-config').setAttribute('aria-expanded', 'false'); $('#manage-other-features').setAttribute('aria-expanded', 'false'); }
   $('#settings-menu').hidden = !open; $('#settings-button').setAttribute('aria-expanded', String(open));
-  if (open) { positionSettings(); $('#feature-auto-commands').value = appearance.autoCommandsEnabled !== false ? 'true' : 'false'; $('#feature-local-shell').value = appearance.localShellEnabled === true ? 'true' : 'false'; $('#manage-keys').focus(); }
+  if (open) { positionSettings(); $('#feature-auto-commands').value = appearance.autoCommandsEnabled !== false ? 'true' : 'false'; $('#feature-local-shell').value = appearance.localShellEnabled === true ? 'true' : 'false'; $('#feature-tcp-tools').value = appearance.tcpToolsEnabled !== false ? 'true' : 'false'; $('#manage-keys').focus(); }
 }
 function showSettingsMenuView(view) {
   const appearanceView = view === 'appearance', otherView = view === 'other';
@@ -684,6 +684,11 @@ function initializeAppearance() {
   $('#feature-local-shell').onchange = safe(async event => {
     const enabled = event.target.value === 'true';
     try { await chooseAppearance({ localShellEnabled: enabled }); }
+    catch (error) { event.target.value = enabled ? 'false' : 'true'; toast(error?.message || String(error)); }
+  });
+  $('#feature-tcp-tools').onchange = safe(async event => {
+    const enabled = event.target.value === 'true';
+    try { await chooseAppearance({ tcpToolsEnabled: enabled }); }
     catch (error) { event.target.value = enabled ? 'false' : 'true'; toast(error?.message || String(error)); }
   });
   $('#close-appearance').onclick = () => $('#appearance-dialog').close(); $('#import-asset').onclick = safe(importAsset);

@@ -58,9 +58,14 @@ const rows = () => popup()?.children.map(row => `${row.children[0].textContent} 
 // prototype identity checks.
 const plain = value => JSON.parse(JSON.stringify(value));
 // Welcome / start page: no reconnect, exit or help — there is no tab to act on.
-assert.deepEqual(plain(api.commandsFor(null).map(c => c.name)), ['ssh', 'ping', 'traceroute', 'nslookup', 'dig', 'curl'], 'welcome set');
+assert.deepEqual(plain(api.commandsFor(null).map(c => c.name)), ['ssh', 'ping', 'traceroute', 'nslookup', 'dig', 'curl', 'tcping', 'telnet'], 'welcome set');
 // A tab whose shell exited: the full local prompt vocabulary.
-assert.deepEqual(plain(api.commandsFor({}).map(c => c.name)), ['ssh', 'reconnect', 'ping', 'traceroute', 'nslookup', 'dig', 'curl', 'help', 'exit'], 'session set');
+assert.deepEqual(plain(api.commandsFor({}).map(c => c.name)), ['ssh', 'reconnect', 'ping', 'traceroute', 'nslookup', 'dig', 'curl', 'tcping', 'telnet', 'help', 'exit'], 'session set');
+// Settings → 其他功能 “候选栏 TCP 工具” off: tcping and telnet drop out.
+context.appearance = { tcpToolsEnabled: false };
+assert.deepEqual(plain(api.commandsFor(null).map(c => c.name)), ['ssh', 'ping', 'traceroute', 'nslookup', 'dig', 'curl'], 'welcome set with TCP tools off');
+assert.deepEqual(plain(api.commandsFor({}).map(c => c.name)), ['ssh', 'reconnect', 'ping', 'traceroute', 'nslookup', 'dig', 'curl', 'help', 'exit'], 'session set with TCP tools off');
+delete context.appearance;
 for (const busy of [{ connected: true }, { pendingConnection: true }, { disconnecting: true }, { detaching: true }, { handoffProvisional: true }, { ownershipUncertain: true }])
   assert.equal(api.commandsFor(busy), null, `connected or transient ${Object.keys(busy)[0]} must not complete`);
 
@@ -83,16 +88,16 @@ assert.deepEqual(plain(rows()), ['ping 主机 [-t]']);
 type('');
 press('Tab');
 assert.equal(area.value, '', 'no common prefix among all commands');
-assert.equal(rows().length, 6, 'welcome page offers six commands');
+assert.equal(rows().length, 8, 'welcome page offers eight commands');
 press('Tab'); assert.equal(area.value, 'ssh', 'first candidate');
 press('Tab'); assert.equal(area.value, 'ping', 'second candidate');
 press('Tab'); assert.equal(area.value, 'traceroute', 'third candidate');
 press('Tab', { shiftKey: true }); assert.equal(area.value, 'ping', 'Shift+Tab cycles backwards');
 press('Tab', { shiftKey: true }); assert.equal(area.value, 'ssh');
-press('Tab', { shiftKey: true }); assert.equal(area.value, 'curl', 'wraps below the first entry');
+press('Tab', { shiftKey: true }); assert.equal(area.value, 'telnet', 'wraps below the first entry');
 
 // Any edit restarts the session; Escape and history arrows close the box.
-type('t');
+type('tr');
 assert.equal(press('Tab').defaultPrevented, true);
 assert.equal(area.value, 'traceroute', 'unique match in the welcome set');
 press('Escape');
