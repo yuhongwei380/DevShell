@@ -38,6 +38,13 @@ func (s *Store) PatchAppearance(patch map[string]json.RawMessage) (Appearance, e
 		switch key {
 		case "chartStyles":
 			err = mergePreferenceMap(value.ChartStyles, raw)
+		case "themes":
+			// 主题列表整体替换（null 清空）：字段级校验在 saveAppearanceLocked
+			// 的 normalizeAppearanceThemes 内完成。
+			var themes []AppearanceTheme
+			if err = json.Unmarshal(raw, &themes); err == nil {
+				value.Themes = themes
+			}
 		case "uiTextColors":
 			err = mergePreferenceMap(value.UITextColors, raw)
 		case "fontColors":
