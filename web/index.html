@@ -8,7 +8,7 @@
   <script src="js/bootstrap.js?v=20261025-devshell-rc1"></script>
   <script>if(location.protocol!=='wails:'&&location.hostname!=='wails.localhost'){const nonce=new URLSearchParams(location.search).get('window');if(/^[A-Za-z0-9_-]{24,96}$/.test(nonce||'')){window.DEVSHELL.detachedNonce=nonce;}}</script>
   <script src="js/security-lock.js?v=20261025-devshell-rc1"></script>
-  <script src="js/theme.js?v=20261102-mergetheme1"></script>
+  <script src="js/theme.js?v=20261104-settingsrestore1"></script>
   <link rel="stylesheet" href="vendor/xterm.css">
   <link rel="stylesheet" href="css/style.css?v=20261102-hdrdot1">
   <link rel="stylesheet" href="css/theme.css?v=20261101-tabdot1">
@@ -42,6 +42,7 @@
 <link rel="stylesheet" href="css/rdp.css?v=20260927-preview1">
   <link rel="stylesheet" href="css/connection-form.css?v=20261102-autocmd2">
   <link rel="stylesheet" href="css/upload-confirmation.css?v=20260928-overwrite1">
+  <link rel="stylesheet" href="css/theme-manager.css?v=20261104-settingsrestore1">
 </head>
 <body>
   <svg class="icon-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
@@ -301,6 +302,7 @@
       <div class="settings-submenu-heading"><button type="button" role="menuitem" id="appearance-settings-back" data-settings-view="main"><svg><use href="#i-chevron"/></svg>返回设置</button><strong>外观配置</strong></div>
       <button role="menuitem" id="manage-ui-appearance"><svg><use href="#i-type"/></svg>界面字体与文字颜色<span>界面字体</span></button>
       <button role="menuitem" id="manage-shell-fonts"><svg><use href="#i-type"/></svg>Shell 字体与颜色<span>终端字体</span></button>
+      <button role="menuitem" id="manage-themes" aria-haspopup="dialog" aria-controls="theme-manager-dialog"><svg><use href="#i-layout"/></svg>主题配置<span>经典 · 毛玻璃</span></button>
       <button role="menuitem" id="manage-backgrounds"><svg><use href="#i-image"/></svg>背景管理器<span>终端背景</span></button>
       <button role="menuitem" id="manage-chart-styles"><svg><use href="#i-network"/></svg>曲线样式<span>网速与延迟</span></button>
       <div class="scale-setting"><label for="ansi-palette">终端 ANSI 颜色</label><select id="ansi-palette" aria-label="终端 ANSI 颜色预设"><option value="soft">柔和</option><option value="vivid">高饱和</option><option value="bright">鲜亮</option></select></div>
@@ -314,6 +316,17 @@
   </div>
   <dialog id="about-dialog" aria-labelledby="about-title"><div class="dialog-heading"><h2 id="about-title">关于 DevShell</h2><button type="button" class="icon-button" id="close-about" aria-label="关闭版本信息"><svg><use href="#i-close"/></svg></button></div><dl class="about-versions"><dt>软件版本</dt><dd id="about-version"></dd><dt>构建版本</dt><dd id="about-build"></dd></dl></dialog>
   <dialog id="release-notes-dialog" aria-labelledby="release-notes-title"><div class="dialog-heading"><div><h2 id="release-notes-title">更新日志</h2><p id="release-notes-version"></p></div><button type="button" class="icon-button" id="close-release-notes" aria-label="关闭更新日志"><svg><use href="#i-close"/></svg></button></div><div id="release-notes-content"></div></dialog>
+  <dialog id="theme-manager-dialog" aria-labelledby="theme-manager-title" aria-describedby="theme-manager-description">
+    <div class="dialog-heading"><div><h2 id="theme-manager-title">主题配置</h2><p id="theme-manager-description">选择适合你的工作台，立即应用。</p></div><button type="button" class="icon-button" id="close-theme-manager" aria-label="关闭主题配置"><svg><use href="#i-close"/></svg></button></div>
+    <fieldset class="theme-mode"><legend>外观模式</legend><div class="theme-segmented">
+      <button type="button" data-theme-mode="light" aria-pressed="false">浅色</button><button type="button" data-theme-mode="dark" aria-pressed="false">深色</button><button type="button" data-theme-mode="system" aria-pressed="false">跟随系统</button>
+    </div></fieldset>
+    <fieldset class="theme-library"><legend>内置主题</legend><div class="theme-grid">
+      <button type="button" class="theme-card" data-theme-style="classic" aria-pressed="false"><span class="theme-swatch theme-swatch-classic" aria-hidden="true"><i></i><b></b><em></em></span><span class="theme-card-heading">经典<span class="theme-selected-mark" aria-hidden="true">✓</span></span><small>熟悉的蓝灰色，清晰专注</small><span class="theme-card-meta">系统内置</span></button>
+      <button type="button" class="theme-card" data-theme-style="frosted" aria-pressed="false"><span class="theme-swatch theme-swatch-frosted" aria-hidden="true"><i></i><b></b><em></em></span><span class="theme-card-heading">毛玻璃<span class="theme-selected-mark" aria-hidden="true">✓</span></span><small>雾白与烟灰玻璃，柔和透光</small><span class="theme-card-meta">系统内置 · 浅色 / 深色</span></button>
+    </div></fieldset>
+    <p class="theme-manager-status" id="theme-manager-status" role="status" aria-live="polite"></p>
+  </dialog>
   <dialog id="appearance-dialog" class="manager-dialog appearance-palette" aria-labelledby="appearance-title" aria-modal="false"><div class="dialog-heading appearance-drag-handle" id="appearance-drag-handle" tabindex="0" aria-label="拖动管理器，方向键移动，Home 恢复位置"><div><h2 id="appearance-title">背景管理器</h2><p id="appearance-description"></p></div><button class="icon-button" id="close-appearance" aria-label="关闭管理器"><svg><use href="#i-close"/></svg></button></div>
     <nav class="font-kind-tabs" id="shell-font-navigation" aria-label="字体设置分类" hidden><button type="button" id="switch-ui-fonts" aria-pressed="false">界面字体</button><button type="button" aria-pressed="true">Shell 字体</button></nav>
     <div class="font-library-entry" id="shell-font-online-entry" hidden><button type="button" class="upload-button" id="online-shell-fonts">在线字体</button></div>
@@ -384,8 +397,9 @@
   <script src="js/command-composer.js?v=20261001-composer"></script>
   <script src="js/workspace-tools.js?v=20260925-v002-b86"></script>
   <script src="js/release-note-tags.js?v=20261102-sectag1"></script>
-  <script src="js/appearance.js?v=20261102-localshell2"></script>
-  <script src="js/ui-appearance.js?v=20261025-devshell-rc1"></script>
+  <script src="js/appearance.js?v=20261104-settingsrestore1"></script>
+  <script src="js/theme-manager.js?v=20261104-settingsrestore1"></script>
+  <script src="js/ui-appearance.js?v=20261104-smokeglass1"></script>
   <script src="js/font-library.js?v=20261019-brand1"></script>
   <script src="js/path-history.js?v=20260925-v002-b86"></script>
   <script src="js/directory-favorites.js?v=20260925-v002-b86"></script>
@@ -402,7 +416,7 @@
   <script src="js/server-manager.js?v=20261103-nohistory1"></script>
   <script src="js/backup-manager.js?v=20261103-nohistory1"></script>
   <script src="js/server-explorer.js?v=20261103-nohistory1"></script>
-  <script src="js/help-guide.js?v=20261103-nohistory1"></script>
+  <script src="js/help-guide.js?v=20261104-settingsrestore1"></script>
   <script src="js/chart-styles.js?v=20260920-v002-b70"></script>
   <script src="js/appearance-tools.js?v=20261102-concise4"></script>
   <script src="js/terminal-snapshot.js?v=20260920-v002-b70"></script>

@@ -12,31 +12,35 @@ import (
 // Appearance is stored alongside connection settings, so native and browser
 // windows use the same selection and custom assets survive application upgrades.
 type Appearance struct {
-	UIFontID            string                    `json:"uiFontId"`
-	UITextColors        map[string]string         `json:"uiTextColors"`
-	FontID              string                    `json:"fontId"`
-	FontColors          map[string]string         `json:"fontColors,omitempty"`
-	FontBold            map[string]bool           `json:"fontBold"`
-	ChartStyles         map[string]ChartLineStyle `json:"chartStyles"`
-	BackgroundID        string                    `json:"backgroundId"`
-	BackgroundOpacity   float64                   `json:"backgroundOpacity"`
-	BackgroundVersion   int                       `json:"backgroundVersion"`
-	UIScale             float64                   `json:"uiScale"`
-	TerminalFontSize    float64                   `json:"terminalFontSize"`
-	TerminalBold        bool                      `json:"terminalBold,omitempty"` // Legacy input only; migrated to the selected font.
-	Theme               string                    `json:"theme"`
-	AnsiPalette         string                    `json:"ansiPalette,omitempty"` // soft (default) | vivid | bright
-	WindowWidth         int                       `json:"windowWidth"`
-	WindowHeight        int                       `json:"windowHeight"`
-	WindowMaximised     bool                      `json:"windowMaximised"`
-	OnboardingCompleted bool                      `json:"onboardingCompleted"`
-	MonitorVisible      bool                      `json:"monitorVisible"`
-	FilesPosition       string                    `json:"filesPosition"`
-	FollowTerminal      bool                      `json:"followTerminal"`
-	PromptUsernameColor string                    `json:"promptUsernameColor"`
-	PromptHostnameColor string                    `json:"promptHostnameColor"`
-	MinimizeAction      string                    `json:"minimizeAction"`
-	ExternalEditor      string                    `json:"externalEditor"`
+	UIFontID          string                    `json:"uiFontId"`
+	UITextColors      map[string]string         `json:"uiTextColors"`
+	FontID            string                    `json:"fontId"`
+	FontColors        map[string]string         `json:"fontColors,omitempty"`
+	FontBold          map[string]bool           `json:"fontBold"`
+	ChartStyles       map[string]ChartLineStyle `json:"chartStyles"`
+	BackgroundID      string                    `json:"backgroundId"`
+	BackgroundOpacity float64                   `json:"backgroundOpacity"`
+	BackgroundVersion int                       `json:"backgroundVersion"`
+	// TerminalTransparency is retained for legacy configuration compatibility.
+	// Themes now use materials inside an opaque application window.
+	TerminalTransparency float64 `json:"terminalTransparency,omitempty"`
+	UIScale              float64 `json:"uiScale"`
+	TerminalFontSize     float64 `json:"terminalFontSize"`
+	TerminalBold         bool    `json:"terminalBold,omitempty"` // Legacy input only; migrated to the selected font.
+	UIStyle              string  `json:"uiStyle"`                // classic | frosted
+	Theme                string  `json:"theme"`
+	AnsiPalette          string  `json:"ansiPalette,omitempty"` // soft (default) | vivid | bright
+	WindowWidth          int     `json:"windowWidth"`
+	WindowHeight         int     `json:"windowHeight"`
+	WindowMaximised      bool    `json:"windowMaximised"`
+	OnboardingCompleted  bool    `json:"onboardingCompleted"`
+	MonitorVisible       bool    `json:"monitorVisible"`
+	FilesPosition        string  `json:"filesPosition"`
+	FollowTerminal       bool    `json:"followTerminal"`
+	PromptUsernameColor  string  `json:"promptUsernameColor"`
+	PromptHostnameColor  string  `json:"promptHostnameColor"`
+	MinimizeAction       string  `json:"minimizeAction"`
+	ExternalEditor       string  `json:"externalEditor"`
 	// UpdateMirror is the optional GitHub accelerator origin (ghproxy-style
 	// URL prefix) used for update manifest and artifact fetches. Empty means
 	// direct connections; signature, build and SHA-256 checks still apply.
@@ -45,18 +49,18 @@ type Appearance struct {
 	// #5) for every profile. The per-profile autoRun flag only takes effect
 	// while this global switch stays on; it lives under Settings → Other
 	// features. Default on: profiles without commands behave as before.
-	AutoCommandsEnabled bool                       `json:"autoCommandsEnabled"`
+	AutoCommandsEnabled bool `json:"autoCommandsEnabled"`
 	// LocalShellEnabled gates the local shell feature (issue #4 slice A):
 	// when on, the session tab “+” opens a local terminal with the user's
 	// login shell at home instead of the start-tab page. macOS only — the
 	// feature was removed on Windows, where enabling it is rejected. Lives
 	// under Settings → Other features. Default off on supported platforms.
 	LocalShellEnabled bool                       `json:"localShellEnabled"`
-	Layout              map[string]json.RawMessage `json:"layout"`
+	Layout            map[string]json.RawMessage `json:"layout"`
 }
 
 func defaultAppearance() Appearance {
-	return Appearance{UIFontID: defaultUIFontID, UITextColors: map[string]string{}, FontID: "builtin:jetbrains-mono", FontColors: map[string]string{}, FontBold: map[string]bool{}, ChartStyles: map[string]ChartLineStyle{}, BackgroundID: "builtin:none", BackgroundOpacity: .42, BackgroundVersion: 2, UIScale: 1, TerminalFontSize: 14, Theme: "system", MonitorVisible: true, FilesPosition: "right", FollowTerminal: true, MinimizeAction: "ask", AutoCommandsEnabled: true, Layout: map[string]json.RawMessage{}}
+	return Appearance{UIFontID: defaultUIFontID, UITextColors: map[string]string{}, FontID: "builtin:jetbrains-mono", FontColors: map[string]string{}, FontBold: map[string]bool{}, ChartStyles: map[string]ChartLineStyle{}, BackgroundID: "builtin:none", BackgroundOpacity: .42, BackgroundVersion: 2, UIScale: 1, TerminalFontSize: 14, UIStyle: "classic", Theme: "system", MonitorVisible: true, FilesPosition: "right", FollowTerminal: true, MinimizeAction: "ask", AutoCommandsEnabled: true, Layout: map[string]json.RawMessage{}}
 }
 
 // Old releases combined 18% image opacity with a dark multiply tint. Keep
@@ -197,6 +201,12 @@ func (s *Store) saveAppearanceLocked(value Appearance) (Appearance, error) {
 		}
 		*color = strings.ToLower(*color)
 	}
+	if value.UIStyle == "" {
+		value.UIStyle = "classic"
+	}
+	if value.UIStyle != "classic" && value.UIStyle != "frosted" {
+		return Appearance{}, errors.New("主题样式应为 classic 或 frosted")
+	}
 	if value.Theme == "" {
 		value.Theme = "system"
 	}
@@ -211,6 +221,9 @@ func (s *Store) saveAppearanceLocked(value Appearance) (Appearance, error) {
 	}
 	if math.IsNaN(value.BackgroundOpacity) || math.IsInf(value.BackgroundOpacity, 0) || value.BackgroundOpacity < 0 || value.BackgroundOpacity > 1 {
 		return Appearance{}, errors.New("背景强度应为 0%–100%")
+	}
+	if math.IsNaN(value.TerminalTransparency) || math.IsInf(value.TerminalTransparency, 0) || value.TerminalTransparency < 0 || value.TerminalTransparency > .6 {
+		return Appearance{}, errors.New("终端透明度应为 0%–60%")
 	}
 	if math.IsNaN(value.TerminalFontSize) || math.IsInf(value.TerminalFontSize, 0) || value.TerminalFontSize < 8 || value.TerminalFontSize > 40 || math.Trunc(value.TerminalFontSize*2) != value.TerminalFontSize*2 {
 		return Appearance{}, errors.New("终端字号应为 8–40，步进为 0.5 px")

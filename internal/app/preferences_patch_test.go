@@ -59,6 +59,26 @@ func TestAppearancePatchPreservesOtherWindowsAndDeletesOneMapKey(t *testing.T) {
 	}
 }
 
+func TestTerminalTransparencyPersistsAndRejectsOutOfRange(t *testing.T) {
+	s, err := OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.PatchAppearance(preferencePatch(t, `{"terminalTransparency":0.4}`)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.PatchAppearance(preferencePatch(t, `{"terminalTransparency":0.9}`)); err == nil {
+		t.Fatal("transparency above 60% accepted")
+	}
+	s, err = OpenStore(s.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := s.List().Appearance.TerminalTransparency; got != .4 {
+		t.Fatalf("terminal transparency not persisted: %v", got)
+	}
+}
+
 func TestAppearancePatchPersistsPinnedConnectionsLayoutKey(t *testing.T) {
 	s, err := OpenStore(t.TempDir())
 	if err != nil {
@@ -176,5 +196,44 @@ func TestAppearancePatchHTTPAndLegacyAPI(t *testing.T) {
 	body, _ := json.Marshal(legacy)
 	if r := request("/api/appearance", string(body)); r.Code != 200 || a.store.List().Appearance.Theme != "light" {
 		t.Fatal("legacy appearance endpoint broken")
+	}
+}
+
+func TestThemeStylePersistsWithoutOverwritingAppearance(t *testing.T) {
+	s, err := OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.List().Appearance.UIStyle != "classic" {
+		t.Fatal("legacy and new stores must default to classic")
+	}
+	if _, err = s.PatchAppearance(preferencePatch(t, `{"uiStyle":"frosted","theme":"system","fontColors":{"builtin:jetbrains-mono":"#abcdef"},"terminalFontSize":16,"backgroundId":"builtin:mist","terminalTransparency":0.4}`)); err != nil {
+		t.Fatal(err)
+	}
+	for _, patch := range []string{`{"uiStyle":"unknown"}`, `{"uiStyle":true}`} {
+		if _, err = s.PatchAppearance(preferencePatch(t, patch)); err == nil {
+			t.Fatalf("accepted invalid theme style %s", patch)
+		}
+	}
+	s, err = OpenStore(s.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := s.List().Appearance
+	if got.UIStyle != "frosted" || got.Theme != "system" || got.TerminalFontSize != 16 || got.FontColors[got.FontID] != "#abcdef" || got.BackgroundID != "builtin:mist" || got.TerminalTransparency != .4 {
+		t.Fatalf("theme round trip lost preferences: %+v", got)
+	}
+	if _, err = s.PatchAppearance(preferencePatch(t, `{"uiStyle":"classic"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if got = s.List().Appearance; got.UIStyle != "classic" || got.TerminalFontSize != 16 || got.FontColors[got.FontID] != "#abcdef" {
+		t.Fatal("classic theme cleared font choices")
+	}
+	var legacy Appearance
+	if err = json.Unmarshal([]byte(`{"theme":"dark","backgroundId":"builtin:mist"}`), &legacy); err != nil {
+		t.Fatal(err)
+	}
+	if legacy.UIStyle != "classic" || legacy.Theme != "dark" || legacy.BackgroundID != "builtin:mist" {
+		t.Fatalf("legacy config migration: %+v", legacy)
 	}
 }

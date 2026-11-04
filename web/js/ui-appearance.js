@@ -127,8 +127,14 @@ window.DengUIAppearance = (() => {
   }
   function fillColors() {
     if (!dialog) return;
+    const palette = appearance.uiStyle === 'frosted' ? { light: '#35362f', dark: '#e6e2d6' } : defaults;
+    dialog.querySelector('#ui-text-title').textContent = '文字颜色 · 浅色 / 深色';
     for (const theme of ['light', 'dark']) {
-      const row = dialog.querySelector(`[data-ui-color-theme="${theme}"]`), color = appearance.uiTextColors?.[theme] || defaults[theme];
+      const row = dialog.querySelector(`[data-ui-color-theme="${theme}"]`), color = appearance.uiTextColors?.[theme] || palette[theme];
+      const label = theme === 'light' ? '浅色模式' : '深色模式';
+      row.querySelector('.ui-color-label strong').textContent = label;
+      row.querySelector('input[type=color]').setAttribute('aria-label', `${label}文字颜色`);
+      row.querySelector('input[type=text]').setAttribute('aria-label', `${label}十六进制文字颜色`);
       row.querySelector('input[type=color]').value = color;
       row.querySelector('input[type=text]').value = color;
       row.querySelector('.ui-color-state').textContent = appearance.uiTextColors?.[theme] ? '已保存自定义颜色' : '使用默认颜色';
@@ -196,7 +202,7 @@ window.DengUIAppearance = (() => {
       } finally { button.disabled = false; }
     });
     document.querySelector('#manage-ui-appearance').onclick = safe(open);
-    window.addEventListener('cloudshell:theme', () => applyColors());
+    window.addEventListener('cloudshell:theme', () => { applyColors(); fillColors(); });
   }
   async function open() { setSettingsMenu(false); if (document.querySelector('#appearance-dialog')?.dataset.kind === 'font') document.querySelector('#appearance-dialog').close(); await loadProfiles(); await render(); if (!dialog.open) dialog.show(); positionAppearancePalette(); }
   async function useFont(id, stillWanted = () => true) { await initCatalog(); const font = fonts().find(f => f.id === id); if (!font) throw new Error('界面字体不存在，请重新下载或导入'); return selectFont(font, stillWanted); }

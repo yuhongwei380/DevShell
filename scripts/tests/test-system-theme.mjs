@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 const source = readFileSync(new URL('../../web/js/theme.js', import.meta.url), 'utf8');
 const portable = readFileSync(new URL('../../web/js/portable-preferences.js', import.meta.url), 'utf8');
-function harness({ theme = 'system', dark = false, native } = {}) {
+function harness({ theme = 'system', dark = false, native, uiStyle = 'classic' } = {}) {
   const media = new EventTarget(); media.matches = dark;
   const window = new EventTarget(), document = new EventTarget(), storage = new Map(), timers = new Map(), saves = [];
   let timerID = 0;
@@ -16,7 +16,7 @@ function harness({ theme = 'system', dark = false, native } = {}) {
   document.createElement = () => ({ querySelector: () => control });
   elements.set('settings-appearance-view', { querySelector: () => ({ after() {} }) });
   const localStorage = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key), get length() { return storage.size; }, key: i => [...storage.keys()][i] };
-  window.DEVSHELL = { theme }; if (native) window.go = { desktop: { Desktop: { SystemTheme: native } } };
+  window.DEVSHELL = { theme, uiStyle }; if (native) window.go = { desktop: { Desktop: { SystemTheme: native } } };
   const context = vm.createContext({ window, document, localStorage, Event, CustomEvent, structuredClone,
     matchMedia: query => query.includes('reduced') ? { matches: true } : media,
     setTimeout: (fn, delay) => { const id = ++timerID; timers.set(id, { fn, delay }); return id; },
@@ -25,7 +25,7 @@ function harness({ theme = 'system', dark = false, native } = {}) {
   });
   vm.runInContext(source, context);
   vm.runInContext(portable, context); window.DengPortablePreferences.accept({ appearance: {} });
-  return { window, document, media, storage, timers, saves, control, hint,
+  return { window, document, media, storage, timers, saves,
     start: () => document.dispatchEvent(new Event('DOMContentLoaded')),
     osDark(value) { media.matches = value; media.dispatchEvent(new Event('change')); },
     async settle() { for (let i = 0; i < 8; i++) await Promise.resolve(); },
@@ -34,19 +34,19 @@ function harness({ theme = 'system', dark = false, native } = {}) {
 const h = harness();
 assert.equal(h.window.DevShellTheme.current, 'light');
 assert.equal(h.window.DevShellTheme.preference, 'system');
-h.start(); assert.equal(h.control.checked, true);
+h.start(); assert.equal(h.document.documentElement.dataset.themePreference, 'system');
 h.osDark(true); assert.equal(h.window.DevShellTheme.current, 'dark');
 assert.equal(h.saves.length, 0, 'OS changes never rewrite portable settings');
 h.window.DevShellTheme.toggle();
 assert.equal(h.window.DevShellTheme.preference, 'light', 'manual toolbar switching leaves system mode');
-assert.equal(h.control.checked, false); assert.equal(h.saves.at(-1).theme, 'light');
+assert.notEqual(h.document.documentElement.dataset.themePreference, 'system'); assert.equal(h.saves.at(-1).theme, 'light');
 h.osDark(false); h.osDark(true);
 assert.equal(h.window.DevShellTheme.current, 'light', 'manual preference is stable across OS changes');
 h.window.DevShellTheme.set('system');
 assert.equal(h.window.DevShellTheme.current, 'dark'); assert.equal(h.saves.at(-1).theme, 'system');
 h.window.DevShellTheme.set('dark');
 assert.equal(h.window.DevShellTheme.current, 'dark'); assert.equal(h.saves.at(-1).theme, 'dark', 'same visible color still persists preference change');
-assert.equal(h.control.checked, false);
+assert.notEqual(h.document.documentElement.dataset.themePreference, 'system');
 h.window.DevShellTheme.set('invalid'); assert.equal(h.window.DevShellTheme.preference, 'dark');
 assert.equal(harness({theme:'dark',dark:false}).window.DevShellTheme.current, 'dark', 'saved manual setting wins at startup');
 let os = 'dark', calls = 0;
@@ -68,3 +68,29 @@ race.start(); race.window.DevShellTheme.set('light'); finish('dark'); await race
 assert.equal(race.window.DevShellTheme.current, 'light', 'an in-flight native response cannot override a manual choice');
 const absent = harness({ dark: true, native: async () => '' }); absent.start(); await absent.settle(); assert.equal(absent.window.DevShellTheme.current, 'dark', 'unsupported native desktop uses matchMedia fallback');
 console.log('System theme: startup, persistence, manual override, live native updates, feedback isolation, visibility, and in-flight race checks passed.');
+
+assert.equal(harness({uiStyle:'frosted'}).document.documentElement.dataset.uiStyle, 'frosted', 'portable style applies before stylesheet loading');
+assert.equal(harness({uiStyle:'unknown'}).document.documentElement.dataset.uiStyle, 'classic', 'invalid bootstrap style falls back safely');
+
+for (const style of ['classic', 'frosted']) {
+  let systemMode = 'light';
+  const glass = harness({uiStyle:style,theme:'light',native:async()=>systemMode});
+  glass.start(); await glass.settle();
+  assert.equal(glass.window.DevShellTheme.current,'light',`${style} restores saved light mode`);
+  glass.window.DevShellTheme.toggle();
+  assert.equal(glass.window.DevShellTheme.current,'dark');
+  assert.equal(glass.saves.at(-1).theme,'dark');
+  glass.window.DevShellTheme.set('system'); await glass.settle();
+  assert.equal(glass.window.DevShellTheme.current,'light');
+  systemMode='dark';await glass.window.DevShellTheme.refreshSystem();
+  assert.equal(glass.window.DevShellTheme.current,'dark');
+  assert.equal(glass.window.DevShellTheme.preference,'system');
+  const saves=glass.saves.length;
+  glass.window.DevShellTheme.setStyle(style==='frosted'?'classic':'frosted');
+  assert.equal(glass.window.DevShellTheme.current,'dark');assert.equal(glass.saves.length,saves,'style switch preserves mode');
+}
+let resolveStyleRace;
+const styleRace=harness({theme:'system',native:()=>new Promise(resolve=>{resolveStyleRace=resolve;})});
+styleRace.start();styleRace.window.DevShellTheme.setStyle('frosted');resolveStyleRace('light');await styleRace.settle();
+assert.equal(styleRace.window.DevShellTheme.current,'light','in-flight OS response applies across theme styles');
+console.log('Classic and glass: light/dark/system, native updates, persistence and style switching passed.');

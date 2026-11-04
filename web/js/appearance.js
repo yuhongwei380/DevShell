@@ -1,6 +1,6 @@
 'use strict';
 
-let appearance = { uiFontId: 'builtin:ui-alibaba-puhuiti-3-55', uiTextColors: {}, fontId: 'builtin:jetbrains-mono', fontColors: {}, fontBold: {}, chartStyles: {}, backgroundId: 'builtin:none', backgroundOpacity: .42, backgroundVersion: 2, uiScale: Number(window.DEVSHELL?.uiScale) || 1, terminalFontSize: 14, ansiPalette: '', autoCommandsEnabled: true, localShellEnabled: false };
+let appearance = { uiStyle: window.DEVSHELL?.uiStyle === 'frosted' ? 'frosted' : 'classic', uiFontId: 'builtin:ui-alibaba-puhuiti-3-55', uiTextColors: {}, fontId: 'builtin:jetbrains-mono', fontColors: {}, fontBold: {}, chartStyles: {}, backgroundId: 'builtin:none', backgroundOpacity: .42, backgroundVersion: 2, uiScale: Number(window.DEVSHELL?.uiScale) || 1, terminalFontSize: 14, ansiPalette: '', autoCommandsEnabled: true, localShellEnabled: false };
 const appearanceMapFields = new Set(['fontColors', 'fontBold', 'chartStyles', 'uiTextColors']);
 const appearanceOwnedElsewhere = new Set(['layout', 'windowWidth', 'windowHeight', 'windowMaximised', 'terminalBold']);
 let appearanceSaved = appearanceSnapshot(appearance);
@@ -20,7 +20,7 @@ const fontColorPresets = [
   { name: '石墨', color: '#243447' }, { name: '纯白', color: '#ffffff' },
 ];
 const validFontColor = color => typeof color === 'string' && /^#[\da-f]{6}$/i.test(color);
-const colorForFont = (id = appearance.fontId) => validFontColor(appearance.fontColors?.[id]) ? appearance.fontColors[id].toLowerCase() : terminalDefaultColor;
+const colorForFont = (id = appearance.fontId) => validFontColor(appearance.fontColors?.[id]) ? appearance.fontColors[id].toLowerCase() : appearance.uiStyle === 'frosted' ? '#d8d2b5' : terminalDefaultColor;
 const boldForFont = (id = appearance.fontId) => appearance.fontBold?.[id] === true;
 function normalizeTerminalFontSize(value) { const number=Number(value); return Number.isFinite(number) ? Math.max(8,Math.min(40,Math.round(number*2)/2)) : 14; }
 const ansiPalettes = {
@@ -205,6 +205,8 @@ function drawTerminalBoxGlyph(glyphs,width,height) {
   for(const [thickness,d]of paths){const stroke=path.cloneNode(false);stroke.setAttribute('d',d);stroke.setAttribute('stroke-width',thickness);svg.append(stroke);}return svg;
 }
 async function applyAppearance() {
+  window.DevShellTheme.setStyle(appearance.uiStyle);
+  window.DengThemeManager?.reflect();
   const uiApplying = window.DengUIAppearance?.apply(appearance);
   window.DengChartStyles?.apply(appearance.chartStyles);
   const generation = ++mediaGeneration, next = { ...appearance };
@@ -227,7 +229,9 @@ async function applyAppearance() {
   terminalFont = normalizeTerminalFontSize(next.terminalFontSize);
   document.documentElement.style.setProperty('--terminal-font-size', `${terminalFont}px`);
   for (const state of sessions.values()) { state.term.options.fontSize = terminalFont; state.term.options.fontWeight = boldForFont(next.fontId) ? '700' : '400'; }
-  const background = allBackgrounds().find(item => item.id === next.backgroundId) || allBackgrounds()[0];
+  // Background choices belong to the classic theme; glass never uses images.
+  // Keep the stored choice so switching back restores the original appearance.
+  const background = next.uiStyle === 'frosted' ? { id: 'builtin:none' } : allBackgrounds().find(item => item.id === next.backgroundId) || allBackgrounds()[0];
   if (activeBackgroundID !== background.id) {
     // Only the two solid built-ins have no image. Built-in catalogue entries
     // carry a file and resolve through assetURL like imported backgrounds.
@@ -387,7 +391,7 @@ async function openAppearance(kind) {
   const isFont = kind === 'font';
   if (isFont) document.getElementById('ui-appearance-dialog')?.close();
   $('#appearance-title').textContent = isFont ? '字体设置 · Shell 字体' : '背景管理器';
-  $('#appearance-description').textContent = isFont ? '每款字体单独设置加粗和颜色，点击字体即可应用。' : '背景立即生效，可拖动此面板观察终端。';
+  $('#appearance-description').textContent = isFont ? '每款字体单独设置加粗和颜色，点击字体即可应用。' : appearance.uiStyle === 'frosted' ? '背景设置用于经典主题；毛玻璃不使用背景图片，原有选择会保留。' : '背景立即生效，可拖动此面板观察终端。';
   $('#import-asset span').textContent = isFont ? '导入字体' : '导入背景';
   $('#asset-picker').accept = isFont ? '.ttf,.otf,.woff,.woff2' : '.png,.jpg,.jpeg,.webp';
   $('#background-strength').hidden = isFont; $('#font-preview').hidden = !isFont;

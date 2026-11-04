@@ -473,12 +473,19 @@ func runDesktopBackend(application desktopBackend, assets fs.FS, configDir, deta
 		defer primary.SetWindowLauncher(nil)
 		go sweepDetachedWebviewCaches(configDir)
 	}
+	windowBackground := options.NewRGB(240, 243, 247)
+	if preferences.UIStyle == "frosted" {
+		windowBackground = options.NewRGB(232, 230, 223)
+		if preferences.Theme == "dark" || (preferences.Theme == "system" && platformSystemTheme() == "dark") {
+			windowBackground = options.NewRGB(57, 54, 51)
+		}
+	}
 	nativeHandler := nativeAssetHandler(application, assets)
 	return wails.Run(&options.App{
 		Title: "DevShell", Width: initial.Width, Height: initial.Height, MinWidth: initial.MinWidth, MinHeight: initial.MinHeight,
 		Frameless:        goruntime.GOOS == "windows",
 		StartHidden:      goruntime.GOOS == "windows",
-		BackgroundColour: options.NewRGB(240, 243, 247),
+		BackgroundColour: windowBackground,
 		AssetServer: &assetserver.Options{Assets: assets, Handler: nativeHandler, Middleware: func(next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Cache-Control", "no-store")
@@ -550,11 +557,13 @@ func runDesktopBackend(application desktopBackend, assets fs.FS, configDir, deta
 		Linux:       &linux.Options{ProgramName: "dengshell", Icon: icon, WebviewGpuPolicy: linux.WebviewGpuPolicyOnDemand},
 		Mac: &mac.Options{
 			DisableZoom: true, DisableEscapeExitsFullscreen: true,
+			// Theme materials are rendered inside the opaque webview.
 			About: &mac.AboutInfo{Title: "DevShell", Message: app.ApplicationDisplayVersion + " · SSH 终端与服务器管理", Icon: icon},
 		},
 		Windows: &windows.Options{
 			WindowClassName: "DevShellWindow", DisableWindowIcon: false,
 			IsZoomControlEnabled: false, DisablePinchZoom: true,
+			WindowIsTranslucent: false, WebviewIsTransparent: false, BackdropType: windows.None,
 			WebviewUserDataPath: desktopWebviewPath(configDir, detachedNonce),
 			Messages: &windows.Messages{
 				InstallationRequired: "DevShell 需要 Microsoft Edge WebView2 运行时才能显示界面。\n点击“确定”从 Microsoft 官方站点下载安装；已有终端配置不会被修改。\n下载需要联网，请等待安装窗口出现。离线电脑可先安装 WebView2 Evergreen 独立安装包。",

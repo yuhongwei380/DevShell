@@ -2,6 +2,7 @@
 (() => {
   'use strict';
   const key = 'cloudshell.theme';
+  document.documentElement.dataset.uiStyle = window.DEVSHELL?.uiStyle === 'frosted' ? 'frosted' : 'classic';
   const system = matchMedia('(prefers-color-scheme: dark)');
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   let transition, transitionTimer, fallbackAnimation, generation = 0;
@@ -80,6 +81,13 @@
   window.DevShellTheme = Object.freeze({
     get current() { return document.documentElement.dataset.theme; },
     get preference() { return preference; },
+    setStyle(style) {
+      const next = style === 'frosted' ? 'frosted' : 'classic';
+      if (document.documentElement.dataset.uiStyle === next) return;
+      document.documentElement.dataset.uiStyle = next;
+      render(false);
+      refreshNativeTheme();
+    },
     set,
     refreshSystem: refreshNativeTheme,
     toggle() { set(this.current === 'dark' ? 'light' : 'dark'); },
