@@ -93,9 +93,10 @@
   filter:blur(80px) saturate(1.25); animation:liquid-drift 36s ease-in-out infinite alternate; }
 @keyframes liquid-drift { from { transform:translate3d(-2.5%,-1.5%,0) scale(1.05); } to { transform:translate3d(2.5%,2%,0) scale(1.14); } }
 [data-ui-style="frosted"] .sidebar { background:var(--glass-sheen),var(--glass-sidebar); backdrop-filter:blur(26px) saturate(1.7) brightness(1.04); -webkit-backdrop-filter:blur(26px) saturate(1.7) brightness(1.04); box-shadow:var(--glass-edge),inset -1px 0 var(--border),var(--shadow); }
-/* 宽屏下监控栏不再有自己的玻璃板：内容直接浮在画布上；液态玻璃只在顶栏、
-   终端与文件面板这些特定区域保持完整玻璃面。窄屏抽屉仍保留面板避免压字。 */
-:root:not([data-narrow="true"])[data-ui-style="frosted"] .sidebar { background:transparent; box-shadow:none; backdrop-filter:none; -webkit-backdrop-filter:none; }
+/* 宽屏下监控栏是与终端、文件面板同语言的悬浮玻璃卡：16px 圆角、四周留
+   网格缝、同一套边缘高光与投影；栏内卡片仍全部融入卡面，不再成盒。
+   窄屏抽屉保持通高面板避免压字。 */
+:root:not([data-narrow="true"])[data-ui-style="frosted"] .sidebar { background:var(--glass-sheen),var(--glass-sidebar); box-shadow:var(--glass-edge),var(--shadow); backdrop-filter:blur(26px) saturate(1.7) brightness(1.04); -webkit-backdrop-filter:blur(26px) saturate(1.7) brightness(1.04); border-radius:16px; }
 /* 玻璃面上不留硬描边：芯片只靠底面色差成块，面板内分隔用明暗差完成，
    不出现直角发丝线。输入控件的细边框保留（那是控件，不是卡片）。 */
 [data-ui-style="frosted"] .address-copy { border:0; border-radius:10px; }
@@ -109,7 +110,7 @@
 [data-ui-style="frosted"] .files-panel { background:var(--glass-sheen),var(--glass-surface); box-shadow:var(--glass-edge),var(--shadow); backdrop-filter:blur(22px) saturate(1.7); -webkit-backdrop-filter:blur(22px) saturate(1.7); }
 /* Keep fixed window controls relative to the viewport: backdrop-filter on the
    header itself would create a new containing block for the floating brand. */
-[data-ui-style="frosted"] .session-bar { position:relative; isolation:isolate; background:transparent; backdrop-filter:none; -webkit-backdrop-filter:none; }
+[data-ui-style="frosted"] .session-bar { position:relative; isolation:isolate; background:transparent; backdrop-filter:none; -webkit-backdrop-filter:none; margin:6px var(--workspace-inset) 0; border-radius:16px; }
 [data-ui-style="frosted"] .session-bar::before { content:""; position:absolute; z-index:-1; inset:0; pointer-events:none; background:var(--glass-sheen),var(--glass-toolbar); border-radius:inherit; box-shadow:var(--glass-edge); backdrop-filter:blur(24px) saturate(1.7) brightness(1.04); -webkit-backdrop-filter:blur(24px) saturate(1.7) brightness(1.04); }
 [data-ui-style="frosted"] .session-bar .brand { border-color:var(--border); }
 [data-ui-style="frosted"] .session-bar .window-controls { background:var(--surface-inset); }
