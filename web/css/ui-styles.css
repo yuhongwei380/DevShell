@@ -96,6 +96,12 @@
 /* 宽屏下监控栏不再有自己的玻璃板：内容直接浮在画布上；液态玻璃只在顶栏、
    终端与文件面板这些特定区域保持完整玻璃面。窄屏抽屉仍保留面板避免压字。 */
 :root:not([data-narrow="true"])[data-ui-style="frosted"] .sidebar { background:transparent; box-shadow:none; backdrop-filter:none; -webkit-backdrop-filter:none; }
+/* 玻璃面上不留硬描边：芯片只靠底面色差成块，面板内分隔用明暗差完成，
+   不出现直角发丝线。输入控件的细边框保留（那是控件，不是卡片）。 */
+[data-ui-style="frosted"] .address-copy { border:0; border-radius:10px; }
+[data-ui-style="frosted"] .terminal-panel :is(.terminal-meta,.terminal-command-bar) { border:0; }
+[data-ui-style="frosted"] :is(.files-toolbar,.file-tabs,.file-table thead,.file-status,.commands-toolbar,.transfer-notice) { border:0; }
+[data-ui-style="frosted"] :is(.disk-row + .disk-row,.process-table tbody tr + tr,.transfer-row + .transfer-row) { border:0; }
 /* 监控栏只在玻璃板层面分割一次：卡片全部融入栏面，不再各自成盒；
    列表行内保留极淡的发丝线即可。 */
 [data-ui-style="frosted"] .sidebar :is(.system-section,.host-card,.disk-section,.network-card,.process-card,.process-details,.disk-resources,.disk-io) { background:transparent; border:0; border-radius:0; box-shadow:none; backdrop-filter:none; -webkit-backdrop-filter:none; }
