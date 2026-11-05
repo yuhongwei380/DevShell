@@ -26,7 +26,7 @@ func (s *Store) PatchAppearance(patch map[string]json.RawMessage) (Appearance, e
 		"uiFontId": &value.UIFontID, "fontId": &value.FontID, "backgroundId": &value.BackgroundID,
 		"backgroundOpacity": &value.BackgroundOpacity, "backgroundVersion": &value.BackgroundVersion,
 		"uiScale": &value.UIScale, "terminalFontSize": &value.TerminalFontSize,
-		"theme":               &value.Theme,
+		"theme": &value.Theme, "uiStyle": &value.UIStyle,
 		"onboardingCompleted": &value.OnboardingCompleted, "monitorVisible": &value.MonitorVisible,
 		"filesPosition": &value.FilesPosition, "followTerminal": &value.FollowTerminal, "promptUsernameColor": &value.PromptUsernameColor,
 		"promptHostnameColor": &value.PromptHostnameColor, "minimizeAction": &value.MinimizeAction,

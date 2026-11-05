@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 const source = readFileSync(new URL('../../web/js/theme.js', import.meta.url), 'utf8');
 const portable = readFileSync(new URL('../../web/js/portable-preferences.js', import.meta.url), 'utf8');
-function harness({ theme = 'system', dark = false, native } = {}) {
+function harness({ theme = 'system', uiStyle, dark = false, native } = {}) {
   const media = new EventTarget(); media.matches = dark;
   const window = new EventTarget(), document = new EventTarget(), storage = new Map(), timers = new Map(), saves = [];
   let timerID = 0;
@@ -16,7 +16,7 @@ function harness({ theme = 'system', dark = false, native } = {}) {
   document.createElement = () => ({ querySelector: () => control });
   elements.set('settings-appearance-view', { querySelector: () => ({ after() {} }) });
   const localStorage = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key), get length() { return storage.size; }, key: i => [...storage.keys()][i] };
-  window.DEVSHELL = { theme }; if (native) window.go = { desktop: { Desktop: { SystemTheme: native } } };
+  window.DEVSHELL = uiStyle === undefined ? { theme } : { theme, uiStyle }; if (native) window.go = { desktop: { Desktop: { SystemTheme: native } } };
   const context = vm.createContext({ window, document, localStorage, Event, CustomEvent, structuredClone,
     matchMedia: query => query.includes('reduced') ? { matches: true } : media,
     setTimeout: (fn, delay) => { const id = ++timerID; timers.set(id, { fn, delay }); return id; },
@@ -49,6 +49,14 @@ assert.equal(h.window.DevShellTheme.current, 'dark'); assert.equal(h.saves.at(-1
 assert.equal(h.control.checked, false);
 h.window.DevShellTheme.set('invalid'); assert.equal(h.window.DevShellTheme.preference, 'dark');
 assert.equal(harness({theme:'dark',dark:false}).window.DevShellTheme.current, 'dark', 'saved manual setting wins at startup');
+assert.equal(h.document.documentElement.dataset.uiStyle, 'classic', 'boot style falls back to classic');
+assert.equal(harness({ uiStyle: 'polar' }).document.documentElement.dataset.uiStyle, 'polar', 'boot style applies before styles load');
+const stylesBefore = h.saves.length;
+h.window.DevShellTheme.setStyle('frosted');
+assert.equal(h.document.documentElement.dataset.uiStyle, 'frosted', 'style switch repaints the workbench attribute');
+h.window.DevShellTheme.setStyle('vapor');
+assert.equal(h.document.documentElement.dataset.uiStyle, 'classic', 'unknown styles fall back to classic');
+assert.equal(h.saves.length, stylesBefore, 'setStyle itself never persists; the appearance patch does');
 let os = 'dark', calls = 0;
 const n = harness({ native: async () => { calls++; return os; } });
 n.start(); await n.settle();

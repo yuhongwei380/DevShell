@@ -2,6 +2,10 @@
 (() => {
   'use strict';
   const key = 'cloudshell.theme';
+  const uiStyles = new Set(['classic', 'frosted', 'polar', 'twilight']);
+  // Global workbench style: persisted through the appearance config, applied
+  // here before styles load so the first painted frame already matches.
+  document.documentElement.dataset.uiStyle = uiStyles.has(window.DEVSHELL?.uiStyle) ? window.DEVSHELL.uiStyle : 'classic';
   const system = matchMedia('(prefers-color-scheme: dark)');
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   let transition, transitionTimer, fallbackAnimation, generation = 0;
@@ -81,6 +85,12 @@
     get current() { return document.documentElement.dataset.theme; },
     get preference() { return preference; },
     set,
+    setStyle(style) {
+      const next = uiStyles.has(style) ? style : 'classic';
+      if (document.documentElement.dataset.uiStyle === next) return;
+      document.documentElement.dataset.uiStyle = next;
+      render(false);
+    },
     refreshSystem: refreshNativeTheme,
     toggle() { set(this.current === 'dark' ? 'light' : 'dark'); },
   });

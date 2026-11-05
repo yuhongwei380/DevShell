@@ -5,7 +5,7 @@
    字体或背景若已被删除会在应用时报错回滚，而不是留下半套外观。 */
 'use strict';
 window.DengThemeManager = (() => {
-  const snapshotKeys = ['theme', 'uiFontId', 'uiTextColors', 'fontId', 'fontColors', 'fontBold', 'ansiPalette', 'backgroundId', 'backgroundOpacity', 'terminalFontSize', 'chartStyles', 'promptUsernameColor', 'promptHostnameColor'];
+  const snapshotKeys = ['theme', 'uiStyle', 'uiFontId', 'uiTextColors', 'fontId', 'fontColors', 'fontBold', 'ansiPalette', 'backgroundId', 'backgroundOpacity', 'terminalFontSize', 'chartStyles', 'promptUsernameColor', 'promptHostnameColor'];
   const mapKeys = new Set(['uiTextColors', 'fontColors', 'fontBold', 'chartStyles']);
   const ansiLabels = { soft: '柔和', vivid: '高饱和', bright: '鲜亮' };
   const themeLabels = { system: '跟随系统', light: '浅色', dark: '深色' };

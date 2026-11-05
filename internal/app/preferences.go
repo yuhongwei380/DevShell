@@ -13,31 +13,36 @@ import (
 // Appearance is stored alongside connection settings, so native and browser
 // windows use the same selection and custom assets survive application upgrades.
 type Appearance struct {
-	UIFontID            string                    `json:"uiFontId"`
-	UITextColors        map[string]string         `json:"uiTextColors"`
-	FontID              string                    `json:"fontId"`
-	FontColors          map[string]string         `json:"fontColors,omitempty"`
-	FontBold            map[string]bool           `json:"fontBold"`
-	ChartStyles         map[string]ChartLineStyle `json:"chartStyles"`
-	BackgroundID        string                    `json:"backgroundId"`
-	BackgroundOpacity   float64                   `json:"backgroundOpacity"`
-	BackgroundVersion   int                       `json:"backgroundVersion"`
-	UIScale             float64                   `json:"uiScale"`
-	TerminalFontSize    float64                   `json:"terminalFontSize"`
-	TerminalBold        bool                      `json:"terminalBold,omitempty"` // Legacy input only; migrated to the selected font.
-	Theme               string                    `json:"theme"`
-	AnsiPalette         string                    `json:"ansiPalette,omitempty"` // soft (default) | vivid | bright
-	WindowWidth         int                       `json:"windowWidth"`
-	WindowHeight        int                       `json:"windowHeight"`
-	WindowMaximised     bool                      `json:"windowMaximised"`
-	OnboardingCompleted bool                      `json:"onboardingCompleted"`
-	MonitorVisible      bool                      `json:"monitorVisible"`
-	FilesPosition       string                    `json:"filesPosition"`
-	FollowTerminal      bool                      `json:"followTerminal"`
-	PromptUsernameColor string                    `json:"promptUsernameColor"`
-	PromptHostnameColor string                    `json:"promptHostnameColor"`
-	MinimizeAction      string                    `json:"minimizeAction"`
-	ExternalEditor      string                    `json:"externalEditor"`
+	UIFontID          string                    `json:"uiFontId"`
+	UITextColors      map[string]string         `json:"uiTextColors"`
+	FontID            string                    `json:"fontId"`
+	FontColors        map[string]string         `json:"fontColors,omitempty"`
+	FontBold          map[string]bool           `json:"fontBold"`
+	ChartStyles       map[string]ChartLineStyle `json:"chartStyles"`
+	BackgroundID      string                    `json:"backgroundId"`
+	BackgroundOpacity float64                   `json:"backgroundOpacity"`
+	BackgroundVersion int                       `json:"backgroundVersion"`
+	UIScale           float64                   `json:"uiScale"`
+	TerminalFontSize  float64                   `json:"terminalFontSize"`
+	TerminalBold      bool                      `json:"terminalBold,omitempty"` // Legacy input only; migrated to the selected font.
+	// UIStyle selects the global workbench style drawn in CSS (chrome,
+	// panels, dialogs and accents — not just a background picture). Each
+	// style paints its own light and dark variant and stays orthogonal to
+	// Theme, fonts, ANSI colours, background choice and layout.
+	UIStyle             string `json:"uiStyle"` // classic (default) | frosted | polar | twilight
+	Theme               string `json:"theme"`
+	AnsiPalette         string `json:"ansiPalette,omitempty"` // soft (default) | vivid | bright
+	WindowWidth         int    `json:"windowWidth"`
+	WindowHeight        int    `json:"windowHeight"`
+	WindowMaximised     bool   `json:"windowMaximised"`
+	OnboardingCompleted bool   `json:"onboardingCompleted"`
+	MonitorVisible      bool   `json:"monitorVisible"`
+	FilesPosition       string `json:"filesPosition"`
+	FollowTerminal      bool   `json:"followTerminal"`
+	PromptUsernameColor string `json:"promptUsernameColor"`
+	PromptHostnameColor string `json:"promptHostnameColor"`
+	MinimizeAction      string `json:"minimizeAction"`
+	ExternalEditor      string `json:"externalEditor"`
 	// UpdateMirror is the optional GitHub accelerator origin (ghproxy-style
 	// URL prefix) used for update manifest and artifact fetches. Empty means
 	// direct connections; signature, build and SHA-256 checks still apply.
@@ -74,6 +79,7 @@ type AppearanceTheme struct {
 	ID                  string                    `json:"id"`
 	Name                string                    `json:"name"`
 	Theme               string                    `json:"theme,omitempty"`
+	UIStyle             string                    `json:"uiStyle,omitempty"`
 	UIFontID            string                    `json:"uiFontId,omitempty"`
 	UITextColors        map[string]string         `json:"uiTextColors,omitempty"`
 	FontID              string                    `json:"fontId,omitempty"`
@@ -89,7 +95,7 @@ type AppearanceTheme struct {
 }
 
 func defaultAppearance() Appearance {
-	return Appearance{UIFontID: defaultUIFontID, UITextColors: map[string]string{}, FontID: "builtin:jetbrains-mono", FontColors: map[string]string{}, FontBold: map[string]bool{}, ChartStyles: map[string]ChartLineStyle{}, BackgroundID: "builtin:none", BackgroundOpacity: .42, BackgroundVersion: 2, UIScale: 1, TerminalFontSize: 14, Theme: "system", MonitorVisible: true, FilesPosition: "right", FollowTerminal: true, MinimizeAction: "ask", AutoCommandsEnabled: true, TcpToolsEnabled: true, Layout: map[string]json.RawMessage{}}
+	return Appearance{UIFontID: defaultUIFontID, UITextColors: map[string]string{}, FontID: "builtin:jetbrains-mono", FontColors: map[string]string{}, FontBold: map[string]bool{}, ChartStyles: map[string]ChartLineStyle{}, BackgroundID: "builtin:none", BackgroundOpacity: .42, BackgroundVersion: 2, UIScale: 1, TerminalFontSize: 14, UIStyle: "classic", Theme: "system", MonitorVisible: true, FilesPosition: "right", FollowTerminal: true, MinimizeAction: "ask", AutoCommandsEnabled: true, TcpToolsEnabled: true, Layout: map[string]json.RawMessage{}}
 }
 
 // Old releases combined 18% image opacity with a dark multiply tint. Keep
@@ -245,6 +251,13 @@ func normalizeAppearanceThemes(themes []AppearanceTheme) error {
 		if theme.Theme != "" && theme.Theme != "system" && theme.Theme != "light" && theme.Theme != "dark" {
 			return errors.New("主题明暗应为 system、light 或 dark")
 		}
+		if theme.UIStyle != "" {
+			switch theme.UIStyle {
+			case "classic", "frosted", "polar", "twilight":
+			default:
+				return errors.New("主题工作台样式应为 classic、frosted、polar 或 twilight")
+			}
+		}
 		if theme.AnsiPalette != "" && theme.AnsiPalette != "soft" && theme.AnsiPalette != "vivid" && theme.AnsiPalette != "bright" {
 			return errors.New("主题 ANSI 预设应为 soft、vivid 或 bright")
 		}
@@ -362,6 +375,14 @@ func (s *Store) saveAppearanceLocked(value Appearance) (Appearance, error) {
 	}
 	if value.Theme != "system" && value.Theme != "light" && value.Theme != "dark" {
 		return Appearance{}, errors.New("主题应为 system、light 或 dark")
+	}
+	if value.UIStyle == "" {
+		value.UIStyle = "classic"
+	}
+	switch value.UIStyle {
+	case "classic", "frosted", "polar", "twilight":
+	default:
+		return Appearance{}, errors.New("工作台样式应为 classic、frosted、polar 或 twilight")
 	}
 	if err := validateSavedLayout(value.Layout); err != nil {
 		return Appearance{}, err

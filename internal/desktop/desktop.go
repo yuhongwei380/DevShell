@@ -480,11 +480,35 @@ func runDesktopBackend(application desktopBackend, assets fs.FS, configDir, deta
 		go sweepDetachedWebviewCaches(configDir)
 	}
 	nativeHandler := nativeAssetHandler(application, assets)
+	// The native backdrop only prevents a flash before the webview paints;
+	// every global style paints its own materials inside the opaque window.
+	windowBackground := options.NewRGB(240, 243, 247)
+	darkAtStart := preferences.Theme == "dark" || (preferences.Theme == "system" && platformSystemTheme() == "dark")
+	switch preferences.UIStyle {
+	case "frosted":
+		if darkAtStart {
+			windowBackground = options.NewRGB(57, 54, 51)
+		} else {
+			windowBackground = options.NewRGB(232, 230, 223)
+		}
+	case "polar":
+		if darkAtStart {
+			windowBackground = options.NewRGB(36, 41, 51)
+		} else {
+			windowBackground = options.NewRGB(222, 229, 236)
+		}
+	case "twilight":
+		if darkAtStart {
+			windowBackground = options.NewRGB(22, 22, 30)
+		} else {
+			windowBackground = options.NewRGB(213, 214, 219)
+		}
+	}
 	return wails.Run(&options.App{
 		Title: "DevShell", Width: initial.Width, Height: initial.Height, MinWidth: initial.MinWidth, MinHeight: initial.MinHeight,
 		Frameless:        goruntime.GOOS == "windows",
 		StartHidden:      goruntime.GOOS == "windows",
-		BackgroundColour: options.NewRGB(240, 243, 247),
+		BackgroundColour: windowBackground,
 		AssetServer: &assetserver.Options{Assets: assets, Handler: nativeHandler, Middleware: func(next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Cache-Control", "no-store")

@@ -13,7 +13,7 @@ func TestAppearanceThemesPatchAndPersistence(t *testing.T) {
 		t.Fatal(err)
 	}
 	raw := `{"themes":[` +
-		`{"id":"11111111-1111-4111-8111-111111111111","name":"夜间工作","theme":"dark","fontId":"builtin:jetbrains-mono",` +
+		`{"id":"11111111-1111-4111-8111-111111111111","name":"夜间工作","theme":"dark","uiStyle":"frosted","fontId":"builtin:jetbrains-mono",` +
 		`"ansiPalette":"vivid","backgroundId":"builtin:none","backgroundOpacity":0,"terminalFontSize":16,` +
 		`"fontColors":{"builtin:jetbrains-mono":"#ABCDEF"},"chartStyles":{"upload":{"color":"#ff0000","width":3,"dashed":true}},` +
 		`"promptUsernameColor":"#AABBCC"},` +
@@ -22,7 +22,7 @@ func TestAppearanceThemesPatchAndPersistence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(saved.Themes) != 2 || saved.Themes[0].Name != "夜间工作" || saved.Themes[1].Theme != "light" {
+	if len(saved.Themes) != 2 || saved.Themes[0].Name != "夜间工作" || saved.Themes[1].Theme != "light" || saved.Themes[0].UIStyle != "frosted" {
 		t.Fatal("themes not stored", saved.Themes)
 	}
 	// 颜色统一小写；opacity 为 0 必须保留（与未设置可区分）。
@@ -71,6 +71,7 @@ func TestAppearanceThemesValidation(t *testing.T) {
 		{"重复标识", `{"themes":[{"id":"a1","name":"甲"},{"id":"a1","name":"乙"}]}`, "标识重复"},
 		{"名称含控制符", `{"themes":[{"id":"a1","name":"坏\n名"}]}`, "主题名称"},
 		{"无效明暗", `{"themes":[{"id":"a1","name":"甲","theme":"sepia"}]}`, "明暗"},
+		{"无效工作台样式", `{"themes":[{"id":"a1","name":"甲","uiStyle":"paper"}]}`, "工作台样式"},
 		{"无效 ANSI", `{"themes":[{"id":"a1","name":"甲","ansiPalette":"retro"}]}`, "ANSI"},
 		{"背景强度越界", `{"themes":[{"id":"a1","name":"甲","backgroundOpacity":1.5}]}`, "背景强度"},
 		{"字号越界", `{"themes":[{"id":"a1","name":"甲","terminalFontSize":6}]}`, "字号"},
@@ -114,4 +115,36 @@ func TestAppearanceThemesEmptyIsQuiet(t *testing.T) {
 	if strings.Contains(string(data), `"themes"`) {
 		t.Fatal("empty themes should be omitted from config JSON")
 	}
+}
+
+// 全局工作台样式：默认经典、四种枚举合法、非法值整笔拒绝且不动已存值。
+func TestAppearanceUIStyle(t *testing.T) {
+	store, err := OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := store.List().Appearance.UIStyle; got != "classic" {
+		t.Fatal("default style should be classic", got)
+	}
+	for _, style := range []string{"frosted", "polar", "twilight", "classic"} {
+		if saved, err := store.PatchAppearance(preferencePatch(t, `{"uiStyle":"`+style+`"}`)); err != nil || saved.UIStyle != style {
+			t.Fatalf("style %s rejected: %v %+v", style, err, saved)
+		}
+	}
+	if _, err := store.PatchAppearance(preferencePatch(t, `{"uiStyle":"vapor"}`)); err == nil || !strings.Contains(err.Error(), "工作台样式") {
+		t.Fatal("unknown style accepted", err)
+	}
+	if got := store.List().Appearance.UIStyle; got != "classic" {
+		t.Fatal("rejected style changed stored value", got)
+	}
+	if saved, err := reopenedSaveWithEmptyStyle(store); err != nil || saved.UIStyle != "classic" {
+		t.Fatal("empty style should normalize back to classic", saved.UIStyle, err)
+	}
+}
+
+// reopenedSaveWithEmptyStyle 模拟旧配置缺字段后整体重存时回退默认样式。
+func reopenedSaveWithEmptyStyle(store *Store) (Appearance, error) {
+	value := store.List().Appearance
+	value.UIStyle = ""
+	return store.saveAppearanceLocked(value)
 }
