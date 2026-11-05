@@ -93,7 +93,13 @@
   filter:blur(80px) saturate(1.25); animation:liquid-drift 36s ease-in-out infinite alternate; }
 @keyframes liquid-drift { from { transform:translate3d(-2.5%,-1.5%,0) scale(1.05); } to { transform:translate3d(2.5%,2%,0) scale(1.14); } }
 [data-ui-style="frosted"] .sidebar { background:var(--glass-sheen),var(--glass-sidebar); backdrop-filter:blur(26px) saturate(1.7) brightness(1.04); -webkit-backdrop-filter:blur(26px) saturate(1.7) brightness(1.04); box-shadow:var(--glass-edge),inset -1px 0 var(--border),var(--shadow); }
-[data-ui-style="frosted"] .sidebar :is(.system-section,.host-card,.disk-section,.network-card,.process-card,.process-details,.disk-resources,.disk-io) { background:transparent; box-shadow:none; backdrop-filter:none; -webkit-backdrop-filter:none; border-color:var(--border); }
+/* 宽屏下监控栏不再有自己的玻璃板：内容直接浮在画布上；液态玻璃只在顶栏、
+   终端与文件面板这些特定区域保持完整玻璃面。窄屏抽屉仍保留面板避免压字。 */
+:root:not([data-narrow="true"])[data-ui-style="frosted"] .sidebar { background:transparent; box-shadow:none; backdrop-filter:none; -webkit-backdrop-filter:none; }
+/* 监控栏只在玻璃板层面分割一次：卡片全部融入栏面，不再各自成盒；
+   列表行内保留极淡的发丝线即可。 */
+[data-ui-style="frosted"] .sidebar :is(.system-section,.host-card,.disk-section,.network-card,.process-card,.process-details,.disk-resources,.disk-io) { background:transparent; border:0; border-radius:0; box-shadow:none; backdrop-filter:none; -webkit-backdrop-filter:none; }
+[data-ui-style="frosted"] .sidebar :is(.disk-row + .disk-row,.process-table tbody tr + tr,.metric + .metric,.file-status) { border-color:var(--border); }
 [data-ui-style="frosted"] .files-panel { background:var(--glass-sheen),var(--glass-surface); box-shadow:var(--glass-edge),var(--shadow); backdrop-filter:blur(22px) saturate(1.7); -webkit-backdrop-filter:blur(22px) saturate(1.7); }
 /* Keep fixed window controls relative to the viewport: backdrop-filter on the
    header itself would create a new containing block for the floating brand. */
