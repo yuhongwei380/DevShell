@@ -22,7 +22,7 @@ const fontColorPresets = [
 const validFontColor = color => typeof color === 'string' && /^#[\da-f]{6}$/i.test(color);
 // Frosted glass paints a dark reading base even in light mode, so its default
 // terminal ink is warm beige; custom per-font colours always win.
-const colorForFont = (id = appearance.fontId) => validFontColor(appearance.fontColors?.[id]) ? appearance.fontColors[id].toLowerCase() : appearance.uiStyle === 'frosted' ? '#d8d2b5' : terminalDefaultColor;
+const colorForFont = (id = appearance.fontId) => validFontColor(appearance.fontColors?.[id]) ? appearance.fontColors[id].toLowerCase() : appearance.uiStyle === 'frosted' ? '#dbe1e8' : terminalDefaultColor;
 const boldForFont = (id = appearance.fontId) => appearance.fontBold?.[id] === true;
 function normalizeTerminalFontSize(value) { const number=Number(value); return Number.isFinite(number) ? Math.max(8,Math.min(40,Math.round(number*2)/2)) : 14; }
 const ansiPalettes = {
@@ -392,7 +392,7 @@ async function openAppearance(kind) {
   const isFont = kind === 'font';
   if (isFont) document.getElementById('ui-appearance-dialog')?.close();
   $('#appearance-title').textContent = isFont ? '字体设置 · Shell 字体' : '背景管理器';
-  $('#appearance-description').textContent = isFont ? '每款字体单独设置加粗和颜色，点击字体即可应用。' : appearance.uiStyle === 'frosted' ? '背景设置用于经典主题；毛玻璃不使用背景图片，原有选择会保留。' : '背景立即生效，可拖动此面板观察终端。';
+  $('#appearance-description').textContent = isFont ? '每款字体单独设置加粗和颜色，点击字体即可应用。' : appearance.uiStyle === 'frosted' ? '背景设置用于经典主题；液态玻璃不使用背景图片，原有选择会保留。' : '背景立即生效，可拖动此面板观察终端。';
   $('#import-asset span').textContent = isFont ? '导入字体' : '导入背景';
   $('#asset-picker').accept = isFont ? '.ttf,.otf,.woff,.woff2' : '.png,.jpg,.jpeg,.webp';
   $('#background-strength').hidden = isFont; $('#font-preview').hidden = !isFont;

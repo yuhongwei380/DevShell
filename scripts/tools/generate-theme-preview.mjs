@@ -38,7 +38,7 @@ const behavior = String.raw`
   systemRow.innerHTML = '<span>明暗跟随系统<small id="follow-system-theme-hint"></small></span><input id="follow-system-theme" type="checkbox" role="switch" aria-describedby="follow-system-theme-hint">';
   $('#settings-appearance-view .settings-submenu-heading').after(systemRow);
   $('#ui-scale').value = '1';
-  const styleNames = { classic: '经典', frosted: '毛玻璃', polar: '极地', twilight: '夜幕' };
+  const styleNames = { classic: '经典', frosted: '液态玻璃', polar: '极地', twilight: '夜幕' };
   const validStyle = value => ['classic', 'frosted', 'polar', 'twilight'].includes(value) ? value : 'frosted';
   let style = validStyle(params.get('style'));
   let preference = ['light','dark','system'].includes(params.get('mode')) ? params.get('mode') : 'dark';
@@ -169,7 +169,7 @@ const html = `<!doctype html>
   <style>
     /* 只有终端演示文本需要样式；全部控件使用产品 CSS。 */
     .preview-terminal-copy { margin:0; color:var(--terminal-foreground,#d3e0e8); font:14px/1.6 var(--terminal-family,monospace); white-space:pre; }
-    [data-ui-style="frosted"] .preview-terminal-copy { color:#d8d2b5; }
+    [data-ui-style="frosted"] .preview-terminal-copy { color:#dbe1e8; }
     :root[data-preview-opaque="true"][data-ui-style="frosted"] { --glass-surface:var(--glass-solid); --glass-toolbar:var(--glass-solid); --glass-sidebar:var(--glass-solid); --glass-popup:var(--glass-solid); --glass-terminal:var(--glass-terminal-solid); }
     [data-preview-opaque="true"] body::before { display:none; }
   </style>

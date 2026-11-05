@@ -7,7 +7,7 @@
   const status = document.getElementById('ui-style-status');
   const styles = [...dialog.querySelectorAll('[data-ui-style]')];
   const modes = [...dialog.querySelectorAll('[data-theme-mode]')];
-  const names = { classic: '经典', frosted: '毛玻璃', polar: '极地', twilight: '夜幕' };
+  const names = { classic: '经典', frosted: '液态玻璃', polar: '极地', twilight: '夜幕' };
   let saving = false;
   function currentStyle() { return ['frosted', 'polar', 'twilight'].includes(appearance.uiStyle) ? appearance.uiStyle : 'classic'; }
   function reflect() {

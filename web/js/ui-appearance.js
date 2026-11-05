@@ -128,7 +128,7 @@ window.DengUIAppearance = (() => {
   function fillColors() {
     if (!dialog) return;
     // Frosted glass ships its own warm ink defaults; custom colors still win.
-    const palette = appearance.uiStyle === 'frosted' ? { light: '#35362f', dark: '#e6e2d6' } : defaults;
+    const palette = appearance.uiStyle === 'frosted' ? { light: '#2c333a', dark: '#e7eaf0' } : defaults;
     for (const theme of ['light', 'dark']) {
       const row = dialog.querySelector(`[data-ui-color-theme="${theme}"]`), color = appearance.uiTextColors?.[theme] || palette[theme];
       row.querySelector('input[type=color]').value = color;

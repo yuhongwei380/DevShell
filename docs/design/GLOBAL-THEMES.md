@@ -24,17 +24,20 @@
 | 样式 | 浅色 | 深色 | 强调 | 模糊 |
 | --- | --- | --- | --- | --- |
 | 经典 | 现状不变 | 现状不变 | 现状 | 无 |
-| 毛玻璃 | 雾白 #faf9f5/76% | 烟灰 #2f2e2c/79% | 苔绿 #526944 / #c1ceb0 | 侧栏 32px、面板 20px、浮层 28px |
+| 液态玻璃 | 透璃白 rgb(255 255 255/58%) | 烟璃 #2d2f33/62% | 湖蓝 #2f6f9e / #93c2e8 | 侧栏 26px、面板 20–22px、浮层 30px（均加饱和） |
 | 极地 | 雪 #f6f9fc | 极夜板 #343c4a | 冰蓝 #3f6d94 / #88c0d0 | 无 |
 | 夜幕 | 日间 #eceef2 | 夜色板 #1f2133 | 蓝 #3763bd / #7aa2f7 | 无 |
 
 - 材质只重绘 CSS 变量（`--surface/--surface-inset/--surface-hover/--surface-selected/
   --text*/--accent/--border/--shadow`）与少量组件规则（顶栏伪元素、连续侧栏、
   终端面板、浮层），不新增布局、不改控件几何；经典完全不受影响。
-- **终端阅读底**：毛玻璃、极地、夜幕在两种明暗下都用深色终端底（毛玻璃
-  #1e1e1d/68%，实底 #242423；极地 #2b323e/浅 #3b4351；夜幕 #16161e/浅 #2a2f4a），
-  保证 ANSI 语义色可读；毛玻璃默认终端文字暖米 #d8d2b5，自定义字体颜色优先。
-- 毛玻璃不使用背景图（保存的 `backgroundId` 原样保留，切回经典即恢复）；
+- **终端阅读底**：液态玻璃、极地、夜幕在两种明暗下都用深色终端底（液态玻璃
+  #171a1e/68%，实底 #1b1e21；极地 #2b323e/浅 #3b4351；夜幕 #16161e/浅 #2a2f4a），
+  保证 ANSI 语义色可读；液态玻璃默认终端文字冷灰 #dbe1e8，自定义字体颜色优先。
+- 液态玻璃区别于平铺磨砂：面板更透明并加强底衬饱和（saturate 1.5–1.7），底层
+  四团光斑缓慢漂移（`liquid-drift`，`prefers-reduced-motion` 下静止），面板叠加
+  镜面光泽层（`--glass-sheen`）与边缘聚光内阴影（`--glass-edge`），配长弥散投影。
+- 液态玻璃不使用背景图（保存的 `backgroundId` 原样保留，切回经典即恢复）；
   极地/夜幕照常使用背景。
 - 回退：`@supports not (backdrop-filter)` 或 `prefers-reduced-transparency` →
   全部收敛到同色实底（--glass-solid / --glass-terminal-solid）；
@@ -66,4 +69,4 @@
 - 前端：`npm run check`；`test:theme` 增加 boot 样式、`setStyle` 白名单回退、
   setStyle 不直接持久化的断言。
 - 视觉：Edge 无头截图四样式×明暗 + 对话框（`docs/design/previews/`）。
-- 真机待办：macOS 原生窗口与 GPU 性能；毛玻璃在真实 WebView2 下的采样成本。
+- 真机待办：macOS 原生窗口与 GPU 性能；液态玻璃在真实 WebView2 下的采样成本。
