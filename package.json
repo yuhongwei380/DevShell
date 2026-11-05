@@ -14,6 +14,7 @@
     "test:traffic": "node scripts/tests/test-traffic-chart.mjs && node scripts/tests/test-network-refresh.mjs",
     "test:snapshot": "node scripts/tests/test-terminal-snapshot.mjs",
     "test:theme": "node scripts/tests/test-system-theme.mjs",
+    "test:tcp": "node scripts/tests/test-tcp-session.mjs",
     "test:system-identity": "node scripts/tests/test-system-identity.mjs",
     "test:global-history": "node scripts/tests/test-global-history.mjs",
     "test:local-history": "node scripts/tests/test-local-history.mjs",

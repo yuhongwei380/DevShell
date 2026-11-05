@@ -46,7 +46,9 @@
       sessions.delete(pendingID);
       // 重拨时旧会话的伪配置随旧标签一起退场，避免 temporaryProfiles 泄漏。
       if (previous && previous.profileId !== profileID) temporaryProfiles.delete(previous.profileId);
-      Object.assign(state, info, { cwd: '~', connected: true, localOnly: false, pendingConnection: false });
+      // TcpSessionInfo.host 是主机名，会撞掉 createTerminal 建立的 state.host DOM 容器，
+      // 导致后续 state.host.dataset 抛错、已建立的连接被挂起；第三参数把容器夺回来。
+      Object.assign(state, info, { host: state.host, cwd: '~', connected: true, localOnly: false, pendingConnection: false });
       sessions.set(state.id, state); state.host.dataset.session = state.id;
       state.openTerminalSocket();
       if (selected) activate(state.id); else renderTabs();
