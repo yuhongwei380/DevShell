@@ -169,7 +169,6 @@ const html = `<!doctype html>
   <style>
     /* 只有终端演示文本需要样式；全部控件使用产品 CSS。 */
     .preview-terminal-copy { margin:0; color:var(--terminal-foreground,#d3e0e8); font:14px/1.6 var(--terminal-family,monospace); white-space:pre; }
-    [data-ui-style="frosted"] .preview-terminal-copy { color:#dbe1e8; }
     :root[data-preview-opaque="true"][data-ui-style="frosted"] { --glass-surface:var(--glass-solid); --glass-toolbar:var(--glass-solid); --glass-sidebar:var(--glass-solid); --glass-popup:var(--glass-solid); --glass-terminal:var(--glass-terminal-solid); }
     [data-preview-opaque="true"] body::before { display:none; }
   </style>

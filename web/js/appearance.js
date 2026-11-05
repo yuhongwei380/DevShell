@@ -21,8 +21,8 @@ const fontColorPresets = [
 ];
 const validFontColor = color => typeof color === 'string' && /^#[\da-f]{6}$/i.test(color);
 // Frosted glass paints a dark reading base even in light mode, so its default
-// terminal ink is warm beige; custom per-font colours always win.
-const colorForFont = (id = appearance.fontId) => validFontColor(appearance.fontColors?.[id]) ? appearance.fontColors[id].toLowerCase() : appearance.uiStyle === 'frosted' ? '#dbe1e8' : terminalDefaultColor;
+// 液态玻璃沿用经典终端墨色（不改色板，只加玻璃材质）；每款字体的自定义色始终优先。
+const colorForFont = (id = appearance.fontId) => validFontColor(appearance.fontColors?.[id]) ? appearance.fontColors[id].toLowerCase() : terminalDefaultColor;
 const boldForFont = (id = appearance.fontId) => appearance.fontBold?.[id] === true;
 function normalizeTerminalFontSize(value) { const number=Number(value); return Number.isFinite(number) ? Math.max(8,Math.min(40,Math.round(number*2)/2)) : 14; }
 const ansiPalettes = {

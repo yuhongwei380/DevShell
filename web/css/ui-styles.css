@@ -30,14 +30,14 @@
 [data-theme="dark"] .ui-style-swatch-classic { background:#0f1419; }
 [data-theme="dark"] .ui-style-swatch-classic :is(i,b) { background:#24303a; }
 [data-theme="dark"] .ui-style-swatch-classic em { background:#0f161d; }
-.ui-style-swatch-frosted { background:#22252b; }
-.ui-style-swatch-frosted i { inset:0 auto 0 0; width:29%; border-radius:0; background:#2e3238b3; border-right:1px solid #ffffff20; box-shadow:inset -14px 0 26px -14px #4f97d466; }
-.ui-style-swatch-frosted b { background:#383c43cc; box-shadow:inset 0 1px #ffffff4d; }
-.ui-style-swatch-frosted em { background:#181a1da6; box-shadow:inset 0 1px #ffffff33,0 0 22px #4f97d433; }
-[data-theme="light"] .ui-style-swatch-frosted { background:#dde2e9; }
-[data-theme="light"] .ui-style-swatch-frosted i { background:#ffffff8c; border-color:#3c4d5f33; }
+.ui-style-swatch-frosted { background:#0f1419; }
+.ui-style-swatch-frosted i { inset:0 auto 0 0; width:29%; border-radius:0; background:#181f26b3; border-right:1px solid #ffffff26; box-shadow:inset -14px 0 26px -14px #658daf59; }
+.ui-style-swatch-frosted b { background:#181f26d9; box-shadow:inset 0 1px #ffffff3d; }
+.ui-style-swatch-frosted em { background:#0f161db3; box-shadow:inset 0 1px #ffffff2e,0 0 22px #658daf3d; }
+[data-theme="light"] .ui-style-swatch-frosted { background:#e7edf3; }
+[data-theme="light"] .ui-style-swatch-frosted i { background:#ffffffa6; border-color:#658daf33; }
 [data-theme="light"] .ui-style-swatch-frosted b { background:#ffffffd9; box-shadow:inset 0 1px #fff; }
-[data-theme="light"] .ui-style-swatch-frosted em { background:#1d2126bf; box-shadow:inset 0 1px #ffffff2e; }
+[data-theme="light"] .ui-style-swatch-frosted em { background:#223746cc; box-shadow:inset 0 1px #ffffff2e; }
 .ui-style-swatch-polar { background:#20242c; }
 .ui-style-swatch-polar i { background:#2e3440dd; border-right:1px solid #434c5e; }
 .ui-style-swatch-polar b { background:#3b4252; }
@@ -57,46 +57,49 @@
 #ui-styles-dialog .ui-style-status { margin:0; min-height:18px; font-size:12px; color:var(--muted); }
 @media(max-width:520px) { #ui-styles-dialog { padding:18px; } .ui-style-grid { gap:10px; } .ui-style-swatch { height:88px; } }
 
-/* —— 液态玻璃：折射底层色彩并在边缘聚光的半透明材质（经典配色不受影响）。
-   区别于平铺磨砂：面板更透明、底衬采样加强饱和，让底层流动的光色透过玻璃；
-   边缘高光与内阴影模拟透镜聚光，表面罩一层镜面光泽，配长而弥散的投影，
-   面板像悬浮在内容之上的玻璃板。样式键保持 frosted，仅展示名改为液态玻璃。 —— */
+/* —— 液态玻璃：在经典主题原版配色之上加折射玻璃材质。
+   文字、强调色、边框、终端色板全部原样继承经典，不改色板；只是面板填充
+   变为半透明：背景模糊折射、边缘聚光高光、镜面光泽与长投影让它像悬浮
+   的玻璃板。样式键保持 frosted，展示名为液态玻璃。 —— */
 :root[data-ui-style="frosted"][data-theme] {
-  --glass-base:#2a2c30; --glass-sheen:linear-gradient(150deg,#ffffff22,#ffffff00 42%,#ffffff00 58%,#ffffff0f);
-  --glass-surface:rgb(45 47 51 / .66); --glass-toolbar:rgb(56 58 62 / .64);
-  --glass-sidebar:rgb(45 47 51 / .68); --glass-popup:rgb(48 50 54 / .84); --glass-input:rgb(232 240 250 / .07);
-  --glass-terminal:rgb(19 21 23 / .64); --glass-solid:#313338; --glass-terminal-solid:#1b1d20;
-  --glass-edge:inset 0 1px 0 #ffffff55,inset 0 -1px 0 #ffffff14,inset 0 0 0 1px #ffffff14;
-  --surface:var(--glass-surface); --surface-inset:var(--glass-input); --surface-hover:#ffffff12; --surface-selected:#9fc4e024;
-  --text:#e7eaf0; --text-secondary:#c9cdd5; --muted:#a9adb6; --text-faint:#979ca6; --accent:#93c2e8; --border:#ffffff20;
-  --focus-surface:#93c2e826; --focus-input:#3a3d42; --primary-focus:#5f89ab; --shadow:0 16px 44px -12px #00000066,0 2px 10px #00000038;
-  color-scheme:dark; background:var(--glass-base); color:var(--text);
+  --glass-base:#0f1419;
+  --glass-sheen:linear-gradient(150deg,#ffffff1a,#ffffff00 42%,#ffffff00 58%,#ffffff0c);
+  --glass-surface:rgb(24 31 38 / .7); --glass-toolbar:rgb(24 31 38 / .68);
+  --glass-sidebar:rgb(21 28 35 / .66); --glass-popup:rgb(24 31 38 / .88); --glass-input:rgb(19 26 33 / .62);
+  --glass-terminal:rgb(15 22 29 / .8); --glass-solid:#181f26; --glass-terminal-solid:#0f161d;
+  --glass-edge:inset 0 1px 0 #ffffff30,inset 0 -1px 0 #ffffff0d,inset 0 0 0 1px #ffffff10;
+  --surface:var(--glass-surface); --surface-inset:var(--glass-input);
+  --surface-hover:rgb(36 48 58 / .6); --surface-selected:rgb(33 57 72 / .72);
+  --shadow:0 16px 44px -12px #00000080,0 2px 10px #00000044;
+  color-scheme:dark; background:var(--glass-base);
 }
 :root[data-ui-style="frosted"][data-theme="light"] {
-  --glass-base:#e9ecf0; --glass-sheen:linear-gradient(150deg,#ffffffd8,#ffffff00 44%,#ffffff00 60%,#ffffff66);
-  --glass-surface:rgb(255 255 255 / .58); --glass-toolbar:rgb(255 255 255 / .64);
-  --glass-sidebar:rgb(255 255 255 / .48); --glass-popup:rgb(252 253 255 / .84); --glass-input:rgb(35 55 75 / .06);
-  --glass-terminal:rgb(23 26 30 / .68); --glass-solid:#f3f5f7; --glass-terminal-solid:#1b1e21;
-  --glass-edge:inset 0 1px 0 #ffffffe0,inset 0 -1px 0 #ffffff66,inset 0 0 0 1px #7f93a724;
-  --surface:var(--glass-surface); --surface-inset:var(--glass-input); --surface-hover:#2f42560e; --surface-selected:#38678d1f;
-  --text:#2c333a; --text-secondary:#454c55; --muted:#5c646e; --text-faint:#707881; --accent:#2f6f9e; --border:#38495b22;
-  --focus-surface:#38678d1e; --focus-input:#fffffff2; --primary-focus:#2f6f9e; --shadow:0 16px 44px -12px #26364633,0 2px 10px #26364617;
+  --glass-base:#f0f3f7;
+  --glass-sheen:linear-gradient(150deg,#ffffffd0,#ffffff00 44%,#ffffff00 60%,#ffffff59);
+  --glass-surface:rgb(255 255 255 / .72); --glass-toolbar:rgb(255 255 255 / .74);
+  --glass-sidebar:rgb(255 255 255 / .66); --glass-popup:rgb(255 255 255 / .9); --glass-input:rgb(244 247 249 / .75);
+  --glass-terminal:rgb(34 55 70 / .82); --glass-solid:#ffffff; --glass-terminal-solid:#223746;
+  --glass-edge:inset 0 1px 0 #ffffffe6,inset 0 -1px 0 #ffffff7a,inset 0 0 0 1px #64809a1f;
+  --surface:var(--glass-surface); --surface-inset:var(--glass-input);
+  --surface-hover:#e9eef4cc; --surface-selected:#d6e8f4b8;
+  --shadow:0 16px 44px -12px #293f5630,0 2px 10px #293f5614;
   color-scheme:light;
 }
-[data-ui-style="frosted"][data-theme="light"] body::before { opacity:.42; }
-[data-ui-style="frosted"][data-theme="light"] :is(.primary-button,.dialog-actions .primary-button) { background:#2f6f9e; color:#fff; }
 [data-ui-style="frosted"] body { background:var(--glass-base); color:var(--text); isolation:isolate; }
+[data-ui-style="frosted"][data-theme="light"] body { background:radial-gradient(ellipse at 15% 0%,#f9fafc,#f0f3f7 70%); }
 /* 底层大色斑缓慢漂移，为玻璃提供可折射的流动光色——液态玻璃的「液态」。
-   深色下压低强度：光色是透过玻璃的折射，不该把画布染浊。 */
-[data-ui-style="frosted"] body::before { content:""; position:fixed; z-index:-1; pointer-events:none; inset:-14%; opacity:.45;
-  background:radial-gradient(38% 44% at 22% 22%,#35708f,#0000 62%),radial-gradient(42% 38% at 76% 14%,#4a418f,#0000 64%),radial-gradient(46% 50% at 70% 80%,#8a5a35,#0000 62%),radial-gradient(40% 42% at 24% 76%,#2a7a66,#0000 64%);
-  filter:blur(80px) saturate(1.25); animation:liquid-drift 36s ease-in-out infinite alternate; }
+   色相取经典强调色同族的蓝：光色是折射，不引入经典色板之外的颜色。 */
+[data-ui-style="frosted"] body::before { content:""; position:fixed; z-index:-1; pointer-events:none; inset:-14%; opacity:.5;
+  background:radial-gradient(38% 44% at 22% 22%,#31536e,#0000 62%),radial-gradient(42% 38% at 76% 14%,#25405a,#0000 64%),radial-gradient(46% 50% at 70% 80%,#1c3145,#0000 62%),radial-gradient(40% 42% at 24% 76%,#3a5f7d,#0000 64%);
+  filter:blur(80px); animation:liquid-drift 36s ease-in-out infinite alternate; }
+[data-ui-style="frosted"][data-theme="light"] body::before {
+  background:radial-gradient(38% 44% at 22% 22%,#c9d8e6,#0000 62%),radial-gradient(42% 38% at 76% 14%,#d7e2ec,#0000 64%),radial-gradient(46% 50% at 70% 80%,#c2d2e1,#0000 62%),radial-gradient(40% 42% at 24% 76%,#d3e0ea,#0000 64%); }
 @keyframes liquid-drift { from { transform:translate3d(-2.5%,-1.5%,0) scale(1.05); } to { transform:translate3d(2.5%,2%,0) scale(1.14); } }
-[data-ui-style="frosted"] .sidebar { background:var(--glass-sheen),var(--glass-sidebar); backdrop-filter:blur(26px) saturate(1.7) brightness(1.04); -webkit-backdrop-filter:blur(26px) saturate(1.7) brightness(1.04); box-shadow:var(--glass-edge),inset -1px 0 var(--border),var(--shadow); }
+[data-ui-style="frosted"] .sidebar { background:var(--glass-sheen),var(--glass-sidebar); backdrop-filter:blur(26px) saturate(1.2) brightness(1.03); -webkit-backdrop-filter:blur(26px) saturate(1.2) brightness(1.03); box-shadow:var(--glass-edge),inset -1px 0 var(--border),var(--shadow); }
 /* 宽屏下监控栏是与终端、文件面板同语言的悬浮玻璃卡：16px 圆角、四周留
    网格缝、同一套边缘高光与投影；栏内卡片仍全部融入卡面，不再成盒。
    窄屏抽屉保持通高面板避免压字。 */
-:root:not([data-narrow="true"])[data-ui-style="frosted"] .sidebar { background:var(--glass-sheen),var(--glass-sidebar); box-shadow:var(--glass-edge),var(--shadow); backdrop-filter:blur(26px) saturate(1.7) brightness(1.04); -webkit-backdrop-filter:blur(26px) saturate(1.7) brightness(1.04); border-radius:16px; }
+:root:not([data-narrow="true"])[data-ui-style="frosted"] .sidebar { background:var(--glass-sheen),var(--glass-sidebar); box-shadow:var(--glass-edge),var(--shadow); backdrop-filter:blur(26px) saturate(1.2) brightness(1.03); -webkit-backdrop-filter:blur(26px) saturate(1.2) brightness(1.03); border-radius:16px; }
 /* 玻璃面上不留硬描边：芯片只靠底面色差成块，面板内分隔用明暗差完成，
    不出现直角发丝线。输入控件的细边框保留（那是控件，不是卡片）。 */
 [data-ui-style="frosted"] .address-copy { border:0; border-radius:10px; }
@@ -107,31 +110,25 @@
    列表行内保留极淡的发丝线即可。 */
 [data-ui-style="frosted"] .sidebar :is(.system-section,.host-card,.disk-section,.network-card,.process-card,.process-details,.disk-resources,.disk-io) { background:transparent; border:0; border-radius:0; box-shadow:none; backdrop-filter:none; -webkit-backdrop-filter:none; }
 [data-ui-style="frosted"] .sidebar :is(.disk-row + .disk-row,.process-table tbody tr + tr,.metric + .metric,.file-status) { border-color:var(--border); }
-[data-ui-style="frosted"] .files-panel { background:var(--glass-sheen),var(--glass-surface); box-shadow:var(--glass-edge),var(--shadow); backdrop-filter:blur(22px) saturate(1.7); -webkit-backdrop-filter:blur(22px) saturate(1.7); }
+[data-ui-style="frosted"] .files-panel { background:var(--glass-sheen),var(--glass-surface); box-shadow:var(--glass-edge),var(--shadow); backdrop-filter:blur(22px) saturate(1.2); -webkit-backdrop-filter:blur(22px) saturate(1.2); }
 /* Keep fixed window controls relative to the viewport: backdrop-filter on the
    header itself would create a new containing block for the floating brand. */
 [data-ui-style="frosted"] .session-bar { position:relative; isolation:isolate; background:transparent; backdrop-filter:none; -webkit-backdrop-filter:none; margin:6px var(--workspace-inset) 0; border-radius:16px; }
-[data-ui-style="frosted"] .session-bar::before { content:""; position:absolute; z-index:-1; inset:0; pointer-events:none; background:var(--glass-sheen),var(--glass-toolbar); border-radius:inherit; box-shadow:var(--glass-edge); backdrop-filter:blur(24px) saturate(1.7) brightness(1.04); -webkit-backdrop-filter:blur(24px) saturate(1.7) brightness(1.04); }
+[data-ui-style="frosted"] .session-bar::before { content:""; position:absolute; z-index:-1; inset:0; pointer-events:none; background:var(--glass-sheen),var(--glass-toolbar); border-radius:inherit; box-shadow:var(--glass-edge); backdrop-filter:blur(24px) saturate(1.2) brightness(1.03); -webkit-backdrop-filter:blur(24px) saturate(1.2) brightness(1.03); }
 [data-ui-style="frosted"] .session-bar .brand { border-color:var(--border); }
 [data-ui-style="frosted"] .session-bar .window-controls { background:var(--surface-inset); }
-[data-ui-style="frosted"] .session-tab { color:var(--muted); background:transparent; }
-[data-ui-style="frosted"] .session-tab.active { background:var(--glass-popup); color:var(--text); box-shadow:var(--glass-edge); }
-[data-ui-style="frosted"] .terminal-panel { background:var(--glass-sheen),var(--glass-terminal); box-shadow:var(--glass-edge),var(--shadow); backdrop-filter:blur(22px) saturate(1.5); -webkit-backdrop-filter:blur(22px) saturate(1.5); }
+[data-ui-style="frosted"] .session-tab { background:transparent; border:0; border-radius:12px; }
+[data-ui-style="frosted"] .session-tab.active { background:var(--glass-popup); box-shadow:var(--glass-edge); }
+[data-ui-style="frosted"] .terminal-panel { background:var(--glass-sheen),var(--glass-terminal); box-shadow:var(--glass-edge),var(--shadow); backdrop-filter:blur(22px) saturate(1.15); -webkit-backdrop-filter:blur(22px) saturate(1.15); }
 [data-ui-style="frosted"] .terminal-panel::before,[data-ui-style="frosted"] .terminal-panel::after { display:none; background-image:none; }
 [data-ui-style="frosted"] .terminal-panel :is(.terminal-meta,.terminal-command-bar) { background:#ffffff08; border-color:#ffffff16; backdrop-filter:none; -webkit-backdrop-filter:none; }
-[data-ui-style="frosted"] .terminal-panel :is(.terminal-tool,.terminal-protocol,#terminal-meta-host) { color:#c7ccd4; }
-[data-ui-style="frosted"] .terminal-panel .terminal-command-bar textarea { color:#dfe3e9; }
-[data-ui-style="frosted"] .terminal-panel .terminal-command-bar textarea::placeholder { color:#a9aeb7; }
-[data-ui-style="frosted"] .terminal-panel .terminal-tool:hover { background:#ffffff14; color:#fff; }
 [data-ui-style="frosted"] :is(dialog,.connections-drawer,.settings-menu,.popup-menu,.themed-select-popup) { background:var(--glass-sheen),var(--glass-popup); color:var(--text); border-color:var(--border); box-shadow:0 22px 64px #00000055,var(--glass-edge); backdrop-filter:blur(30px) saturate(1.6); -webkit-backdrop-filter:blur(30px) saturate(1.6); }
 [data-ui-style="frosted"] :is(.specs,.cpu-model,.metric,.chart-caption,.process-heading,.disk-row,.file-status,.file-table,.tree-row,.tree-shortcut,.connection-card-text,.drawer-heading h2,dialog h2,.brand) { color:var(--text); }
 [data-ui-style="frosted"] :is(.process-table,.file-table) :is(th,td),[data-ui-style="frosted"] .system-section :is(h2,b,strong) { color:var(--text-secondary); border-color:var(--border); }
 [data-ui-style="frosted"] :is(.file-table thead,.files-toolbar,.file-tabs,.file-status,.directory-tree,.commands-toolbar,.transfer-notice) { background:transparent; border-color:var(--border); }
 [data-ui-style="frosted"] :is(.file-search,.path-form,.connection-search,.meter,dialog input,dialog select,dialog textarea,.server-icon,.themed-select-trigger,.count-badge,.upload-button) { background:var(--glass-input); color:var(--text); border-color:var(--border); }
 [data-ui-style="frosted"] :is(.connection-card,.tree-row,.tree-shortcut,.file-tab).selected,[data-ui-style="frosted"] .file-tab.active,[data-ui-style="frosted"] .file-table tr.selected { background:var(--surface-selected); color:var(--accent); }
-[data-ui-style="frosted"] :is(.primary-button,.dialog-actions .primary-button) { background:#5f89ab; color:#f2f7fc; }
 [data-ui-style="frosted"] button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
-[data-ui-style="frosted"] :is(#appearance-dialog .font-list .font-sample,.font-preview,.ui-color-sample.dark,.color-dialog-preview,#diagnostics-output) { background:var(--glass-terminal-solid); color:#dbe1e8; border-color:var(--border); }
 /* Stable opaque equivalents preserve readability when transparency is unavailable. */
 @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))) {
   [data-ui-style="frosted"] body::before { display:none; }
