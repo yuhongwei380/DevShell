@@ -3,7 +3,9 @@ body { transform-origin:0 0; }
 .brand-logo { width:26px; height:26px; flex-shrink:0; }
 .session-bar { --wails-draggable:drag; user-select:none; gap:5px; min-width:0; }
 .session-bar :is(button,input,select,.session-tab) { --wails-draggable:no-drag; }
-.session-bar .brand { --wails-draggable:no-drag; }
+/* 品牌区（窄屏外固定悬浮在监控栏上方）的空白处应能拖动窗口；
+   其中按钮由上一条规则单独排除。 */
+.session-bar .brand { --wails-draggable:drag; }
 .session-tabs { min-width:0; }
 #settings-button { flex-shrink:0; color:var(--muted); }
 #about-dialog { width:360px; }
