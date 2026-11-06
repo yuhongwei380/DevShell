@@ -14,6 +14,7 @@ async function connectCase({ keyId = 'shared', keyPath = '/fixture/external-key'
   const context = {
     profiles: [profile], managedKeys: [{ id: 'shared', encrypted: true, hasPassphrase: false }],
     sessions: new Map(), connecting: new Set(), connectionAttempts: new Map(), connectionRequests: new Map(), credentials: new Map(),
+    temporaryProfiles: new Set(), declinedCredentials: new Set(),
     nextSessionOrder: 0, activeID: null, AbortController, crypto: webcrypto, window: {},
     connectionProfile: id => id === profile.id ? profile : undefined,
     makeSessionState: info => ({ ...info, host: { dataset: {} }, openTerminalSocket() {} }),
@@ -76,7 +77,7 @@ const element = selector => {
   if (!nodes.has(selector)) nodes.set(selector, { hidden: false, textContent: '', showModal() {} });
   return nodes.get(selector);
 };
-const form = { elements: Object.fromEntries(['id', 'auth', 'keyId', 'protocol'].map(name => [name, { value: '' }])) };
+const form = { elements: Object.fromEntries(['id', 'auth', 'keyId', 'protocol', 'host', 'port', 'user', 'serialPort'].map(name => [name, { value: '' }])) };
 nodes.set('#connection-form', form);
 form.elements.auth.value = 'key'; form.elements.keyId.value = 'shared';
 const context = { $: element, profiles: [], managedKeys: [{ id: 'shared', encrypted: true, hasPassphrase: true }], native: () => null };

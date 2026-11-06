@@ -93,7 +93,7 @@ const parentPath = path => normalizePath('..', path);
 
 // Consistent in-app dialogs; serialised so multiple transfer errors cannot overlap.
 let dialogQueue = Promise.resolve();
-function ask({ title, description = '', input = false, value = '', secret = false, confirm = '确定', alt = '', signal }) {
+function ask({ title, description = '', input = false, value = '', secret = false, confirm = '确定', alt = '', signal, cancelKey = false }) {
   const result = dialogQueue.then(() => new Promise(resolve => {
     if (signal?.aborted) return resolve(null);
     const dialog = $('#action-dialog');
@@ -107,8 +107,18 @@ function ask({ title, description = '', input = false, value = '', secret = fals
     altButton.onclick = () => finish('alt');
     let done = false;
     const cancel = () => finish(null);
-    const finish = answer => { if (done) return; done = true; altButton.onclick = null; signal?.removeEventListener('abort', cancel); dialog.close(); resolve(answer); };
+    const finish = answer => { if (done) return; done = true; altButton.onclick = null; signal?.removeEventListener('abort', cancel); dialog.removeEventListener('keydown', onCtrlC); dialog.close(); resolve(answer); };
     signal?.addEventListener('abort', cancel, { once: true });
+    // cancelKey: connection-flow prompts also accept Ctrl+C as cancel (Xshell
+    // muscle memory). Copy stays intact — a live selection falls through.
+    const onCtrlC = event => {
+      if (!cancelKey || event.type !== 'keydown' || !event.ctrlKey || event.altKey || event.code !== 'KeyC') return;
+      if (input && $('#action-input').selectionStart !== $('#action-input').selectionEnd) return;
+      if (window.getSelection?.().toString()) return;
+      event.preventDefault();
+      cancel();
+    };
+    if (cancelKey) dialog.addEventListener('keydown', onCtrlC);
     $('#action-form').onsubmit = event => { event.preventDefault(); finish(input ? $('#action-input').value : true); };
     $('#action-cancel').onclick = () => finish(null);
     dialog.oncancel = event => { event.preventDefault(); finish(null); };
@@ -237,8 +247,8 @@ async function connectProfile(profileID, { background = false, previous = null, 
       // These are exactly the auth modes persistRunCredential can write back, so
       // say up front that a successful connection stores the credential (a
       // not-yet-saved quick connection has no row to write into).
-      const promptNote = (profile.auth === 'key' ? '如果私钥没有加密，可直接确定。' : `${profile.user}@${profile.host}:${profile.port}`) + (temporaryProfiles.has(profileID) || declinedCredentials.has(profileID) ? '' : '\n连接成功后凭据会加密保存到该连接，之后自动连接。');
-      secret = await ask({ title: profile.auth === 'key' ? `私钥口令 · ${profile.name}` : `连接 ${profile.name}`, description: promptNote, input: true, secret: true, confirm: '连接', signal: state.connectionAbort.signal });
+      const promptNote = (profile.auth === 'key' ? '如果私钥没有加密，可直接确定。' : `${profile.user}@${profile.host}:${profile.port}`) + (temporaryProfiles.has(profileID) || declinedCredentials.has(profileID) ? '' : '\n连接成功后凭据会加密保存到该连接，之后自动连接。') + '\n按 Ctrl+C 可取消本次连接。';
+      secret = await ask({ title: profile.auth === 'key' ? `私钥口令 · ${profile.name}` : `连接 ${profile.name}`, description: promptNote, input: true, secret: true, confirm: '连接', signal: state.connectionAbort.signal, cancelKey: true });
       if (!alive()) return null;
       if (secret === null) { showConnectionProgress(state, '已取消连接', true); return null; }
       if (profile.auth === 'password' && !secret) throw new Error('请输入 SSH 密码');
@@ -254,7 +264,7 @@ async function connectProfile(profileID, { background = false, previous = null, 
           if (!['ssh_host_key_unknown', 'ssh_host_key_changed'].includes(error.code) || !error.hostKey || confirmations >= 2) throw error;
           const key = error.hostKey, changed = error.code === 'ssh_host_key_changed';
           showConnectionProgress(state, '等待核实服务器指纹...');
-          const accepted = await ask({ title: changed ? `服务器指纹已变化 · ${profile.name}` : `首次连接 · ${profile.name}`, description: `${key.host}\n算法：${key.algorithm}\n${changed ? `原指纹：${key.previousFingerprint}\n` : ''}新指纹：${key.fingerprint}\n\n${changed ? '服务器重装、密钥更换或连接被冒充都可能导致此变化。' : ''}请通过服务器控制台或可信管理员核对指纹；确认一致后才继续发送登录凭据。`, confirm: '已核实，信任并连接', signal: state.connectionAbort.signal });
+          const accepted = await ask({ title: changed ? `服务器指纹已变化 · ${profile.name}` : `首次连接 · ${profile.name}`, description: `${key.host}\n算法：${key.algorithm}\n${changed ? `原指纹：${key.previousFingerprint}\n` : ''}新指纹：${key.fingerprint}\n\n${changed ? '服务器重装、密钥更换或连接被冒充都可能导致此变化。' : ''}请通过服务器控制台或可信管理员核对指纹；确认一致后才继续发送登录凭据。按 Ctrl+C 可取消本次连接。`, confirm: '已核实，信任并连接', signal: state.connectionAbort.signal, cancelKey: true });
           if (!alive()) return null;
           if (!accepted) { showConnectionProgress(state, '已取消连接', true); return null; }
           hostKeyApproval = { host: key.host, fingerprint: key.fingerprint, previousFingerprint: key.previousFingerprint };
@@ -263,9 +273,19 @@ async function connectProfile(profileID, { background = false, previous = null, 
       }
     };
     let info;
-    try { info = await requestConnection(); }
+    const attemptOnce = async () => {
+      const pending = requestConnection();
+      const value = await awaitConnection(pending, state);
+      // Ctrl+C 或关闭标签会先结束等待（桌面 IPC 无法中断在途请求）：
+      // 请求若在之后仍成功，销毁这个迟建的会话。
+      if (!value) pending.then(late => { if (late?.id) remove(`/api/sessions/${late.id}`).catch(() => {}); }).catch(() => {});
+      return value;
+    };
+    try { info = await attemptOnce(); }
     catch (error) {
       if (!alive()) return null;
+      // Ctrl+C 取消：AbortError 不是认证失败，不删缓存凭据、也不再弹重输框。
+      if (state.connectionCancelled) return null;
       credentials.delete(profileID);
       const needsKeyPassphrase = profile.auth === 'key' && ['ssh_key_passphrase_required', 'ssh_key_passphrase_invalid'].includes(error.code);
       if (!needsKeyPassphrase && !(profile.auth === 'password' && error.code === 'ssh_authentication_failed')) throw error;
@@ -275,17 +295,17 @@ async function connectProfile(profileID, { background = false, previous = null, 
       // passphrases stay owned by the key manager and are never overwritten here.
       const replacesStored = profile.auth !== 'key' || !profile.keyId;
       credentialRetried = replacesStored;
-      secret = await ask({ title: `${needsKeyPassphrase ? (error.code === 'ssh_key_passphrase_required' ? '私钥口令' : '重新输入私钥口令') : '重新输入 SSH 密码'} · ${profile.name}`, description: error.message + `\n本次输入会替代缓存凭据${replacesStored ? '；连接成功后同时替换该连接已保存的旧凭据。' : '，不会修改密钥管理器中保存的口令。'}`, input: true, secret: true, confirm: '连接', signal: state.connectionAbort.signal });
+      secret = await ask({ title: `${needsKeyPassphrase ? (error.code === 'ssh_key_passphrase_required' ? '私钥口令' : '重新输入私钥口令') : '重新输入 SSH 密码'} · ${profile.name}`, description: error.message + `\n本次输入会替代缓存凭据${replacesStored ? '；连接成功后同时替换该连接已保存的旧凭据。' : '，不会修改密钥管理器中保存的口令。'}\n按 Ctrl+C 可取消本次连接。`, input: true, secret: true, confirm: '连接', signal: state.connectionAbort.signal, cancelKey: true });
       if (!alive()) return null;
       if (secret === null) { showConnectionProgress(state, '已取消连接', true); return null; }
       if (profile.auth === 'password' && !secret) throw new Error('请输入 SSH 密码');
       showConnectionProgress(state, '连接主机...');
-      info = await requestConnection();
+      info = await attemptOnce();
     }
     if (!info) return null;
-    // The user may close/retry this tab while a native request is still running.
+    // The user may close/retry this tab (or press Ctrl+C) while a native request is still running.
     // Dispose only that late result; never resurrect its placeholder or touch a newer attempt.
-    if (!alive()) { await remove(`/api/sessions/${info.id}`).catch(() => {}); return null; }
+    if (!alive() || state.connectionCancelled) { await remove(`/api/sessions/${info.id}`).catch(() => {}); return null; }
     const pendingID = state.id, selected = activeID === pendingID;
     sessions.delete(pendingID);
     Object.assign(state, info, { cwd: info.home, connected: true, localOnly: false, pendingConnection: false });
@@ -314,8 +334,11 @@ async function connectProfile(profileID, { background = false, previous = null, 
     return state;
   } catch (error) {
     if (alive()) {
-      showConnectionProgress(state, '连接主机失败：' + (error.message || String(error)), true); if (profile.verbose) startVerboseDiagnostics(state, profile.verbose, `handshake-${profileID}`); toast(`❌  ${profile.name}：${error.message || error}`);
-      if (!background && ['ssh_key_missing', 'ssh_key_unavailable', 'ssh_private_key_invalid', 'ssh_proxy_missing'].includes(error.code)) showConnectionForm(profile);
+      if (state.connectionCancelled || error?.name === 'AbortError') showConnectionProgress(state, '已取消连接（Ctrl+C）', true);
+      else {
+        showConnectionProgress(state, '连接主机失败：' + (error.message || String(error)), true); if (profile.verbose) startVerboseDiagnostics(state, profile.verbose, `handshake-${profileID}`); toast(`❌  ${profile.name}：${error.message || error}`);
+        if (!background && ['ssh_key_missing', 'ssh_key_unavailable', 'ssh_private_key_invalid', 'ssh_proxy_missing'].includes(error.code)) showConnectionForm(profile);
+      }
     }
     return null;
   } finally {
@@ -323,6 +346,29 @@ async function connectProfile(profileID, { background = false, previous = null, 
     if (alive() && state.localOnly) { state.pendingConnection = false; renderTabs(); if (current() === state) renderSessionInfo(); }
     renderConnections(); updateStatus();
   }
+}
+// Ctrl+C（或标签上的「取消连接」）打断进行中的连接尝试：AbortController 取消
+// 在途的 POST /api/sessions，后端请求上下文随之取消、握手中途关闭 socket；
+// 绑定同一信号的凭据/指纹对话框也会关闭。标签保留为本机提示符，可再次连接。
+function cancelPendingConnection(state) {
+  if (!state?.pendingConnection || state.closed || state.connectionCancelled) return;
+  state.connectionCancelled = true;
+  state.connectionAbort?.abort();
+  showConnectionProgress(state, '已取消连接（Ctrl+C）', true);
+}
+// 让连接请求与其 AbortController 赛跑：桌面模式的 IPC 不响应 fetch abort，
+// 取消时先让标签立即回到本机提示符，迟到的成功结果由调用方销毁。
+function awaitConnection(attempt, state) {
+  const signal = state.connectionAbort.signal;
+  if (signal.aborted) return Promise.resolve(null);
+  return new Promise((resolve, reject) => {
+    const onAbort = () => resolve(null);
+    signal.addEventListener('abort', onAbort, { once: true });
+    attempt.then(
+      value => { signal.removeEventListener('abort', onAbort); resolve(value); },
+      error => { signal.removeEventListener('abort', onAbort); reject(error); },
+    );
+  });
 }
 function writeTerminalAndWait(state, text = '') {
   if (state.closed) return Promise.resolve(false);
@@ -427,6 +473,8 @@ function createTerminal(state) {
     if (event.ctrlKey && !event.altKey && event.code === 'KeyC') {
       event.preventDefault();
       if (event.shiftKey) copyTerminalSelection(state).catch(() => toast('无法访问剪贴板'));
+      // 正在连接时 Ctrl+C 取消本次连接尝试，而不是向尚未建立的会话发 \x03。
+      else if (state.pendingConnection) cancelPendingConnection(state);
       else { terminal.clearSelection(); terminal.scrollToBottom(); sendInput(state, '\x03'); }
       return false;
     }
