@@ -63,45 +63,51 @@
    的玻璃板。样式键保持 frosted，展示名为液态玻璃。 —— */
 :root[data-ui-style="frosted"][data-theme] {
   --glass-base:#0f1419;
-  --glass-sheen:linear-gradient(150deg,#ffffff1a,#ffffff00 42%,#ffffff00 58%,#ffffff0c);
-  --glass-terminal-sheen:linear-gradient(150deg,#ffffff12,#ffffff00 48%,#ffffff08);
-  --glass-surface:rgb(24 31 38 / .7); --glass-toolbar:rgb(24 31 38 / .68);
-  --glass-sidebar:rgb(21 28 35 / .66); --glass-popup:rgb(24 31 38 / .88); --glass-input:rgb(13 18 24 / .72);
-  --glass-terminal:rgb(15 22 29 / .8); --glass-solid:#181f26; --glass-terminal-solid:#0f161d;
-  --glass-edge:inset 0 1px 0 #ffffff30,inset 0 -1px 0 #ffffff0d,inset 0 0 0 1px #ffffff10;
+  --glass-sheen:linear-gradient(150deg,#ffffff26,#ffffff00 40%,#ffffff00 56%,#ffffff17);
+  --glass-terminal-sheen:linear-gradient(150deg,#ffffff16,#ffffff00 48%,#ffffff0d);
+  --glass-surface:rgb(24 31 38 / .6); --glass-toolbar:rgb(24 31 38 / .6);
+  --glass-sidebar:rgb(21 28 35 / .55); --glass-popup:rgb(24 31 38 / .84); --glass-input:rgb(13 18 24 / .72);
+  --glass-terminal:rgb(15 22 29 / .7); --glass-solid:#181f26; --glass-terminal-solid:#0f161d;
+  --glass-edge:inset 0 1px 0 #d9ecff4d,inset 0 -1px 0 #ffc98f1a,inset 0 0 0 1px #ffffff12,inset 0 0 34px -14px #ffffff3d;
   --glass-ring:inset 0 0 0 1px #ffffff22;
   --surface:var(--glass-surface); --surface-inset:var(--glass-input);
   --surface-hover:rgb(36 48 58 / .6); --surface-selected:rgb(33 57 72 / .72);
-  --shadow:0 16px 44px -12px #00000080,0 2px 10px #00000044;
+  --shadow:0 26px 70px -18px #000000a6,0 3px 14px #00000059;
   color-scheme:dark; background:var(--glass-base);
 }
 :root[data-ui-style="frosted"][data-theme="light"] {
   --glass-base:#f0f3f7;
-  --glass-sheen:linear-gradient(150deg,#ffffffd0,#ffffff00 44%,#ffffff00 60%,#ffffff59);
-  --glass-surface:rgb(255 255 255 / .72); --glass-toolbar:rgb(255 255 255 / .74);
-  --glass-sidebar:rgb(255 255 255 / .66); --glass-popup:rgb(255 255 255 / .9); --glass-input:rgb(244 247 249 / .75);
-  --glass-terminal:rgb(34 55 70 / .82); --glass-solid:#ffffff; --glass-terminal-solid:#223746;
-  --glass-edge:inset 0 1px 0 #ffffffe6,inset 0 -1px 0 #ffffff7a,inset 0 0 0 1px #64809a1f;
+  --glass-sheen:linear-gradient(150deg,#ffffffea,#ffffff00 42%,#ffffff00 58%,#ffffff7a);
+  --glass-surface:rgb(255 255 255 / .58); --glass-toolbar:rgb(255 255 255 / .62);
+  --glass-sidebar:rgb(255 255 255 / .52); --glass-popup:rgb(255 255 255 / .84); --glass-input:rgb(244 247 249 / .75);
+  --glass-terminal:rgb(34 55 70 / .72); --glass-solid:#ffffff; --glass-terminal-solid:#223746;
+  --glass-edge:inset 0 1px 0 #fffffff2,inset 0 -1px 0 #d9b58c26,inset 0 0 0 1px #64809a22,inset 0 0 34px -16px #5c7c9c1c;
   --glass-ring:inset 0 0 0 1px #64809a2e;
   --surface:var(--glass-surface); --surface-inset:var(--glass-input);
   --surface-hover:#e9eef4cc; --surface-selected:#d6e8f4b8;
-  --shadow:0 16px 44px -12px #293f5630,0 2px 10px #293f5614;
+  --shadow:0 26px 70px -20px #293f5645,0 3px 14px #293f561d;
   color-scheme:light;
 }
 [data-ui-style="frosted"] body { background:var(--glass-base); color:var(--text); isolation:isolate; }
 [data-ui-style="frosted"][data-theme="light"] body { background:radial-gradient(ellipse at 15% 0%,#f9fafc,#f0f3f7 70%); }
 /* 底层大色斑缓慢漂移，为玻璃提供可折射的流动光色——液态玻璃的「液态」。
-   色相取经典强调色同族的蓝：光色是折射，不引入经典色板之外的颜色。 */
-[data-ui-style="frosted"] body::before { content:""; position:fixed; z-index:-1; pointer-events:none; inset:-14%; opacity:.5;
-  background:radial-gradient(38% 44% at 22% 22%,#31536e,#0000 62%),radial-gradient(42% 38% at 76% 14%,#25405a,#0000 64%),radial-gradient(46% 50% at 70% 80%,#1c3145,#0000 62%),radial-gradient(40% 42% at 24% 76%,#3a5f7d,#0000 64%);
-  filter:blur(80px); animation:liquid-drift 36s ease-in-out infinite alternate; }
+   色相取经典强调色同族的蓝；两层光场以不同速度反向漂移形成视差，
+   玻璃板后的世界明显在流动，这是与经典主题最直观的差异。 */
+[data-ui-style="frosted"] body::before { content:""; position:fixed; z-index:-1; pointer-events:none; inset:-14%; opacity:.72;
+  background:radial-gradient(38% 44% at 22% 22%,#34607e,#0000 62%),radial-gradient(42% 38% at 76% 14%,#274a6c,#0000 64%),radial-gradient(46% 50% at 70% 80%,#1d3a5c,#0000 62%),radial-gradient(40% 42% at 24% 76%,#3e6f96,#0000 64%);
+  filter:blur(90px); animation:liquid-drift 36s ease-in-out infinite alternate; }
+[data-ui-style="frosted"] body::after { content:""; position:fixed; z-index:-1; pointer-events:none; inset:-30%; opacity:.55;
+  background:radial-gradient(42% 46% at 62% 30%,#3a6d95,#0000 60%),radial-gradient(36% 40% at 30% 70%,#20405f,#0000 62%);
+  filter:blur(120px); animation:liquid-drift 52s ease-in-out infinite alternate-reverse; }
 [data-ui-style="frosted"][data-theme="light"] body::before {
-  background:radial-gradient(38% 44% at 22% 22%,#c9d8e6,#0000 62%),radial-gradient(42% 38% at 76% 14%,#d7e2ec,#0000 64%),radial-gradient(46% 50% at 70% 80%,#c2d2e1,#0000 62%),radial-gradient(40% 42% at 24% 76%,#d3e0ea,#0000 64%); }
+  background:radial-gradient(38% 44% at 22% 22%,#b7cfe6,#0000 62%),radial-gradient(42% 38% at 76% 14%,#c8dcee,#0000 64%),radial-gradient(46% 50% at 70% 80%,#a6c3e0,#0000 62%),radial-gradient(40% 42% at 24% 76%,#d2e4f4,#0000 64%); }
+[data-ui-style="frosted"][data-theme="light"] body::after { opacity:.6;
+  background:radial-gradient(42% 46% at 62% 30%,#aecbe8,#0000 60%),radial-gradient(36% 40% at 30% 70%,#c2d8ec,#0000 62%); }
 @keyframes liquid-drift { from { transform:translate3d(-2.5%,-1.5%,0) scale(1.05); } to { transform:translate3d(2.5%,2%,0) scale(1.14); } }
-[data-ui-style="frosted"] .sidebar { background:var(--glass-sheen),var(--glass-sidebar); backdrop-filter:blur(26px) saturate(1.2) brightness(1.03); -webkit-backdrop-filter:blur(26px) saturate(1.2) brightness(1.03); box-shadow:var(--glass-edge),inset -1px 0 var(--border),var(--shadow); }
+[data-ui-style="frosted"] .sidebar { background:var(--glass-sheen),var(--glass-sidebar); backdrop-filter:blur(30px) saturate(1.8) brightness(1.05); -webkit-backdrop-filter:blur(30px) saturate(1.8) brightness(1.05); box-shadow:var(--glass-edge),inset -1px 0 var(--border),var(--shadow); }
 /* 宽屏下监控玻璃面从顶部工具栏下方开始，与 Shell 和 SFTP 对齐。
    窄屏抽屉保持原来的定位。 */
-:root:not([data-narrow="true"])[data-ui-style="frosted"] .sidebar { background:var(--glass-sheen),var(--glass-sidebar); box-shadow:var(--glass-edge),var(--shadow); backdrop-filter:blur(26px) saturate(1.2) brightness(1.03); -webkit-backdrop-filter:blur(26px) saturate(1.2) brightness(1.03); border-radius:16px; }
+:root:not([data-narrow="true"])[data-ui-style="frosted"] .sidebar { background:var(--glass-sheen),var(--glass-sidebar); box-shadow:var(--glass-edge),var(--shadow); backdrop-filter:blur(30px) saturate(1.8) brightness(1.05); -webkit-backdrop-filter:blur(30px) saturate(1.8) brightness(1.05); border-radius:20px; }
 html[data-ui-style="frosted"]:not([data-narrow="true"]):not([data-monitor-visible="false"]) .sidebar { margin-top:48px; padding-top:0; }
 /* 玻璃面上不留硬描边：芯片只靠底面色差成块，面板内分隔用明暗差完成，
    不出现直角发丝线。输入控件的细边框保留（那是控件，不是卡片）。 */
@@ -116,14 +122,14 @@ html[data-ui-style="frosted"]:not([data-narrow="true"]):not([data-monitor-visibl
 [data-ui-style="frosted"] .sidebar .process-details { margin-top:18px; }
 [data-ui-style="frosted"] .sidebar .disk-readout:is(.read,.write) { padding:0; background:transparent; }
 [data-ui-style="frosted"] .sidebar :is(.disk-row + .disk-row,.process-table tbody tr + tr,.metric + .metric,.file-status) { border-color:var(--border); }
-[data-ui-style="frosted"] .files-panel { background:var(--glass-sheen),var(--glass-surface); box-shadow:var(--glass-edge),var(--shadow); backdrop-filter:blur(22px) saturate(1.2); -webkit-backdrop-filter:blur(22px) saturate(1.2); }
+[data-ui-style="frosted"] .files-panel { background:var(--glass-sheen),var(--glass-surface); box-shadow:var(--glass-edge),var(--shadow); border-radius:20px; backdrop-filter:blur(26px) saturate(1.7); -webkit-backdrop-filter:blur(26px) saturate(1.7); }
 /* 会话栏直接融入工作台背景，Shell 和 SFTP 的面板间距负责区分区域。 */
 [data-ui-style="frosted"] .session-bar { background:transparent; box-shadow:none; backdrop-filter:none; -webkit-backdrop-filter:none; }
 [data-ui-style="frosted"] .session-bar .brand { border-color:var(--border); }
 [data-ui-style="frosted"] .session-bar .window-controls { background:var(--surface-inset); }
 [data-ui-style="frosted"] .session-tab { background:transparent; border:0; border-radius:12px; }
 [data-ui-style="frosted"] .session-tab.active { background:var(--glass-popup); box-shadow:var(--glass-edge); }
-[data-ui-style="frosted"] .terminal-panel { background:var(--glass-terminal-sheen),var(--glass-terminal); box-shadow:var(--glass-edge),var(--shadow); backdrop-filter:blur(22px) saturate(1.15); -webkit-backdrop-filter:blur(22px) saturate(1.15); }
+[data-ui-style="frosted"] .terminal-panel { background:var(--glass-terminal-sheen),var(--glass-terminal); box-shadow:var(--glass-edge),var(--shadow); border-radius:20px; backdrop-filter:blur(26px) saturate(1.5); -webkit-backdrop-filter:blur(26px) saturate(1.5); }
 [data-ui-style="frosted"] .terminal-panel::before,[data-ui-style="frosted"] .terminal-panel::after { display:none; background-image:none; }
 [data-ui-style="frosted"] .terminal-panel :is(.terminal-meta,.terminal-command-bar) { background:#ffffff08; border-color:#ffffff16; backdrop-filter:none; -webkit-backdrop-filter:none; }
 [data-ui-style="frosted"] :is(dialog,.connections-drawer,.settings-menu,.popup-menu,.themed-select-popup) { background:var(--glass-sheen),var(--glass-popup); color:var(--text); border-color:var(--border); box-shadow:0 22px 64px #00000055,var(--glass-edge); backdrop-filter:blur(30px) saturate(1.6); -webkit-backdrop-filter:blur(30px) saturate(1.6); }
@@ -137,17 +143,17 @@ html[data-ui-style="frosted"]:not([data-narrow="true"]):not([data-monitor-visibl
 [data-ui-style="frosted"] button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 /* Stable opaque equivalents preserve readability when transparency is unavailable. */
 @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))) {
-  [data-ui-style="frosted"] body::before { display:none; }
+  [data-ui-style="frosted"] body::before,[data-ui-style="frosted"] body::after { display:none; }
   :root[data-ui-style="frosted"][data-theme] { --glass-sheen:none; --glass-terminal-sheen:none; --glass-edge:0 0 0 0 transparent; --glass-ring:inset 0 0 0 1px var(--border); --glass-surface:var(--glass-solid); --glass-toolbar:var(--glass-solid); --glass-sidebar:var(--glass-solid); --glass-popup:var(--glass-solid); --glass-terminal:var(--glass-terminal-solid); }
 }
 @media (prefers-reduced-transparency:reduce) {
-  [data-ui-style="frosted"] body::before { display:none; }
+  [data-ui-style="frosted"] body::before,[data-ui-style="frosted"] body::after { display:none; }
   :root[data-ui-style="frosted"][data-theme] { --glass-sheen:none; --glass-terminal-sheen:none; --glass-edge:0 0 0 0 transparent; --glass-ring:inset 0 0 0 1px var(--border); --glass-surface:var(--glass-solid); --glass-toolbar:var(--glass-solid); --glass-sidebar:var(--glass-solid); --glass-popup:var(--glass-solid); --glass-terminal:var(--glass-terminal-solid); }
   [data-ui-style="frosted"] :is(.sidebar,.session-bar,.files-panel,.terminal-panel,dialog,.connections-drawer,.settings-menu,.popup-menu,.themed-select-popup) { backdrop-filter:none; -webkit-backdrop-filter:none; }
 }
-@media (prefers-reduced-motion:reduce) { [data-ui-style="frosted"] body::before { animation:none; } }
+@media (prefers-reduced-motion:reduce) { [data-ui-style="frosted"] body::before,[data-ui-style="frosted"] body::after { animation:none; } }
 @media (forced-colors:active) {
-  [data-ui-style="frosted"] body::before { display:none; }
+  [data-ui-style="frosted"] body::before,[data-ui-style="frosted"] body::after { display:none; }
   [data-ui-style="frosted"] :is(.sidebar,.files-panel,.terminal-panel,dialog,.connections-drawer,.settings-menu,.popup-menu,.themed-select-popup) { background:Canvas; color:CanvasText; outline:1px solid CanvasText; backdrop-filter:none; -webkit-backdrop-filter:none; box-shadow:none; }
   .ui-style-card[aria-pressed="true"],.ui-style-segmented button[aria-pressed="true"] { border:2px solid Highlight; }
 }
