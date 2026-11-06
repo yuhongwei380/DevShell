@@ -111,7 +111,12 @@ type UpdateStatus struct {
 	Reason         string `json:"reason,omitempty"`
 	// Mirror is the accelerator host that actually served the manifest or
 	// release list for this result; empty means the direct GitHub channel.
-	Mirror  string         `json:"mirror,omitempty"`
+	Mirror string `json:"mirror,omitempty"`
+	// Channel records which manual-check channel produced this offer:
+	// "" keeps the build's default discovery, "release" stays on stable
+	// releases, "rc" includes prerelease publishes. A staged download
+	// repeats the channel when it refreshes a stale offer.
+	Channel string         `json:"channel,omitempty"`
 	Package *UpdatePackage `json:"package,omitempty"`
 }
 type UpdateReceipt struct {
@@ -148,6 +153,7 @@ type UpdateDownload struct {
 	Error        string        `json:"error,omitempty"`
 	File         string        `json:"-"`
 	Package      UpdatePackage `json:"-"`
+	channel      string
 	cancel       context.CancelFunc
 	releaseLease func()
 }
@@ -158,7 +164,7 @@ type startupUpdate struct {
 	mu       sync.Mutex
 	job      *UpdateDownload
 	manualMu sync.Mutex
-	probe    func(context.Context, time.Duration) UpdateStatus // test seam; nil uses updateProbe
+	probe    func(context.Context, time.Duration, string) UpdateStatus // test seam; nil uses updateProbe
 }
 
 // Integrity failures mean the cached offer trails the shipped assets, for
@@ -247,7 +253,7 @@ func (a *App) beginUpdateCheck() {
 			defer close(a.updateCheck.done)
 			ctx, cancel := context.WithTimeout(a.ctx, updateTimeout)
 			defer cancel()
-			a.setUpdateResult(boundedUpdateProbe(ctx, func() UpdateStatus { return a.updateProbe(ctx, updateTimeout) }))
+			a.setUpdateResult(boundedUpdateProbe(ctx, func() UpdateStatus { return a.updateProbe(ctx, updateTimeout, "") }))
 		}()
 	})
 }
@@ -266,9 +272,28 @@ func (a *App) getUpdateResult() UpdateStatus {
 	return a.updateCheck.result
 }
 
+// updateWantsReleaseList decides which discovery endpoint one check uses.
+// The full release list carries rc prereleases, so it is required for rc
+// builds and for the explicit "rc" manual channel (which lets a stable
+// build opt into a newer rc publish); "release" stays on the stable
+// latest-release assets even for rc builds, and "" keeps the build's
+// default behaviour.
+func updateWantsReleaseList(channel string) bool {
+	switch channel {
+	case "rc":
+		return true
+	case "release":
+		return false
+	default:
+		return isReleaseCandidateBuild()
+	}
+}
+
 // updateProbe runs one end-to-end update check; the manual settings action
-// reuses it with a longer budget than the non-blocking startup probe.
-func (a *App) updateProbe(ctx context.Context, timeout time.Duration) UpdateStatus {
+// reuses it with a longer budget than the non-blocking startup probe. The
+// channel selects the manual discovery mode described by
+// updateWantsReleaseList; startup and legacy callers pass "".
+func (a *App) updateProbe(ctx context.Context, timeout time.Duration, channel string) UpdateStatus {
 	exe, err := os.Executable()
 	if err != nil {
 		return noUpdate("unavailable")
@@ -285,7 +310,7 @@ func (a *App) updateProbe(ctx context.Context, timeout time.Duration) UpdateStat
 	mirror := a.store.UpdateMirror()
 	address, artifact := updateAddress(platform)
 	client := updateClient(timeout, mirror)
-	if isReleaseCandidateBuild() {
+	if updateWantsReleaseList(channel) {
 		source, reason, viaMirror := latestReleaseUpdateSource(ctx, client, platform, mirror)
 		if reason != "" {
 			result := noUpdate(reason)
@@ -558,11 +583,25 @@ func (a *App) registerUpdateHTTP(mux *http.ServeMux) {
 		}
 	})
 	mux.HandleFunc("POST /api/updates/check", func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			Channel string `json:"channel"`
+		}
+		if !decode(w, r, &request) {
+			return
+		}
+		channel := strings.ToLower(strings.TrimSpace(request.Channel))
+		switch channel {
+		case "", "release", "rc":
+		default:
+			respond(w, nil, errors.New("更新通道应为 release 或 rc"))
+			return
+		}
 		a.updateCheck.manualMu.Lock()
 		defer a.updateCheck.manualMu.Unlock()
 		ctx, cancel := context.WithTimeout(r.Context(), manualUpdateTimeout)
 		defer cancel()
-		result := a.updateProbe(ctx, manualUpdateTimeout)
+		result := a.updateProbe(ctx, manualUpdateTimeout, channel)
+		result.Channel = channel
 		a.setUpdateResult(result)
 		writeJSON(w, result)
 	})
@@ -632,7 +671,7 @@ func (a *App) StartUpdateDownload(hash string) (UpdateDownload, error) {
 		return UpdateDownload{}, e
 	}
 	ctx, cancel := context.WithTimeout(a.ctx, 15*time.Minute)
-	job := &UpdateDownload{ID: randomID(), Status: "downloading", Total: offer.Package.Size, File: filepath.Join(dir, filepath.Base(offer.Package.URL)), Package: *offer.Package, cancel: cancel}
+	job := &UpdateDownload{ID: randomID(), Status: "downloading", Total: offer.Package.Size, File: filepath.Join(dir, filepath.Base(offer.Package.URL)), Package: *offer.Package, channel: offer.Channel, cancel: cancel}
 	job.releaseLease = release
 	a.updateCheck.job = job
 	go a.downloadUpdate(ctx, job)
@@ -684,12 +723,14 @@ func (a *App) downloadUpdate(ctx context.Context, job *UpdateDownload) {
 			}
 			// The offer predates re-published assets: refresh the check once
 			// and retarget the job at the current package before retrying.
+			// The refresh keeps the channel that produced the original offer
+			// so an rc-channel job never falls back to the stable list.
 			refreshed = true
 			probe := a.updateProbe
 			if a.updateCheck.probe != nil {
 				probe = a.updateCheck.probe
 			}
-			offer := boundedUpdateProbe(ctx, func() UpdateStatus { return probe(ctx, updateTimeout) })
+			offer := boundedUpdateProbe(ctx, func() UpdateStatus { return probe(ctx, updateTimeout, job.channel) })
 			a.setUpdateResult(offer)
 			if offer.Status != "available" || offer.Package == nil || (offer.Package.URL == job.Package.URL && offer.Package.SHA256 == job.Package.SHA256 && offer.Package.Size == job.Total) {
 				return last

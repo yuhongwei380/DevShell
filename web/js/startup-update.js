@@ -21,10 +21,25 @@
   dialog.addEventListener('close',()=>{stopped=true;dialog.remove();resolve()},{once:true});document.body.append(dialog);dialog.showModal();later.focus();
  })}
  let checking=false;
-async function checkNow(){
- if(checking)return;checking=true;toast('正在检查更新…');
- try{
-  const result=await post('/api/updates/check',{});
+ // 手动检查更新先选通道：「更新 release」只查找正式版；「更新 rc 版本」走
+ // 完整 Releases 列表（含 rc 预览），正式版也可直接升级到更新的 rc 构建。
+ // 启动自动检查不走这里，仍按当前构建类型自动选择。
+ function pickUpdateChannel(){return new Promise(resolve=>{
+  const dialog=document.createElement('dialog');dialog.className='manager-dialog startup-update-dialog';dialog.id='update-channel-dialog';
+  dialog.innerHTML='<div class="dialog-heading"><div><h2>检查更新方式</h2><p>选择本次手动检查使用的更新通道</p></div><button type="button" class="icon-button" aria-label="关闭更新方式选择"><svg><use href="#i-close"/></svg></button></div><div class="update-channel-options"><label class="update-channel-option"><input type="radio" name="update-channel" value="release" checked><span><strong>更新 release</strong><em>只查找正式 release 版本；当前运行 rc 预览版时也可直接升级到正式版</em></span></label><label class="update-channel-option"><input type="radio" name="update-channel" value="rc"><span><strong>更新 rc 版本</strong><em>查找最新 rc 预览版；允许正式版升级到更新的 rc 构建</em></span></label><p class="update-channel-help">两种通道都会继续校验产品、平台、构建高水位与 SHA-256，不会降级到更低构建。当前运行 rc 预览版时默认选中「更新 rc 版本」。</p></div><div class="dialog-buttons"><button type="button" class="secondary-button" id="update-channel-cancel">取消</button><button type="button" class="primary-button" id="update-channel-go">开始检查</button></div>';
+  if(/-rc\.?\d/.test(String(window.DEVSHELL?.displayVersion||'')))dialog.querySelector('input[value="rc"]').checked=true;
+  const cancel=()=>dialog.close(),go=()=>{const value=dialog.querySelector('input[name="update-channel"]:checked')?.value||'release';dialog.close();resolve(value)};
+  dialog.querySelector('#update-channel-go').onclick=go;dialog.querySelector('#update-channel-cancel').onclick=cancel;dialog.querySelector('.icon-button').onclick=cancel;
+  dialog.oncancel=event=>{event.preventDefault();cancel()};
+  dialog.addEventListener('close',()=>{dialog.remove();resolve('')},{once:true});
+  document.body.append(dialog);dialog.showModal();
+ });}
+ async function checkNow(channel){
+  if(checking)return;
+  if(channel!=='release'&&channel!=='rc'){channel=await pickUpdateChannel();if(!channel)return}
+  checking=true;toast(channel==='rc'?'正在检查更新（rc 版本）…':'正在检查更新（release）…');
+  try{
+   const result=await post('/api/updates/check',{channel});
   if(result?.status==='available'){await showUpdate(result);return;}
   const label=(version,build)=>build?`${version}（构建 ${build}）`:version;
   if(result?.reason==='current'||result?.reason==='build-rollback'||result?.reason==='version-rollback')toast(`已是最新版本 ${label(result.currentVersion,result.currentBuild)}`);

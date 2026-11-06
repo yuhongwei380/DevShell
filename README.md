@@ -406,7 +406,7 @@ SWAP 支持常用容量及自定义大小，并根据文件系统和交换区类
 
 ### 升级
 
-启动时可以检查新版本，确认后下载并校验大小、SHA-256 与更高构建号；描述一旦携带任何签名字段，则必须通过 Ed25519 与有效期校验（本分支发布未签名描述，信任锚是 GitHub Releases 的 HTTPS 来源加 SHA-256，见 [更新器约定](docs/release/UPDATER-CONTRACT.md)）。在线更新载荷：Windows `up.exe`；macOS 通用应用包 `DevShell-macos-universal.zip`，配 `up-macos-arm64.json` / `up-macos-amd64.json` 两份描述。自 2026-10-20 起 Linux 停止发版，已安装的 Linux 客户端检查更新时会看到「Linux 版已停止发布更新」的明确提示，当前版本可继续使用，历史安装包保留在 Releases 旧版本。当前属于退出并重启的更新方式（Windows 替换程序，macOS 原子替换 `.app` 并自动启动新版本），不保留正在运行的 SSH 会话；GitHub 发布本身不自动部署官网的更新文件。
+启动时可以检查新版本，确认后下载并校验大小、SHA-256 与更高构建号；描述一旦携带任何签名字段，则必须通过 Ed25519 与有效期校验（本分支发布未签名描述，信任锚是 GitHub Releases 的 HTTPS 来源加 SHA-256，见 [更新器约定](docs/release/UPDATER-CONTRACT.md)）。手动「检查更新」会先选择通道：「更新 release」只查找正式版；「更新 rc 版本」查找完整 Releases 列表（含 rc 预览版），正式版也可直接升级到构建号更新的 rc 版本；两个通道共用同一套构建高水位与校验，不会降级。在线更新载荷：Windows `up.exe`；macOS 通用应用包 `DevShell-macos-universal.zip`，配 `up-macos-arm64.json` / `up-macos-amd64.json` 两份描述。自 2026-10-20 起 Linux 停止发版，已安装的 Linux 客户端检查更新时会看到「Linux 版已停止发布更新」的明确提示，当前版本可继续使用，历史安装包保留在 Releases 旧版本。当前属于退出并重启的更新方式（Windows 替换程序，macOS 原子替换 `.app` 并自动启动新版本），不保留正在运行的 SSH 会话；GitHub 发布本身不自动部署官网的更新文件。
 
 检查更新与下载共用代理策略：优先读取对应协议的 `HTTPS_PROXY` / `HTTP_PROXY`，其次 `ALL_PROXY`（兼容小写名称），并遵守 `NO_PROXY`。未设置环境变量时，Windows 跟随当前用户的系统代理（包括 FlClash 系统代理和可解析的 PAC）；Linux 读取 GNOME 或 KDE 的手动代理。支持 HTTP CONNECT、HTTPS 代理和 SOCKS5；代理地址变化在下一次请求生效，正在下载的连接需取消后重试。没有代理时直连；已配置的代理连接失败不会偷偷改为直连。Linux 自动代理脚本尚不支持，可改用系统手动代理或上述环境变量。SSH 连接仍使用各自的连接代理设置。
 

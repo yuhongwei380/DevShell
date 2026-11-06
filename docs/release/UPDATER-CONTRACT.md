@@ -8,6 +8,7 @@
 - Arch pacman（R28 起）：固定 `/up.pkg.tar.zst.json` 与 `/up.pkg.tar.zst`，签名中的平台为 `linux-amd64-pacman`。
 - 发版策略（2026-10-20）：仅发布 Windows 与 macOS；Linux 载荷 `up.deb` / `up.pkg.tar.zst` 及其描述文件不再发布，端点名保留仅供已部署的 Linux 客户端探测——返回 404 时客户端提示「Linux 版已停止发布更新」，不再误报网络故障。
 - 来源固定为 `https://github.com/yuhongwei380/DevShell` 的 Releases 下载（仅允许 GitHub 官方资产主机 `objects.githubusercontent.com` 与 `release-assets.githubusercontent.com` 跳转），不接受其他跨域更新下载或描述文件指定的命令。
+- 手动「检查更新」先选通道：「更新 release」只查 `/releases/latest` 正式版资产；「更新 rc 版本」读取完整 Releases 列表（含 prerelease），允许正式版升级到更新的 rc 构建；启动自动检查按当前构建类型自动选择。两个通道共用同一套构建高水位与校验，不放宽降级限制。
 - 描述文件可不带签名（信任锚为 GitHub Releases 与 HTTPS）；一旦携带任何签名字段，则必须通过 Ed25519 验证。
 - 版本号规则 `vX.Y.Z`：X 为年份后两位，Y 为月份（不补零），Z 为当月第几个版本（从 0 起）；`build` 为 `YYYYMMDD` + 两位当日序号（2026-10-24 起；此前为三位序号，历史十一位构建号继续有效，已安装旧构建需手动安装新构建一次），每次发布递增，禁止回退。
 - schema 2；新版强制验证 SHA-256、大小、版本与构建高水位，描述文件携带签名字段时额外强制 Ed25519 验证与有效期；Arch 独立验证包格式、名称、架构和 pkgrel。
