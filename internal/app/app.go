@@ -240,6 +240,10 @@ func (a *App) Handler(assets fs.FS) http.Handler {
 		a.disconnect(r.PathValue("id"))
 		writeJSON(w, map[string]bool{"ok": true})
 	})
+	mux.HandleFunc("POST /api/sessions/{id}/channel", func(w http.ResponseWriter, r *http.Request) {
+		s, err := a.CloneSessionChannel(r.Context(), r.PathValue("id"))
+		respond(w, s, err)
+	})
 	mux.HandleFunc("GET /api/sessions/{id}/disconnect-diagnostic", a.sshDisconnectDiagnosticHTTP)
 	mux.HandleFunc("GET /api/sessions/{id}/verbose", a.sshVerboseHTTP)
 	mux.HandleFunc("GET /api/sessions/{id}/terminal", a.terminal)

@@ -241,3 +241,63 @@ func TestProfileDuplicateCarriesStoredCredentials(t *testing.T) {
 		t.Fatalf("duplicating a trashed profile succeeded: %s", trashed.Body)
 	}
 }
+
+// 「复制链接」提交 原名-clone；链接栏与服务器管理共用同一份配置，
+// 名称必须保持唯一（重名时 store 追加 2/3… 后缀）。空 name 保留旧的
+// 原样复制行为；克隆渠道端点对不存在的会话必须干净失败。
+func TestProfileDuplicateCloneNamesAndChannelEndpoint(t *testing.T) {
+	a, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	handler := a.Handler(fstest.MapFS{"index.html": {Data: []byte("fixture")}})
+	request := func(method, path string, input any) *httptest.ResponseRecorder {
+		t.Helper()
+		body, _ := json.Marshal(input)
+		req := httptest.NewRequest(method, "http://wails.localhost"+path, bytes.NewReader(body))
+		req.Header.Set("X-CloudShell-Token", a.Token())
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, req)
+		if response.Code != 200 {
+			t.Fatalf("%s %s: %d %s", method, path, response.Code, response.Body)
+		}
+		return response
+	}
+	response := request("POST", "/api/profiles", Profile{Name: "Clone source", Host: "localhost", User: "root", Secret: "clone-secret"})
+	var source Profile
+	if err := json.Unmarshal(response.Body.Bytes(), &source); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Clone source-clone", "Clone source-clone 2", "Clone source-clone 3"} {
+		response = request("POST", "/api/profiles/"+source.ID+"/duplicate", struct {
+			Name string `json:"name"`
+		}{Name: "Clone source-clone"})
+		if bytes.Contains(response.Body.Bytes(), []byte("clone-secret")) {
+			t.Fatal("named duplicate response disclosed credentials")
+		}
+		var clone Profile
+		if err := json.Unmarshal(response.Body.Bytes(), &clone); err != nil {
+			t.Fatal(err)
+		}
+		if clone.Name != want {
+			t.Fatalf("named duplicate = %q, want %q", clone.Name, want)
+		}
+	}
+	response = request("POST", "/api/profiles/"+source.ID+"/duplicate", struct{}{})
+	var bare Profile
+	if err := json.Unmarshal(response.Body.Bytes(), &bare); err != nil {
+		t.Fatal(err)
+	}
+	if bare.Name != "Clone source" {
+		t.Fatalf("unnamed duplicate renamed: %q", bare.Name)
+	}
+	body, _ := json.Marshal(struct{}{})
+	req := httptest.NewRequest("POST", "http://wails.localhost/api/sessions/missing-session/channel", bytes.NewReader(body))
+	req.Header.Set("X-CloudShell-Token", a.Token())
+	missing := httptest.NewRecorder()
+	handler.ServeHTTP(missing, req)
+	if missing.Code == 200 {
+		t.Fatalf("clone channel for a nonexistent session succeeded: %s", missing.Body)
+	}
+}

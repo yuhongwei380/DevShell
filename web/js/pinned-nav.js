@@ -171,7 +171,28 @@ window.DengPinnedNav = (() => {
     render(); reflect();
     toast(`已重命名为「${saved.name}」`);
   }
-  // 右键菜单：复用标签菜单样式，重命名与“保存到服务器管理”两个入口。
+  // 复制链接：复制这份已保存连接本身，默认名「原会话名-clone」（重名时后端自动
+  // 加 2/3… 后缀），只生成链接不打开会话。从标签菜单进入只生成；从链接栏 chip
+  // 进入则把新 chip 自动插到源 chip 右侧固定,让链接栏即时反映这次点击。
+  async function cloneLink(profile, { pin = false } = {}) {
+    const saved = await post(`/api/profiles/${encodeURIComponent(profile.id)}/duplicate`, { name: `${profile.name}-clone` });
+    const index = profiles.findIndex(entry => entry.id === saved.id);
+    if (index >= 0) profiles[index] = saved; else profiles.push(saved);
+    if (pin) {
+      await reorderSave.catch(() => {});
+      readPinned();
+      if (!pinned.includes(saved.id)) {
+        const at = pinned.indexOf(profile.id);
+        pinned.splice(at < 0 ? pinned.length : at + 1, 0, saved.id);
+        await writePinned();
+      }
+    }
+    renderConnections(); renderTabs(); renderSessionInfo();
+    render(); reflect();
+    toast(`已生成「${saved.name}」${pin ? '并固定到链接栏' : ''}；可在服务器管理或链接栏中重命名`);
+    return saved;
+  }
+  // 右键菜单：复用标签菜单样式,重命名 / 复制链接 / “保存到服务器管理”三个入口。
   function openItemMenu(event, item, profile) {
     itemMenuCleanup?.();
     const menu = node('div', 'session-tab-menu');
@@ -183,10 +204,13 @@ window.DengPinnedNav = (() => {
     const rename = node('button', '', '重命名连接');
     rename.type = 'button'; rename.setAttribute('role', 'menuitem'); rename.title = '修改该连接的名称，与服务器管理同步';
     rename.onclick = safe(() => { close(); return renameProfile(profile); });
+    const clone = node('button', '', '复制链接');
+    clone.type = 'button'; clone.setAttribute('role', 'menuitem'); clone.title = '复制这份连接生成新链接（默认名「原会话名-clone」），并自动固定到链接栏';
+    clone.onclick = safe(() => { close(); return cloneLink(profile, { pin: true }); });
     const save = node('button', '', '保存到服务器管理');
     save.type = 'button'; save.setAttribute('role', 'menuitem'); save.title = '把这个连接保存到服务器管理的指定分组（可选择或新建分组）';
     save.onclick = safe(() => { close(); return openSaveDialog(profile); });
-    menu.append(rename, save);
+    menu.append(rename, clone, save);
     document.documentElement.append(menu);
     const rect = item.getBoundingClientRect();
     menu.style.left = Math.max(8, Math.min(logicalWidth() - menu.offsetWidth - 8, (event.clientX || rect.left) / effectiveScale)) + 'px';
@@ -250,7 +274,7 @@ window.DengPinnedNav = (() => {
       confirm.disabled = false;
     }
   }
-  const itemTitle = profile => `${profile.name} · ${profileSubtitle(profile)}\n拖拽调整顺序 · 左键新建会话 · 右键菜单（重命名 / 保存到服务器管理） · × 关闭（取消固定需确认）`;
+  const itemTitle = profile => `${profile.name} · ${profileSubtitle(profile)}\n拖拽调整顺序 · 左键新建会话 · 右键菜单（重命名 / 复制链接 / 保存到服务器管理） · × 关闭（取消固定需确认）`;
   function itemFor(profile) {
     const item = node('span', 'pinned-item');
     const open = node('button', 'pinned-item-open');
@@ -360,5 +384,5 @@ window.DengPinnedNav = (() => {
       if (expanded && !cancelDrag) { setExpanded(false); toggle.focus(); }
     });
   }, { once: true });
-  return { render, reflect, renameProfile, isPinnedFor: profile => isPinned(profile.id), pinCurrent, unpinCurrent, pinProfile: pin, unpinProfile: unpin };
+  return { render, reflect, renameProfile, cloneLink, isPinnedFor: profile => isPinned(profile.id), pinCurrent, unpinCurrent, pinProfile: pin, unpinProfile: unpin };
 })();

@@ -370,6 +370,38 @@ function awaitConnection(attempt, state) {
     );
   });
 }
+// 复制同服务器SSH会话（Xshell 的「复制 SSH 渠道」语义）：后端在既有会话已认证
+// 的 SSH 传输上登记新会话——不拨号、不认证、不再核指纹；终端渠道与 PTY 随新
+// 标签的 WebSocket 接入打开。传输按引用计数保活：关闭任一标签不影响其余渠道,
+// 最后一个标签关闭时连接才断开；传输死亡则所有渠道随之断开。
+async function cloneSessionChannel(state) {
+  if (!state || state.closed || state.pendingConnection || !state.connected) { toast('请先连接这个会话，再复制同服务器SSH会话'); return null; }
+  if (state.localShell || state.telnet || state.serial) { toast('这个标签不是 SSH 会话，无法复制 SSH 渠道'); return null; }
+  try {
+    const info = await post(`/api/sessions/${encodeURIComponent(state.id)}/channel`, {});
+    if (!info?.id) throw new Error('后端没有返回新会话');
+    const clone = makeSessionState(info);
+    clone.tabOrder = nextSessionOrder++;
+    clone.announceConnectionReady = true;
+    sessions.set(clone.id, clone);
+    createTerminal(clone);
+    activate(clone.id);
+    setDrawer(false);
+    renderConnections();
+    clone.openTerminalSocket();
+    if (clone.sftpPending) void refreshFileStatus(clone, true);
+    else if (info.sftpAvailable !== false) navigate(clone.cwd, clone).catch(error => { if (!clone.closed) toast(`⚠️  目录读取失败：${error.message}`); });
+    const profile = profileFor(clone);
+    if (profile?.verbose) startVerboseDiagnostics(clone, profile.verbose);
+    window.DengCommandHistory?.refresh(clone.profileId).catch(() => {});
+    if (current() === clone && clone.ready) { pollStats(); pollLatency(); }
+    toast(`已复制「${profileFor(state)?.name || '当前会话'}」的 SSH 连接；新标签打开独立终端渠道，关闭任一标签都不影响其余渠道`);
+    return clone;
+  } catch (error) {
+    toast(`❌ 复制同服务器SSH会话失败：${error.message || '未知错误'}`);
+    return null;
+  }
+}
 function writeTerminalAndWait(state, text = '') {
   if (state.closed) return Promise.resolve(false);
   return new Promise((resolve, reject) => {
@@ -696,9 +728,10 @@ function renderTabs() {
     button.setAttribute('aria-busy', String(!!state.pendingConnection));
     if (state.localOnly) button.title += ` · ${state.connectionMessage}`;
     const close = node('button', 'tab-close'); close.append(icon('close')); close.title = state.pendingConnection ? '取消连接' : '关闭连接'; close.setAttribute('aria-label', `${state.pendingConnection ? '取消' : '关闭'} ${profile?.name || '会话'}`); close.onclick = safe(() => closeSession(state.id)); close.disabled = !!(state.detaching || state.handoffProvisional); tab.dataset.detaching = String(!!state.detaching); tab.append(button, close);
-    // 已断开的标签双击即用原地址在本标签重连；
+    // 已断开的标签双击即用原地址在本标签重连；已连接的 SSH 标签双击默认打开
+    // 同服务器会话（复用同一条 SSH 连接再开一条终端渠道，不再拨号或认证）；
     // 连接中、交接中或已删除配置的标签不响应，关闭按钮上的双击不触发。
-    tab.ondblclick = event => { if (event.target.closest('.tab-close')) return; if (profile && !state.connected && !state.pendingConnection && !state.disconnecting && !state.detaching && !state.handoffProvisional && !state.ownershipUncertain) safe(() => connect(state.profileId, true, { sessionId: state.id }))(); };
+    tab.ondblclick = event => { if (event.target.closest('.tab-close')) return; if (!profile || state.pendingConnection || state.disconnecting || state.detaching || state.handoffProvisional || state.ownershipUncertain) return; if (state.connected) { if (!state.localShell && !state.telnet && !state.serial) safe(() => cloneSessionChannel(state))(); return; } safe(() => connect(state.profileId, true, { sessionId: state.id }))(); };
     window.DengSessionWindows.bindTab(tab, state); return [tab, ...(window.DengProcessView?.tabs(state) || [])];
   })); window.DengStartTabs?.appendTabs($('#session-tabs')); window.DengRDP?.appendTabs($('#session-tabs')); window.DengTabOrder.apply($('#session-tabs')); updateStatus(); window.DengTextEditors?.reflect(); window.DengCommandComposer?.reflect(); window.DengPinnedNav?.render();
 }

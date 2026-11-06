@@ -90,10 +90,24 @@ try {
   await finish('after-cancel');
   assert(!await page.evaluate(()=>connecting.has('same')));
   assert.equal(await page.evaluate(()=>sessions.size),3);
-  // The visible tab menu offers an explicit extra SSH session.
+  // The connected tab menu offers the SSH channel clone, and no standalone new-session item.
   await page.click('.session-tab[data-session-id="third"]',{button:'right'});
-  assert(await page.$eval('#session-tab-menu',e=>e.textContent.includes('新建同服务器会话')));
-  checks.push('cancel/retry isolation, late result cleanup, explicit tab menu');
+  assert(await page.$eval('#session-tab-menu',e=>e.textContent.includes('复制同服务器SSH会话')&&!e.textContent.includes('新建同服务器会话')));
+  checks.push('cancel/retry isolation, late result cleanup, clone-channel tab menu');
+  // Double-clicking a connected tab defaults to a same-server session: a channel on the existing session.
+  await page.evaluate(()=>{
+    const originalChannelAPI = api;
+    api = (path, options = {}) => {
+      if (/^\/api\/sessions\/[^/]+\/channel$/.test(path) && options.method === 'POST') { qa.channel = path; return Promise.resolve({id:'cloned',profileId:'same',home:'/',sftpAvailable:true}); }
+      return originalChannelAPI(path, options);
+    };
+    document.querySelector('#session-tab-menu')?.remove();
+  });
+  await page.click('.session-tab[data-session-id="third"]',{clickCount:2});
+  await page.waitForFunction(()=>qa.channel==='/api/sessions/third/channel'&&sessions.get('cloned')?.connected);
+  assert.equal(await page.evaluate(()=>sessions.size),4);
+  assert(await page.evaluate(()=>!!qa.sockets.cloned),'the clone tab opens its own terminal channel');
+  checks.push('double-click on a connected tab opens a same-server channel session');
   await page.screenshot({path:stage+'/same-server-sessions.png'});
   assert.deepEqual(errors,[]);
   fs.writeFileSync(stage+'/same-server-sessions.json',JSON.stringify({passed:true,checks,errors},null,2));

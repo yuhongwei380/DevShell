@@ -32,9 +32,11 @@ type Session struct {
 	SFTPDisabled        bool   `json:"sftpDisabled,omitempty"`
 	connectionHost      string // immutable successful connection target; never resolved again
 	connectionPeer      string // public direct TCP peer; empty for explicit proxies
+	proxyType           string // immutable proxy type for ping target selection; clones copy it
 	fileWriteIdentity   string // immutable verified server identity for text-save locks
 	client              *ssh.Client
 	activity            *sshActivityConn
+	transport           *sshTransport // authenticated transport shared with cloned-channel sessions; nil for bare test sessions
 	files               *sftp.Client
 	fileBridge          atomic.Pointer[sshSFTPBridge]
 	backgroundGateOnce  sync.Once
@@ -98,6 +100,47 @@ type Session struct {
 	promptHostname      string
 }
 
+// sshTransport 是「复制同服务器SSH会话」共享的已认证 SSH 连接。拨号会话是其
+// 第一个引用;每个复制出的渠道会话再持一个引用:任一标签关闭只释放自己的引用,
+// 最后一个引用释放时才关闭 ssh.Client。传输死亡时所有渠道的 relay 自然终止,
+// 各会话按既有路径断开(对应 Xshell 的复制 SSH 渠道语义)。
+type sshTransport struct {
+	client   *ssh.Client
+	activity *sshActivityConn
+	mu       sync.Mutex
+	refs     int
+	closed   bool
+}
+
+// addRef keeps the transport alive for one more session. It fails once the
+// last reference has already been released, so a clone never resurrects a
+// closed transport.
+func (t *sshTransport) addRef() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.closed {
+		return false
+	}
+	t.refs++
+	return true
+}
+
+// release reports whether this was the last reference; only then must the
+// caller close the underlying ssh.Client.
+func (t *sshTransport) release() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.closed || t.refs <= 0 {
+		return false
+	}
+	t.refs--
+	if t.refs == 0 {
+		t.closed = true
+		return true
+	}
+	return false
+}
+
 // Cleanup acknowledgements need several round trips on congested links. A
 // short monitoring deadline must not turn 250 ms of network jitter into a
 // terminal disconnect. Workers remain owned until cleanup finishes or expires.
@@ -127,7 +170,16 @@ func (s *Session) forceClose() {
 		b.close()
 	}
 	s.transportCloseOnce.Do(func() {
-		if s.client != nil {
+		if s.transport != nil {
+			// 共享传输上的 SFTP 通道与提示符文件属于本会话自己;引用归零的
+			// 那次释放才关闭传输本身。
+			if files, _ := s.fileClientSnapshot(); files != nil {
+				_ = files.Close()
+			}
+			if s.transport.release() {
+				_ = s.transport.client.Close()
+			}
+		} else if s.client != nil {
 			_ = s.client.Close()
 		} else if files, _ := s.fileClientSnapshot(); files != nil {
 			_ = files.Close()
@@ -284,9 +336,10 @@ func (a *App) ConnectWithHostKeyApproval(ctx context.Context, profileID, secret 
 	}
 	handshakeElapsed := time.Since(handshakeStart)
 	client := ssh.NewClient(sshConn, chans, reqs)
+	transport := &sshTransport{client: client, activity: activity, refs: 1}
 	sessionCtx, sessionCancel := context.WithCancel(a.ctx)
 	writeIdentity := strings.Join([]string{address, fingerprint, p.User, p.Proxy.Type, p.Proxy.Host, strconv.Itoa(p.Proxy.Port), p.Proxy.User}, "\x00")
-	s := &Session{ID: randomID(), ProfileID: p.ID, Fingerprint: fingerprint, connectionHost: p.Host, connectionPeer: directSSHServerPeer(client.RemoteAddr(), p.Proxy.Type), fileWriteIdentity: writeIdentity, client: client, activity: activity, ctx: sessionCtx, cancel: sessionCancel, verboseLevel: p.Verbose}
+	s := &Session{ID: randomID(), ProfileID: p.ID, Fingerprint: fingerprint, connectionHost: p.Host, connectionPeer: directSSHServerPeer(client.RemoteAddr(), p.Proxy.Type), proxyType: p.Proxy.Type, fileWriteIdentity: writeIdentity, client: client, activity: activity, transport: transport, ctx: sessionCtx, cancel: sessionCancel, verboseLevel: p.Verbose}
 	appearance := a.store.List().Appearance
 	s.promptUsernameColor, s.promptHostnameColor = appearance.PromptUsernameColor, appearance.PromptHostnameColor
 	// Publish immediately after SSH authentication. The terminal stages its own
@@ -350,6 +403,69 @@ func (a *App) ConnectWithHostKeyApproval(ctx context.Context, profileID, secret 
 		}
 	})
 	s.startPing(p.Host, p.Proxy.Type, client.RemoteAddr())
+	return s, nil
+}
+
+// CloneSessionChannel 实现标签菜单的「复制同服务器SSH会话」:在父会话已认证的
+// 传输上登记一个新会话——不再拨号、认证或核指纹,终端渠道与 PTY 由它自己的
+// relay 在 WebSocket 接入时打开(Xshell 的复制 SSH 渠道语义)。-L 端口转发只属
+// 于传输所有者,这里绝不重复绑定;keepalive 与 -vvv 传输报文也只绑定在拨号会
+// 话上。传输按引用计数保活:任一标签关闭都不影响其余渠道,最后一个会话释放时
+// 才关闭连接;传输死亡时各会话的 Wait/relay 自然终止并各自断开。
+func (a *App) CloneSessionChannel(ctx context.Context, parentID string) (*Session, error) {
+	parent, err := a.session(parentID)
+	if err != nil {
+		return nil, err
+	}
+	transport := parent.transport
+	if transport == nil {
+		return nil, errors.New("这个会话没有可复用的 SSH 传输，请重新连接后再复制")
+	}
+	if !transport.addRef() {
+		return nil, errors.New("SSH 连接已断开，请重新连接")
+	}
+	published := false
+	defer func() {
+		if !published && transport.release() {
+			_ = transport.client.Close()
+		}
+	}()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	sessionCtx, sessionCancel := context.WithCancel(a.ctx)
+	if err := sessionCtx.Err(); err != nil {
+		sessionCancel()
+		return nil, err
+	}
+	s := &Session{ID: randomID(), ProfileID: parent.ProfileID, Fingerprint: parent.Fingerprint, connectionHost: parent.connectionHost, connectionPeer: parent.connectionPeer, proxyType: parent.proxyType, fileWriteIdentity: parent.fileWriteIdentity, client: transport.client, activity: transport.activity, transport: transport, ctx: sessionCtx, cancel: sessionCancel, verboseLevel: parent.verboseLevel}
+	appearance := a.store.List().Appearance
+	s.promptUsernameColor, s.promptHostnameColor = appearance.PromptUsernameColor, appearance.PromptHostnameColor
+	// 与新建连接相同的发布契约:终端在 shell 请求里自带引导脚本,文件面板暂不
+	// 打开 SSH 通道;Home 保持 "/" 直到文件状态报告真实家目录。
+	integration := s.prepareTerminalLaunch()
+	s.preparedIntegration = &integration
+	s.prepareFileInitialization()
+	a.mu.Lock()
+	s.diagnosticLog = &a.sshDiagnostics
+	s.diagnosticStarted = time.Now()
+	a.sessions[s.ID] = s
+	a.mu.Unlock()
+	published = true
+	s.startConnectionDiagnostics()
+	go func() { <-sessionCtx.Done(); a.disconnect(s.ID) }()
+	// 与新建连接相同的孤儿期限:复制后标签必须自行接入终端,否则不得长期占用
+	// 共享传输。
+	time.AfterFunc(45*time.Second, func() {
+		s.mu.Lock()
+		started := s.terminalRelay != nil
+		s.mu.Unlock()
+		if !started {
+			s.noteDisconnect("DS-110", "terminal-not-attached")
+			a.disconnect(s.ID)
+		}
+	})
+	s.startPing(s.connectionHost, s.proxyType, transport.client.RemoteAddr())
 	return s, nil
 }
 

@@ -316,8 +316,10 @@ func (s *Store) saveProfile(p Profile, clearSecret, allowNewID bool) (Profile, e
 
 // Duplicate clones a saved connection under a fresh ID inside the store, so
 // the stored login secret and proxy password travel with the copy without
-// ever crossing the HTTP boundary.
-func (s *Store) Duplicate(id string) (Profile, error) {
+// ever crossing the HTTP boundary. A non-empty name renames the copy (the
+// 「复制链接」 flow passes 「原名-clone」); an already-taken name gains a
+// numeric suffix so link-bar chips never collide.
+func (s *Store) Duplicate(id string, name string) (Profile, error) {
 	p, err := s.Get(id)
 	if err != nil {
 		return Profile{}, err
@@ -325,9 +327,34 @@ func (s *Store) Duplicate(id string) (Profile, error) {
 	if p.Temporary {
 		return Profile{}, errors.New("临时连接不能复制")
 	}
+	if trimmed := strings.TrimSpace(name); trimmed != "" {
+		p.Name = s.uniqueServerName(trimmed)
+	}
 	p.ID = ""
 	p.Verbose = 0
 	return s.saveProfile(p, false, true)
+}
+
+// uniqueServerName appends " 2", " 3", ... until the name no longer matches
+// an existing saved connection (case-insensitive, trash included) so repeated
+// clones stay distinguishable without opening an editor.
+func (s *Store) uniqueServerName(base string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	taken := make(map[string]bool, len(s.config.Servers))
+	for _, existing := range s.config.Servers {
+		taken[strings.ToLower(strings.TrimSpace(existing.Name))] = true
+	}
+	if !taken[strings.ToLower(base)] {
+		return base
+	}
+	for n := 2; n <= 1000; n++ {
+		candidate := fmt.Sprintf("%s %d", base, n)
+		if !taken[strings.ToLower(candidate)] {
+			return candidate
+		}
+	}
+	return base
 }
 
 func (s *Store) hostKey(hostname string, _ net.Addr, key ssh.PublicKey) error {

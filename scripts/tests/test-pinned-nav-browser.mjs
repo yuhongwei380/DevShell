@@ -243,7 +243,7 @@ try {
   const firstName = await page.$eval('.pinned-item .pinned-item-open span', el => el.textContent);
   await page.evaluate(() => document.querySelector('.pinned-item').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })));
   await page.waitForSelector('#pinned-item-menu[role=menu]');
-  assert.deepEqual(await page.$$eval('#pinned-item-menu button', els => els.map(b => b.textContent)), ['重命名连接', '保存到服务器管理']);
+  assert.deepEqual(await page.$$eval('#pinned-item-menu button', els => els.map(b => b.textContent)), ['重命名连接', '复制链接', '保存到服务器管理']);
   await page.click('#pinned-item-menu button');
   await page.waitForSelector('#action-dialog[open]');
   assert((await page.$eval('#action-title', e => e.textContent)).includes('重命名连接'));

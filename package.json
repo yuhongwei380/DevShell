@@ -32,7 +32,8 @@
     "test:startup-update": "node scripts/tests/test-startup-update.mjs",
     "test:terminal-startup": "node scripts/tests/test-terminal-first-files.mjs",
     "test:follow": "node scripts/tests/test-follow-default.mjs",
-    "test:connection-cancel": "node scripts/tests/test-connection-cancel.mjs"
+    "test:connection-cancel": "node scripts/tests/test-connection-cancel.mjs",
+    "test:clone-session": "node scripts/tests/test-clone-session-channel.mjs"
   },
   "dependencies": {
     "@xterm/addon-fit": "0.11.0",

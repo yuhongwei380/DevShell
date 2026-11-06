@@ -210,7 +210,13 @@ func (a *App) registerConnectionManagementHTTP(mux *http.ServeMux) {
 		respond(w, profile, err)
 	})
 	mux.HandleFunc("POST /api/profiles/{id}/duplicate", func(w http.ResponseWriter, r *http.Request) {
-		profile, err := a.store.Duplicate(r.PathValue("id"))
+		var input struct {
+			Name string `json:"name"`
+		}
+		if !decode(w, r, &input) {
+			return
+		}
+		profile, err := a.store.Duplicate(r.PathValue("id"), input.Name)
 		respond(w, profile, err)
 	})
 	mux.HandleFunc("POST /api/trash/{id}/restore", func(w http.ResponseWriter, r *http.Request) {
