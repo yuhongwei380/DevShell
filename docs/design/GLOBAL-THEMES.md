@@ -12,8 +12,8 @@
 - **MDN backdrop-filter**：2024 年起为 Baseline（Chromium 76 / Safari 9 /
   Firefox 103 / Edge 17）；需要半透明底衬；祖先带 `filter`、`opacity<1`、
   `mask/clip-path`、`mix-blend-mode` 或另一个 `backdrop-filter` 会形成
-  backdrop root 限制取样范围——因此顶栏玻璃画在 `::before` 伪元素上，
-  避免给固定定位的窗口控件建立包含块。
+  backdrop root 限制取样范围；会话栏不施加模糊，也避免给固定定位的窗口
+  控件建立包含块。
 - **玻璃拟态通行做法**（glassmorphism）：低饱和底色 + 薄亮边 + 内高光 +
   克制的投影；文字不模糊、只模糊底衬。
 - **Nord**：低饱和“极地夜/雪暴”十色体系，深浅两模式同一色族。
@@ -38,8 +38,9 @@
 - 液态玻璃区别于平铺磨砂：面板更透明（saturate 约 1.2，底层光斑色相取经典
   强调色同族的蓝，不引入经典之外的颜色），四团光斑缓慢漂移（`liquid-drift`，
   `prefers-reduced-motion` 下静止），面板叠加镜面光泽层（`--glass-sheen`）与
-  边缘聚光内阴影（`--glass-edge`），配长弥散投影；宽屏下顶栏与监控栏同为
-  16px 圆角悬浮玻璃卡，与终端、文件面板同一语言，玻璃面上不发丝线描边。
+  边缘聚光内阴影（`--glass-edge`），配长弥散投影；顶部工具栏融入背景，
+  监控面板从工具栏下方开始，Shell 与 SFTP 通过面板间距轻微分隔；监控信息、目录与文件列表融入各自面板，
+  主要通过留白和标题区分内容，减少嵌套边框。
 - 液态玻璃不使用背景图（保存的 `backgroundId` 原样保留，切回经典即恢复）；
   极地/夜幕照常使用背景。
 - 回退：`@supports not (backdrop-filter)` 或 `prefers-reduced-transparency` →

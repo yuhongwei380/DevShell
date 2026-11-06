@@ -64,6 +64,7 @@
 :root[data-ui-style="frosted"][data-theme] {
   --glass-base:#0f1419;
   --glass-sheen:linear-gradient(150deg,#ffffff1a,#ffffff00 42%,#ffffff00 58%,#ffffff0c);
+  --glass-terminal-sheen:linear-gradient(150deg,#ffffff12,#ffffff00 48%,#ffffff08);
   --glass-surface:rgb(24 31 38 / .7); --glass-toolbar:rgb(24 31 38 / .68);
   --glass-sidebar:rgb(21 28 35 / .66); --glass-popup:rgb(24 31 38 / .88); --glass-input:rgb(13 18 24 / .72);
   --glass-terminal:rgb(15 22 29 / .8); --glass-solid:#181f26; --glass-terminal-solid:#0f161d;
@@ -98,57 +99,56 @@
   background:radial-gradient(38% 44% at 22% 22%,#c9d8e6,#0000 62%),radial-gradient(42% 38% at 76% 14%,#d7e2ec,#0000 64%),radial-gradient(46% 50% at 70% 80%,#c2d2e1,#0000 62%),radial-gradient(40% 42% at 24% 76%,#d3e0ea,#0000 64%); }
 @keyframes liquid-drift { from { transform:translate3d(-2.5%,-1.5%,0) scale(1.05); } to { transform:translate3d(2.5%,2%,0) scale(1.14); } }
 [data-ui-style="frosted"] .sidebar { background:var(--glass-sheen),var(--glass-sidebar); backdrop-filter:blur(26px) saturate(1.2) brightness(1.03); -webkit-backdrop-filter:blur(26px) saturate(1.2) brightness(1.03); box-shadow:var(--glass-edge),inset -1px 0 var(--border),var(--shadow); }
-/* 宽屏下监控栏是与终端、文件面板同语言的悬浮玻璃卡：16px 圆角、四周留
-   网格缝、同一套边缘高光与投影；栏内卡片仍全部融入卡面，不再成盒。
-   窄屏抽屉保持通高面板避免压字。 */
+/* 宽屏下监控玻璃面从顶部工具栏下方开始，与 Shell 和 SFTP 对齐。
+   窄屏抽屉保持原来的定位。 */
 :root:not([data-narrow="true"])[data-ui-style="frosted"] .sidebar { background:var(--glass-sheen),var(--glass-sidebar); box-shadow:var(--glass-edge),var(--shadow); backdrop-filter:blur(26px) saturate(1.2) brightness(1.03); -webkit-backdrop-filter:blur(26px) saturate(1.2) brightness(1.03); border-radius:16px; }
+html[data-ui-style="frosted"]:not([data-narrow="true"]):not([data-monitor-visible="false"]) .sidebar { margin-top:48px; padding-top:0; }
 /* 玻璃面上不留硬描边：芯片只靠底面色差成块，面板内分隔用明暗差完成，
    不出现直角发丝线。输入控件的细边框保留（那是控件，不是卡片）。 */
 [data-ui-style="frosted"] .address-copy { border:0; border-radius:10px; }
 [data-ui-style="frosted"] .terminal-panel :is(.terminal-meta,.terminal-command-bar) { border:0; }
 [data-ui-style="frosted"] :is(.files-toolbar,.file-tabs,.file-table thead,.file-status,.commands-toolbar,.transfer-notice) { border:0; }
 [data-ui-style="frosted"] :is(.disk-row + .disk-row,.process-table tbody tr + tr,.transfer-row + .transfer-row) { border:0; }
-/* 监控栏只在玻璃板层面分割一次：卡片全部融入栏面，不再各自成盒；
-   列表行内保留极淡的发丝线即可。 */
+/* 监控信息融入同一玻璃面，以留白区分内容，不逐项叠加卡片。 */
 [data-ui-style="frosted"] .sidebar :is(.system-section,.host-card,.disk-section,.network-card,.process-card,.process-details,.disk-resources,.disk-io) { background:transparent; border:0; border-radius:0; box-shadow:none; backdrop-filter:none; -webkit-backdrop-filter:none; }
+[data-ui-style="frosted"] .sidebar .network-grid { gap:14px; margin-top:16px; }
+[data-ui-style="frosted"] .sidebar .network-card { padding:0; }
+[data-ui-style="frosted"] .sidebar .process-details { margin-top:18px; }
+[data-ui-style="frosted"] .sidebar .disk-readout:is(.read,.write) { padding:0; background:transparent; }
 [data-ui-style="frosted"] .sidebar :is(.disk-row + .disk-row,.process-table tbody tr + tr,.metric + .metric,.file-status) { border-color:var(--border); }
 [data-ui-style="frosted"] .files-panel { background:var(--glass-sheen),var(--glass-surface); box-shadow:var(--glass-edge),var(--shadow); backdrop-filter:blur(22px) saturate(1.2); -webkit-backdrop-filter:blur(22px) saturate(1.2); }
-/* Keep fixed window controls relative to the viewport: backdrop-filter on the
-   header itself would create a new containing block for the floating brand. */
-[data-ui-style="frosted"] .session-bar { position:relative; isolation:isolate; background:transparent; backdrop-filter:none; -webkit-backdrop-filter:none; margin:6px var(--workspace-inset) 0; border-radius:16px; }
-[data-ui-style="frosted"] .session-bar::before { content:""; position:absolute; z-index:-1; inset:0; pointer-events:none; background:var(--glass-sheen),var(--glass-toolbar); border-radius:inherit; box-shadow:var(--glass-edge); backdrop-filter:blur(24px) saturate(1.2) brightness(1.03); -webkit-backdrop-filter:blur(24px) saturate(1.2) brightness(1.03); }
+/* 会话栏直接融入工作台背景，Shell 和 SFTP 的面板间距负责区分区域。 */
+[data-ui-style="frosted"] .session-bar { background:transparent; box-shadow:none; backdrop-filter:none; -webkit-backdrop-filter:none; }
 [data-ui-style="frosted"] .session-bar .brand { border-color:var(--border); }
 [data-ui-style="frosted"] .session-bar .window-controls { background:var(--surface-inset); }
 [data-ui-style="frosted"] .session-tab { background:transparent; border:0; border-radius:12px; }
 [data-ui-style="frosted"] .session-tab.active { background:var(--glass-popup); box-shadow:var(--glass-edge); }
-[data-ui-style="frosted"] .terminal-panel { background:var(--glass-sheen),var(--glass-terminal); box-shadow:var(--glass-edge),var(--shadow); backdrop-filter:blur(22px) saturate(1.15); -webkit-backdrop-filter:blur(22px) saturate(1.15); }
+[data-ui-style="frosted"] .terminal-panel { background:var(--glass-terminal-sheen),var(--glass-terminal); box-shadow:var(--glass-edge),var(--shadow); backdrop-filter:blur(22px) saturate(1.15); -webkit-backdrop-filter:blur(22px) saturate(1.15); }
 [data-ui-style="frosted"] .terminal-panel::before,[data-ui-style="frosted"] .terminal-panel::after { display:none; background-image:none; }
 [data-ui-style="frosted"] .terminal-panel :is(.terminal-meta,.terminal-command-bar) { background:#ffffff08; border-color:#ffffff16; backdrop-filter:none; -webkit-backdrop-filter:none; }
 [data-ui-style="frosted"] :is(dialog,.connections-drawer,.settings-menu,.popup-menu,.themed-select-popup) { background:var(--glass-sheen),var(--glass-popup); color:var(--text); border-color:var(--border); box-shadow:0 22px 64px #00000055,var(--glass-edge); backdrop-filter:blur(30px) saturate(1.6); -webkit-backdrop-filter:blur(30px) saturate(1.6); }
 [data-ui-style="frosted"] :is(.specs,.cpu-model,.metric,.chart-caption,.process-heading,.disk-row,.file-status,.file-table,.tree-row,.tree-shortcut,.connection-card-text,.drawer-heading h2,dialog h2,.brand) { color:var(--text); }
 [data-ui-style="frosted"] :is(.process-table,.file-table) :is(th,td),[data-ui-style="frosted"] .system-section :is(h2,b,strong) { color:var(--text-secondary); border-color:var(--border); }
 [data-ui-style="frosted"] :is(.file-table thead,.files-toolbar,.file-tabs,.file-status,.directory-tree,.commands-toolbar,.transfer-notice) { background:transparent; border-color:var(--border); }
-/* SFTP 面板内部卡片采用与 shell（终端卡片）一致的边框设计：圆角 + 玻璃边缘环，
-   不用实心发丝线；列表与目录树各成一块半透明玻璃卡片。 */
-[data-ui-style="frosted"] :is(.file-table-wrap,.directory-tree) { background:var(--glass-input); border-radius:12px; box-shadow:var(--glass-ring); }
-[data-ui-style="frosted"] .file-table thead { background:var(--glass-popup); border-radius:12px 12px 0 0; }
+/* 目录与文件列表融入同一面板，交互状态仍保留底色。 */
+[data-ui-style="frosted"] :is(.file-table-wrap,.directory-tree,.file-table thead) { background:transparent; border:0; border-radius:0; box-shadow:none; }
 [data-ui-style="frosted"] :is(.file-search,.path-form,.connection-search,.meter,dialog input,dialog select,dialog textarea,.server-icon,.themed-select-trigger,.count-badge,.upload-button) { background:var(--glass-input); color:var(--text); border:0; border-radius:9px; box-shadow:var(--glass-ring); }
 [data-ui-style="frosted"] :is(.connection-card,.tree-row,.tree-shortcut,.file-tab).selected,[data-ui-style="frosted"] .file-tab.active,[data-ui-style="frosted"] .file-table tr.selected { background:var(--surface-selected); color:var(--accent); }
 [data-ui-style="frosted"] button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 /* Stable opaque equivalents preserve readability when transparency is unavailable. */
 @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))) {
   [data-ui-style="frosted"] body::before { display:none; }
-  :root[data-ui-style="frosted"][data-theme] { --glass-sheen:none; --glass-edge:0 0 0 0 transparent; --glass-ring:inset 0 0 0 1px var(--border); --glass-surface:var(--glass-solid); --glass-toolbar:var(--glass-solid); --glass-sidebar:var(--glass-solid); --glass-popup:var(--glass-solid); --glass-terminal:var(--glass-terminal-solid); }
+  :root[data-ui-style="frosted"][data-theme] { --glass-sheen:none; --glass-terminal-sheen:none; --glass-edge:0 0 0 0 transparent; --glass-ring:inset 0 0 0 1px var(--border); --glass-surface:var(--glass-solid); --glass-toolbar:var(--glass-solid); --glass-sidebar:var(--glass-solid); --glass-popup:var(--glass-solid); --glass-terminal:var(--glass-terminal-solid); }
 }
 @media (prefers-reduced-transparency:reduce) {
   [data-ui-style="frosted"] body::before { display:none; }
-  :root[data-ui-style="frosted"][data-theme] { --glass-sheen:none; --glass-edge:0 0 0 0 transparent; --glass-ring:inset 0 0 0 1px var(--border); --glass-surface:var(--glass-solid); --glass-toolbar:var(--glass-solid); --glass-sidebar:var(--glass-solid); --glass-popup:var(--glass-solid); --glass-terminal:var(--glass-terminal-solid); }
-  [data-ui-style="frosted"] .session-bar::before,[data-ui-style="frosted"] :is(.sidebar,.session-bar,.files-panel,.terminal-panel,dialog,.connections-drawer,.settings-menu,.popup-menu,.themed-select-popup) { backdrop-filter:none; -webkit-backdrop-filter:none; }
+  :root[data-ui-style="frosted"][data-theme] { --glass-sheen:none; --glass-terminal-sheen:none; --glass-edge:0 0 0 0 transparent; --glass-ring:inset 0 0 0 1px var(--border); --glass-surface:var(--glass-solid); --glass-toolbar:var(--glass-solid); --glass-sidebar:var(--glass-solid); --glass-popup:var(--glass-solid); --glass-terminal:var(--glass-terminal-solid); }
+  [data-ui-style="frosted"] :is(.sidebar,.session-bar,.files-panel,.terminal-panel,dialog,.connections-drawer,.settings-menu,.popup-menu,.themed-select-popup) { backdrop-filter:none; -webkit-backdrop-filter:none; }
 }
 @media (prefers-reduced-motion:reduce) { [data-ui-style="frosted"] body::before { animation:none; } }
 @media (forced-colors:active) {
-  [data-ui-style="frosted"] body::before,[data-ui-style="frosted"] .session-bar::before { display:none; }
-  [data-ui-style="frosted"] :is(.sidebar,.session-bar,.files-panel,.terminal-panel,dialog,.connections-drawer,.settings-menu,.popup-menu,.themed-select-popup) { background:Canvas; color:CanvasText; outline:1px solid CanvasText; backdrop-filter:none; -webkit-backdrop-filter:none; box-shadow:none; }
+  [data-ui-style="frosted"] body::before { display:none; }
+  [data-ui-style="frosted"] :is(.sidebar,.files-panel,.terminal-panel,dialog,.connections-drawer,.settings-menu,.popup-menu,.themed-select-popup) { background:Canvas; color:CanvasText; outline:1px solid CanvasText; backdrop-filter:none; -webkit-backdrop-filter:none; box-shadow:none; }
   .ui-style-card[aria-pressed="true"],.ui-style-segmented button[aria-pressed="true"] { border:2px solid Highlight; }
 }
 
