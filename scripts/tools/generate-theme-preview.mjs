@@ -38,8 +38,8 @@ const behavior = String.raw`
   systemRow.innerHTML = '<span>明暗跟随系统<small id="follow-system-theme-hint"></small></span><input id="follow-system-theme" type="checkbox" role="switch" aria-describedby="follow-system-theme-hint">';
   $('#settings-appearance-view .settings-submenu-heading').after(systemRow);
   $('#ui-scale').value = '1';
-  const styleNames = { classic: '经典', frosted: '液态玻璃', polar: '极地', twilight: '夜幕' };
-  const validStyle = value => ['classic', 'frosted', 'polar', 'twilight'].includes(value) ? value : 'frosted';
+  const styleNames = { classic: '经典', frosted: '液态玻璃' };
+  const validStyle = value => ['classic', 'frosted'].includes(value) ? value : 'frosted';
   let style = validStyle(params.get('style'));
   let preference = ['light','dark','system'].includes(params.get('mode')) ? params.get('mode') : 'dark';
   function reflect() {

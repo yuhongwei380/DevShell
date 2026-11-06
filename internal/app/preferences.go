@@ -29,7 +29,7 @@ type Appearance struct {
 	// panels, dialogs and accents — not just a background picture). Each
 	// style paints its own light and dark variant and stays orthogonal to
 	// Theme, fonts, ANSI colours, background choice and layout.
-	UIStyle             string `json:"uiStyle"` // classic (default) | frosted | polar | twilight
+	UIStyle             string `json:"uiStyle"` // classic (default) | frosted
 	Theme               string `json:"theme"`
 	AnsiPalette         string `json:"ansiPalette,omitempty"` // soft (default) | vivid | bright
 	WindowWidth         int    `json:"windowWidth"`
@@ -98,6 +98,10 @@ func defaultAppearance() Appearance {
 	return Appearance{UIFontID: defaultUIFontID, UITextColors: map[string]string{}, FontID: "builtin:jetbrains-mono", FontColors: map[string]string{}, FontBold: map[string]bool{}, ChartStyles: map[string]ChartLineStyle{}, BackgroundID: "builtin:none", BackgroundOpacity: .42, BackgroundVersion: 2, UIScale: 1, TerminalFontSize: 14, UIStyle: "classic", Theme: "system", MonitorVisible: true, FilesPosition: "right", FollowTerminal: true, MinimizeAction: "ask", AutoCommandsEnabled: true, TcpToolsEnabled: true, Layout: map[string]json.RawMessage{}}
 }
 
+// retiredUIStyle names the polar/twilight workbench styles removed in
+// November 2026; saved values migrate to classic on load.
+func retiredUIStyle(value string) bool { return value == "polar" || value == "twilight" }
+
 // Old releases combined 18% image opacity with a dark multiply tint. Keep
 // explicit strengths, including zero, while replacing that old default once.
 func (value *Appearance) UnmarshalJSON(data []byte) error {
@@ -118,6 +122,16 @@ func (value *Appearance) UnmarshalJSON(data []byte) error {
 	}
 	if next.UIFontID == "" || retiredBuiltinUIFont(next.UIFontID) {
 		next.UIFontID = defaultUIFontID
+	}
+	// polar 与 twilight 已从全局主题中移除：旧配置与旧主题快照里的选择
+	// 在加载时迁回 classic，否则之后的任何外观保存都会被枚举校验拒绝。
+	if retiredUIStyle(next.UIStyle) {
+		next.UIStyle = "classic"
+	}
+	for index := range next.Themes {
+		if retiredUIStyle(next.Themes[index].UIStyle) {
+			next.Themes[index].UIStyle = "classic"
+		}
 	}
 	if strings.HasPrefix(next.FontID, "builtin:") && !builtinTerminalFont(next.FontID) {
 		next.FontID = "builtin:jetbrains-mono"
@@ -253,9 +267,9 @@ func normalizeAppearanceThemes(themes []AppearanceTheme) error {
 		}
 		if theme.UIStyle != "" {
 			switch theme.UIStyle {
-			case "classic", "frosted", "polar", "twilight":
+			case "classic", "frosted":
 			default:
-				return errors.New("主题工作台样式应为 classic、frosted、polar 或 twilight")
+				return errors.New("主题工作台样式应为 classic 或 frosted")
 			}
 		}
 		if theme.AnsiPalette != "" && theme.AnsiPalette != "soft" && theme.AnsiPalette != "vivid" && theme.AnsiPalette != "bright" {
@@ -380,9 +394,9 @@ func (s *Store) saveAppearanceLocked(value Appearance) (Appearance, error) {
 		value.UIStyle = "classic"
 	}
 	switch value.UIStyle {
-	case "classic", "frosted", "polar", "twilight":
+	case "classic", "frosted":
 	default:
-		return Appearance{}, errors.New("工作台样式应为 classic、frosted、polar 或 twilight")
+		return Appearance{}, errors.New("工作台样式应为 classic 或 frosted")
 	}
 	if err := validateSavedLayout(value.Layout); err != nil {
 		return Appearance{}, err

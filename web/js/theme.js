@@ -2,7 +2,7 @@
 (() => {
   'use strict';
   const key = 'cloudshell.theme';
-  const uiStyles = new Set(['classic', 'frosted', 'polar', 'twilight']);
+  const uiStyles = new Set(['classic', 'frosted']);
   // Global workbench style: persisted through the appearance config, applied
   // here before styles load so the first painted frame already matches.
   document.documentElement.dataset.uiStyle = uiStyles.has(window.DEVSHELL?.uiStyle) ? window.DEVSHELL.uiStyle : 'classic';

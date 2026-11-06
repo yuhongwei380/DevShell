@@ -491,18 +491,6 @@ func runDesktopBackend(application desktopBackend, assets fs.FS, configDir, deta
 		} else {
 			windowBackground = options.NewRGB(232, 230, 223)
 		}
-	case "polar":
-		if darkAtStart {
-			windowBackground = options.NewRGB(36, 41, 51)
-		} else {
-			windowBackground = options.NewRGB(222, 229, 236)
-		}
-	case "twilight":
-		if darkAtStart {
-			windowBackground = options.NewRGB(22, 22, 30)
-		} else {
-			windowBackground = options.NewRGB(213, 214, 219)
-		}
 	}
 	return wails.Run(&options.App{
 		Title: "DevShell", Width: initial.Width, Height: initial.Height, MinWidth: initial.MinWidth, MinHeight: initial.MinHeight,

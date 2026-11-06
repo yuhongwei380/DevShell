@@ -1,15 +1,16 @@
-/* 全局主题对话框：选择工作台样式（classic/frosted/polar/twilight）与明暗模式。
+/* 全局主题对话框：选择工作台样式（classic/frosted）与明暗模式。
    样式只重绘整套界面材质，走普通 appearance 补丁持久化；与字体、ANSI、
-   背景选择、布局互相独立，切换不重建终端也不中断连接。 */
+   背景选择、布局互相独立，切换不重建终端也不中断连接。旧的极地（polar）
+   与夜幕（twilight）已移除，保存值在加载时迁回 classic。 */
 (() => {
   'use strict';
   const dialog = document.getElementById('ui-styles-dialog');
   const status = document.getElementById('ui-style-status');
   const styles = [...dialog.querySelectorAll('[data-ui-style]')];
   const modes = [...dialog.querySelectorAll('[data-theme-mode]')];
-  const names = { classic: '经典', frosted: '液态玻璃', polar: '极地', twilight: '夜幕' };
+  const names = { classic: '经典', frosted: '液态玻璃' };
   let saving = false;
-  function currentStyle() { return ['frosted', 'polar', 'twilight'].includes(appearance.uiStyle) ? appearance.uiStyle : 'classic'; }
+  function currentStyle() { return appearance.uiStyle === 'frosted' ? 'frosted' : 'classic'; }
   function reflect() {
     const style = currentStyle();
     for (const button of styles) button.setAttribute('aria-pressed', String(button.dataset.uiStyle === style));

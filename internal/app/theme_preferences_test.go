@@ -2,6 +2,8 @@ package app
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -117,7 +119,8 @@ func TestAppearanceThemesEmptyIsQuiet(t *testing.T) {
 	}
 }
 
-// 全局工作台样式：默认经典、四种枚举合法、非法值整笔拒绝且不动已存值。
+// 全局工作台样式：默认经典、两套枚举合法、已移除的 polar/twilight 整笔
+// 拒绝且不动已存值；旧配置文件里的旧值在加载时迁回 classic。
 func TestAppearanceUIStyle(t *testing.T) {
 	store, err := OpenStore(t.TempDir())
 	if err != nil {
@@ -126,19 +129,45 @@ func TestAppearanceUIStyle(t *testing.T) {
 	if got := store.List().Appearance.UIStyle; got != "classic" {
 		t.Fatal("default style should be classic", got)
 	}
-	for _, style := range []string{"frosted", "polar", "twilight", "classic"} {
+	for _, style := range []string{"frosted", "classic"} {
 		if saved, err := store.PatchAppearance(preferencePatch(t, `{"uiStyle":"`+style+`"}`)); err != nil || saved.UIStyle != style {
 			t.Fatalf("style %s rejected: %v %+v", style, err, saved)
 		}
 	}
-	if _, err := store.PatchAppearance(preferencePatch(t, `{"uiStyle":"vapor"}`)); err == nil || !strings.Contains(err.Error(), "工作台样式") {
-		t.Fatal("unknown style accepted", err)
+	for _, style := range []string{"polar", "twilight", "vapor"} {
+		if _, err := store.PatchAppearance(preferencePatch(t, `{"uiStyle":"`+style+`"}`)); err == nil || !strings.Contains(err.Error(), "工作台样式") {
+			t.Fatalf("removed or unknown style %s accepted", style)
+		}
 	}
 	if got := store.List().Appearance.UIStyle; got != "classic" {
 		t.Fatal("rejected style changed stored value", got)
 	}
 	if saved, err := reopenedSaveWithEmptyStyle(store); err != nil || saved.UIStyle != "classic" {
 		t.Fatal("empty style should normalize back to classic", saved.UIStyle, err)
+	}
+}
+
+// 旧版本保存过 polar/twilight 的配置与主题快照：重启加载即迁回 classic，
+// 不会让后续任何外观保存被枚举校验拒绝。
+func TestAppearanceUIStyleRetiredMigration(t *testing.T) {
+	dir := t.TempDir()
+	raw := `{"appearance":{"uiStyle":"twilight","themes":[{"id":"a1","name":"夜幕快照","uiStyle":"polar"}]}}`
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(raw), 0600); err != nil {
+		t.Fatal(err)
+	}
+	store, err := OpenStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := store.List().Appearance
+	if got.UIStyle != "classic" {
+		t.Fatal("retired live style should migrate to classic", got.UIStyle)
+	}
+	if len(got.Themes) != 1 || got.Themes[0].UIStyle != "classic" {
+		t.Fatal("retired snapshot style should migrate to classic", got.Themes)
+	}
+	if _, err := store.PatchAppearance(preferencePatch(t, `{"terminalFontSize":16}`)); err != nil {
+		t.Fatal("appearance patch after migration should save", err)
 	}
 }
 
