@@ -105,9 +105,10 @@
   background:radial-gradient(42% 46% at 62% 30%,#aecbe8,#0000 60%),radial-gradient(36% 40% at 30% 70%,#c2d8ec,#0000 62%); }
 @keyframes liquid-drift { from { transform:translate3d(-2.5%,-1.5%,0) scale(1.05); } to { transform:translate3d(2.5%,2%,0) scale(1.14); } }
 [data-ui-style="frosted"] .sidebar { background:var(--glass-sheen),var(--glass-sidebar); backdrop-filter:blur(30px) saturate(1.8) brightness(1.05); -webkit-backdrop-filter:blur(30px) saturate(1.8) brightness(1.05); box-shadow:var(--glass-edge),inset -1px 0 var(--border),var(--shadow); }
-/* 宽屏下监控玻璃面从顶部工具栏下方开始，与 Shell 和 SFTP 对齐。
-   窄屏抽屉保持原来的定位。 */
-:root:not([data-narrow="true"])[data-ui-style="frosted"] .sidebar { background:var(--glass-sheen),var(--glass-sidebar); box-shadow:var(--glass-edge),var(--shadow); backdrop-filter:blur(30px) saturate(1.8) brightness(1.05); -webkit-backdrop-filter:blur(30px) saturate(1.8) brightness(1.05); border-radius:20px; }
+/* 宽屏下监控区不再是独立玻璃卡：内容直接融入画布，只从顶部工具栏下方
+   开始（margin-top:48px），与 Shell 和 SFTP 面板顶部对齐；仅 Shell 与
+   SFTP 两块玻璃与画布轻微分隔。窄屏抽屉保持玻璃面避免压字。 */
+:root:not([data-narrow="true"])[data-ui-style="frosted"] .sidebar { background:transparent; box-shadow:none; backdrop-filter:none; -webkit-backdrop-filter:none; border-radius:0; }
 html[data-ui-style="frosted"]:not([data-narrow="true"]):not([data-monitor-visible="false"]) .sidebar { margin-top:48px; padding-top:0; }
 /* 玻璃面上不留硬描边：芯片只靠底面色差成块，面板内分隔用明暗差完成，
    不出现直角发丝线。输入控件的细边框保留（那是控件，不是卡片）。 */
@@ -138,9 +139,9 @@ html[data-ui-style="frosted"]:not([data-narrow="true"]):not([data-monitor-visibl
 [data-ui-style="frosted"] :is(.file-table thead,.files-toolbar,.file-tabs,.file-status,.directory-tree,.commands-toolbar,.transfer-notice) { background:transparent; border-color:var(--border); }
 /* 目录与文件列表融入同一面板，交互状态仍保留底色。 */
 [data-ui-style="frosted"] :is(.file-table-wrap,.directory-tree,.file-table thead) { background:transparent; border:0; border-radius:0; box-shadow:none; }
-/* 粘性表头融入面板同色底带（不是卡片），避免列表滚动时文字穿透重叠。 */
-[data-ui-style="frosted"] .file-table thead { background:rgb(24 31 38 / .82); }
-[data-ui-style="frosted"][data-theme="light"] .file-table thead { background:rgb(255 255 255 / .88); }
+/* 文件列表去掉内框：表头不做底带也不粘顶，作为标题行随内容滚动，
+   内容靠留白、标题与选中状态区分。 */
+[data-ui-style="frosted"] .file-table thead { position:static; }
 [data-ui-style="frosted"] :is(.file-search,.path-form,.connection-search,.meter,dialog input,dialog select,dialog textarea,.server-icon,.themed-select-trigger,.count-badge,.upload-button) { background:var(--glass-input); color:var(--text); border:0; border-radius:9px; box-shadow:var(--glass-ring); }
 [data-ui-style="frosted"] :is(.connection-card,.tree-row,.tree-shortcut,.file-tab).selected,[data-ui-style="frosted"] .file-tab.active,[data-ui-style="frosted"] .file-table tr.selected { background:var(--surface-selected); color:var(--accent); }
 [data-ui-style="frosted"] button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
