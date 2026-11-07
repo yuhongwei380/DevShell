@@ -55,38 +55,71 @@ func (s *Store) Restore(id string) (Profile, error) {
 func (s *Store) Purge(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	index := -1
-	for i, profile := range s.config.Servers {
+	for _, profile := range s.config.Servers {
 		if profile.ID == id {
 			if profile.DeletedAt == nil {
 				return errors.New("只能永久删除回收站中的服务器")
 			}
-			index = i
-			break
+			return s.purgeLocked(map[string]bool{id: true})
 		}
 	}
-	if index < 0 {
-		return errors.New("回收站记录不存在")
+	return errors.New("回收站记录不存在")
+}
+
+// PurgeAllTrash backs the 「一键清理」 button: it permanently removes every
+// trashed connection with the same cascades as Purge and reports the count.
+func (s *Store) PurgeAllTrash() (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ids := map[string]bool{}
+	for _, profile := range s.config.Servers {
+		if profile.DeletedAt != nil {
+			ids[profile.ID] = true
+		}
 	}
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	if err := s.purgeLocked(ids); err != nil {
+		return 0, err
+	}
+	return len(ids), nil
+}
+
+// purgeLocked removes every trashed profile named by ids together with its
+// connection history, layout slots, path history and directory favorites.
+// The caller must hold s.mu.
+func (s *Store) purgeLocked(ids map[string]bool) error {
 	old := cloneConnectionConfig(s.config)
-	s.config.Servers = append(append([]Profile{}, s.config.Servers[:index]...), s.config.Servers[index+1:]...)
-	history := []ConnectionHistory{}
+	kept := make([]Profile, 0, len(s.config.Servers))
+	for _, profile := range s.config.Servers {
+		if ids[profile.ID] && profile.DeletedAt != nil {
+			continue
+		}
+		kept = append(kept, profile)
+	}
+	s.config.Servers = kept
+	history := make([]ConnectionHistory, 0, len(s.config.ConnectionHistory))
 	for _, entry := range s.config.ConnectionHistory {
-		if entry.ProfileID != id {
+		if !ids[entry.ProfileID] {
 			history = append(history, entry)
 		}
 	}
 	s.config.ConnectionHistory = history
 	s.config.Appearance = cloneAppearance(s.config.Appearance)
-	delete(s.config.Appearance.Layout, "dengshell.history."+id)
-	delete(s.config.Appearance.Layout, "dengshell.nic."+id)
-	s.dropPathHistoryLocked(map[string]bool{id: true})
-	s.dropDirectoryFavoritesLocked(map[string]bool{id: true})
+	for id := range ids {
+		delete(s.config.Appearance.Layout, "dengshell.history."+id)
+		delete(s.config.Appearance.Layout, "dengshell.nic."+id)
+	}
+	s.dropPathHistoryLocked(ids)
+	s.dropDirectoryFavoritesLocked(ids)
 	if err := s.writeLocked(); err != nil {
 		s.config = old
 		return err
 	}
-	delete(s.historyState, id)
+	for id := range ids {
+		delete(s.historyState, id)
+	}
 	return nil
 }
 func (s *Store) MarkConnected(id string, at time.Time) error {
@@ -225,5 +258,9 @@ func (a *App) registerConnectionManagementHTTP(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("DELETE /api/trash/{id}", func(w http.ResponseWriter, r *http.Request) {
 		respond(w, map[string]bool{"ok": true}, a.store.Purge(r.PathValue("id")))
+	})
+	mux.HandleFunc("POST /api/trash/purge-all", func(w http.ResponseWriter, r *http.Request) {
+		removed, err := a.store.PurgeAllTrash()
+		respond(w, map[string]any{"ok": err == nil, "removed": removed}, err)
 	})
 }

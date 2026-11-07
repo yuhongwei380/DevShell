@@ -178,7 +178,7 @@
       <label class="connection-search"><svg><use href="#i-search"/></svg><input id="connection-search" placeholder="搜索名称、地址、分组或备注" aria-label="搜索服务器"></label>
     </div>
     <div id="connection-groups" role="tabpanel" aria-labelledby="server-tab-servers"></div>
-    <div id="server-manager-create" class="server-manager-create"><button class="new-connection" id="new-connection"><svg><use href="#i-plus"/></svg>新建连接</button><button class="text-button" id="open-rdp-sessions" type="button" hidden>RDP 会话</button><button class="text-button" id="new-group">＋ 新建分组</button><button class="text-button" id="export-backup" type="button" title="导出连接、密钥与主机指纹为备份文件">备份</button><button class="text-button" id="import-backup" type="button" title="从备份文件导入连接">恢复</button><input type="file" id="backup-picker" accept="application/json,.json" hidden></div>
+    <div id="server-manager-create" class="server-manager-create"><button class="new-connection" id="new-connection"><svg><use href="#i-plus"/></svg>新建连接</button><button class="text-button" id="open-rdp-sessions" type="button" hidden>RDP 会话</button><button class="text-button" id="new-group">＋ 新建分组</button><button class="text-button" id="export-backup" type="button" title="导出连接、密钥与主机指纹为备份文件">备份</button><button class="text-button" id="import-backup" type="button" title="从备份文件导入连接">恢复</button><button class="text-button server-danger" id="purge-trash" type="button" hidden title="永久删除全部已删除连接及其凭据与连接历史，无法恢复">一键清理</button><input type="file" id="backup-picker" accept="application/json,.json" hidden></div>
   </aside>
   <div id="server-group-menu" class="server-group-menu" role="menu" aria-label="分组操作" hidden></div>
   <dialog id="server-move-dialog" aria-labelledby="server-move-title"><form id="server-move-form">

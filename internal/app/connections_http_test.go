@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"testing"
 	"testing/fstest"
+	"time"
 )
 
 func TestConnectionManagementHTTPContract(t *testing.T) {
@@ -314,5 +315,92 @@ func TestProfileDuplicateCloneNamesAndChannelEndpoint(t *testing.T) {
 	handler.ServeHTTP(missing, req)
 	if missing.Code == 200 {
 		t.Fatalf("clone channel for a nonexistent session succeeded: %s", missing.Body)
+	}
+}
+
+// 「一键清理」把回收站全部连接连同其连接历史一次清空：不得触碰在用连接，
+// 清理后 /api/config 不再有回收站区段，重复调用幂等。
+func TestTrashPurgeAllEndpoint(t *testing.T) {
+	a, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	handler := a.Handler(fstest.MapFS{"index.html": {Data: []byte("fixture")}})
+	request := func(method, path string, input any) *httptest.ResponseRecorder {
+		t.Helper()
+		body, _ := json.Marshal(input)
+		req := httptest.NewRequest(method, "http://wails.localhost"+path, bytes.NewReader(body))
+		req.Header.Set("X-CloudShell-Token", a.Token())
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, req)
+		if response.Code != 200 {
+			t.Fatalf("%s %s: %d %s", method, path, response.Code, response.Body)
+		}
+		return response
+	}
+	var ids []string
+	for _, name := range []string{"Purge one", "Purge two"} {
+		response := request("POST", "/api/profiles", Profile{Name: name, Host: "localhost", User: "root"})
+		var profile Profile
+		if err := json.Unmarshal(response.Body.Bytes(), &profile); err != nil {
+			t.Fatal(err)
+		}
+		if err := a.store.MarkConnected(profile.ID, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, profile.ID)
+	}
+	response := request("POST", "/api/profiles", Profile{Name: "Survivor", Host: "localhost", User: "root"})
+	var survivor Profile
+	if err := json.Unmarshal(response.Body.Bytes(), &survivor); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range ids {
+		request("DELETE", "/api/profiles/"+id, nil)
+	}
+	response = request("GET", "/api/config", nil)
+	var before Config
+	if err := json.Unmarshal(response.Body.Bytes(), &before); err != nil {
+		t.Fatal(err)
+	}
+	if len(before.Trash) != 2 || len(before.Servers) != 1 || len(before.ConnectionHistory) != 2 {
+		t.Fatalf("trash staging wrong: trash=%d servers=%d history=%d", len(before.Trash), len(before.Servers), len(before.ConnectionHistory))
+	}
+	response = request("POST", "/api/trash/purge-all", struct{}{})
+	var result struct {
+		OK      bool `json:"ok"`
+		Removed int  `json:"removed"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if !result.OK || result.Removed != 2 {
+		t.Fatalf("purge-all result: %+v", result)
+	}
+	response = request("GET", "/api/config", nil)
+	var after Config
+	if err := json.Unmarshal(response.Body.Bytes(), &after); err != nil {
+		t.Fatal(err)
+	}
+	if len(after.Trash) != 0 || len(after.Servers) != 1 || after.Servers[0].ID != survivor.ID || len(after.ConnectionHistory) != 0 {
+		t.Fatalf("purge-all left trash or touched live connections: %+v", after)
+	}
+	if _, err := a.store.Get(ids[0]); err == nil {
+		t.Fatal("purged profile still readable")
+	}
+	if _, err := a.store.Get(survivor.ID); err != nil {
+		t.Fatalf("survivor lost: %v", err)
+	}
+	response = request("POST", "/api/trash/purge-all", struct{}{})
+	var empty struct {
+		OK      bool `json:"ok"`
+		Removed int  `json:"removed"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &empty); err != nil {
+		t.Fatal(err)
+	}
+	if !empty.OK || empty.Removed != 0 {
+		t.Fatalf("second purge-all not idempotent: %+v", empty)
 	}
 }

@@ -256,7 +256,11 @@ function renderServerManager() {
     tab.setAttribute('aria-selected', String(selected)); tab.tabIndex = selected ? 0 : -1;
     tab.querySelector('span').textContent = String(tabCounts[tab.dataset.serverTab]);
   }
-  $('#server-manager-create').hidden = serverManager.tab !== 'servers';
+  // 「一键清理」与新建/备份同排：「已删除」页隐藏其他按钮只留清理，回收站为空则整行隐藏。
+  const trashTab = serverManager.tab === 'trash';
+  for (const id of ['new-connection', 'new-group', 'export-backup', 'import-backup']) $('#' + id).hidden = trashTab;
+  $('#purge-trash').hidden = !trashTab || !serverManager.trash.length;
+  $('#server-manager-create').hidden = !trashTab || !serverManager.trash.length;
   target.setAttribute('aria-labelledby', `server-tab-${serverManager.tab}`);
   renderServerExplorer(tree, query);
   if (serverManager.tab === 'servers') {
@@ -270,8 +274,17 @@ function renderServerManager() {
   if (focusGroup !== undefined && focusAction) [...$('#server-manager-body').querySelectorAll('[data-group-id]')].find(row => row.dataset.groupId === focusGroup)?.querySelector(`[data-group-action="${focusAction}"]`)?.focus({ preventScroll: true });
 }
 
-function renderServerGroupChoices(selected = '', target = $('#profile-group'), exclude = '') {
-  const tree = serverGroupTree(), excluded = new Set();
+// 「已删除」页的「一键清理」：一次永久移除全部回收站连接，凭据缓存、连接历史
+// 与布局残留随之清除；后端 purge-all 与逐条「永久删除」走同一套级联。
+async function purgeAllTrashedProfiles() {
+  const items = [...serverManager.trash]; if (!items.length) return;
+  if (!await ask({ title: '清空「已删除」？', description: `共 ${items.length} 个已删除连接，其配置、已保存的凭据与连接历史将被永久移除，无法恢复。远程服务器本身不受影响。`, confirm: '全部永久删除' })) return;
+  const result = await post('/api/trash/purge-all', {});
+  for (const profile of items) { credentials.delete(profile.id); save(`dengshell.history.${profile.id}`, undefined); save(`dengshell.nic.${profile.id}`, undefined); }
+  await loadProfiles();
+  toast(`已清理 ${result?.removed ?? items.length} 个已删除连接`);
+}
+function renderServerGroupChoices(selected = '', target = $('#profile-group'), exclude = '') {  const tree = serverGroupTree(), excluded = new Set();
   if (exclude) for (const group of tree.flat) if (group.id === exclude || excluded.has(group.parentId)) excluded.add(group.id);
   const options = [];
   if (target.id === 'group-parent') { const top = node('option', '', '顶层分组'); top.value = ''; options.push(top); }
@@ -419,6 +432,7 @@ function initializeServerManager() {
     };
   }
   $('#cancel-server-group').onclick = () => $('#server-group-dialog').close();
+  $('#purge-trash').onclick = safe(purgeAllTrashedProfiles);
   $('#profile-new-group').onclick = () => openServerGroupEditor();
   $('#group-emoji-search').oninput = renderGroupEmojiPicker;
   $('#server-group-form').elements.emoji.oninput = updateGroupEmojiPreview;
