@@ -243,7 +243,8 @@ func TestProfileDuplicateCarriesStoredCredentials(t *testing.T) {
 }
 
 // 「复制链接」/「复制独立会话」提交 原名-clone；收藏夹与服务器管理共用同一份配置，
-// 名称必须保持唯一（重名时 store 追加 2/3… 后缀）。空 name 保留旧的
+// 名称必须保持唯一（重名时 store 追加 2/3… 后缀，删除副本后编号立即释放回填）。
+// 空 name 保留旧的
 // 原样复制行为；克隆渠道端点对不存在的会话必须干净失败。
 func TestProfileDuplicateCloneNamesAndChannelEndpoint(t *testing.T) {
 	a, err := New(t.TempDir())
@@ -269,6 +270,7 @@ func TestProfileDuplicateCloneNamesAndChannelEndpoint(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &source); err != nil {
 		t.Fatal(err)
 	}
+	var cloneIDs []string
 	for _, want := range []string{"Clone source-clone", "Clone source-clone 2", "Clone source-clone 3"} {
 		response = request("POST", "/api/profiles/"+source.ID+"/duplicate", struct {
 			Name string `json:"name"`
@@ -283,6 +285,7 @@ func TestProfileDuplicateCloneNamesAndChannelEndpoint(t *testing.T) {
 		if clone.Name != want {
 			t.Fatalf("named duplicate = %q, want %q", clone.Name, want)
 		}
+		cloneIDs = append(cloneIDs, clone.ID)
 	}
 	response = request("POST", "/api/profiles/"+source.ID+"/duplicate", struct{}{})
 	var bare Profile
@@ -291,6 +294,18 @@ func TestProfileDuplicateCloneNamesAndChannelEndpoint(t *testing.T) {
 	}
 	if bare.Name != "Clone source" {
 		t.Fatalf("unnamed duplicate renamed: %q", bare.Name)
+	}
+	// 删除副本立即释放编号：删掉「-clone 2」后再复制，应回填 2 而不是累计到 4。
+	request("DELETE", "/api/profiles/"+cloneIDs[1], nil)
+	response = request("POST", "/api/profiles/"+source.ID+"/duplicate", struct {
+		Name string `json:"name"`
+	}{Name: "Clone source-clone"})
+	var refilled Profile
+	if err := json.Unmarshal(response.Body.Bytes(), &refilled); err != nil {
+		t.Fatal(err)
+	}
+	if refilled.Name != "Clone source-clone 2" {
+		t.Fatalf("named duplicate after deleting the middle clone = %q, want %q", refilled.Name, "Clone source-clone 2")
 	}
 	body, _ := json.Marshal(struct{}{})
 	req := httptest.NewRequest("POST", "http://wails.localhost/api/sessions/missing-session/channel", bytes.NewReader(body))

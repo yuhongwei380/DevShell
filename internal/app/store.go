@@ -336,13 +336,19 @@ func (s *Store) Duplicate(id string, name string) (Profile, error) {
 }
 
 // uniqueServerName appends " 2", " 3", ... until the name no longer matches
-// an existing saved connection (case-insensitive, trash included) so repeated
-// clones stay distinguishable without opening an editor.
+// an existing saved connection (case-insensitive) so repeated clones stay
+// distinguishable without opening an editor. Trashed connections release
+// their names and gap-fill resumes from the lowest free number: deleting
+// 「X-clone 2」 makes the next copy reuse 2 instead of letting the counter
+// climb forever.
 func (s *Store) uniqueServerName(base string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	taken := make(map[string]bool, len(s.config.Servers))
 	for _, existing := range s.config.Servers {
+		if existing.DeletedAt != nil {
+			continue
+		}
 		taken[strings.ToLower(strings.TrimSpace(existing.Name))] = true
 	}
 	if !taken[strings.ToLower(base)] {
