@@ -18,14 +18,24 @@ assert.ok(windowsSource.includes("'复制同服务器SSH会话'"), 'tab menu mus
 assert.ok(!windowsSource.includes('新建同服务器会话'), 'tab menu must no longer offer 新建同服务器会话');
 assert.ok(windowsSource.includes('window.DengPinnedNav.cloneLink(profile)'), 'tab menu must offer 复制链接');
 assert.ok(appSource.includes('if (!state.localShell && !state.telnet && !state.serial) safe(() => cloneSessionChannel(state))();'), 'double-click on a connected tab must default to opening a same-server session');
+// 非占位标签在 createTerminal 内已自动接入终端；再调一次 openTerminalSocket 会
+// 撞上后端 409「此会话已有终端」，新标签立刻变红并显示 DS-290（真实回归）。
+assert.ok(cloneSource.includes('createTerminal(clone)'), 'the clone tab must create its terminal');
+assert.ok(!cloneSource.includes('clone.openTerminalSocket('), 'cloneSessionChannel must not open the terminal socket a second time');
 
 function cloneContext(post) {
   const context = {
     sessions: new Map(), nextSessionOrder: 4,
     post, encodeURIComponent,
     toast: message => context.messages.push(message),
-    makeSessionState: info => ({ ...info, connected: true, ready: false, cwd: '/', openTerminalSocket: () => { context.socketed.push(info.id); } }),
-    createTerminal: state => { context.created.push(state.id); },
+    makeSessionState: info => ({ ...info, connected: true, ready: false, cwd: '/' }),
+    // 真实 createTerminal 对非占位标签（无 localOnly/restoration）会赋值
+    // openTerminalSocket 并立即接入一次；照此建模以捕捉任何二次接入。
+    createTerminal: state => {
+      context.created.push(state.id);
+      state.openTerminalSocket = () => { context.socketed.push(state.id); };
+      state.openTerminalSocket();
+    },
     activate: id => { context.activated = id; },
     setDrawer() {}, renderConnections() {},
     refreshFileStatus: async state => { context.refreshed.push(state.id); },
@@ -61,7 +71,7 @@ assert.equal(ctx.sessions.get('clone-1'), cloned);
 assert.equal(cloned.announceConnectionReady, true);
 assert.deepEqual(ctx.created, ['clone-1']);
 assert.equal(ctx.activated, 'clone-1');
-assert.deepEqual(ctx.socketed, ['clone-1'], 'the clone tab must open its own terminal channel');
+assert.deepEqual(ctx.socketed, ['clone-1'], 'the clone tab must attach its terminal channel exactly once');
 assert.deepEqual(ctx.refreshed, ['clone-1'], 'pending SFTP is refreshed per clone session');
 assert.match(ctx.messages.join(''), /已复制「源连接」的 SSH 连接/);
 

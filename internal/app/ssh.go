@@ -443,6 +443,7 @@ func (a *App) CloneSessionChannel(ctx context.Context, parentID string) (*Sessio
 	s.promptUsernameColor, s.promptHostnameColor = appearance.PromptUsernameColor, appearance.PromptHostnameColor
 	// 与新建连接相同的发布契约:终端在 shell 请求里自带引导脚本,文件面板暂不
 	// 打开 SSH 通道;Home 保持 "/" 直到文件状态报告真实家目录。
+	s.Home = "/"
 	integration := s.prepareTerminalLaunch()
 	s.preparedIntegration = &integration
 	s.prepareFileInitialization()

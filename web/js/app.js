@@ -384,11 +384,13 @@ async function cloneSessionChannel(state) {
     clone.tabOrder = nextSessionOrder++;
     clone.announceConnectionReady = true;
     sessions.set(clone.id, clone);
+    // 克隆不是占位标签:非占位标签在 createTerminal 内自动接入终端渠道,这里绝不
+    // 再开第二次 socket——同一会话第二次无交接接入会被后端 409「此会话已有终端」
+    // 拒绝,onclose 把刚建的标签标成断开(DS-290),正是本次修复的缺陷。
     createTerminal(clone);
     activate(clone.id);
     setDrawer(false);
     renderConnections();
-    clone.openTerminalSocket();
     if (clone.sftpPending) void refreshFileStatus(clone, true);
     else if (info.sftpAvailable !== false) navigate(clone.cwd, clone).catch(error => { if (!clone.closed) toast(`⚠️  目录读取失败：${error.message}`); });
     const profile = profileFor(clone);
