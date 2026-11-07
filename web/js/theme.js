@@ -5,7 +5,9 @@
   const uiStyles = new Set(['classic', 'frosted']);
   // Global workbench style: persisted through the appearance config, applied
   // here before styles load so the first painted frame already matches.
-  document.documentElement.dataset.uiStyle = uiStyles.has(window.DEVSHELL?.uiStyle) ? window.DEVSHELL.uiStyle : 'classic';
+  // 浅色主题暂不提供液态玻璃：浅色画布太亮,半透明面板对比度不足,
+  // 解析为 light 时按 classic 渲染;偏好仍保留 frosted,切回深色自动恢复。
+  let selectedStyle = uiStyles.has(window.DEVSHELL?.uiStyle) ? window.DEVSHELL.uiStyle : 'classic';
   const system = matchMedia('(prefers-color-scheme: dark)');
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   let transition, transitionTimer, fallbackAnimation, generation = 0;
@@ -29,6 +31,7 @@
     document.documentElement.dataset.theme = theme;
     document.documentElement.dataset.themePreference = preference;
     document.documentElement.style.colorScheme = theme;
+    document.documentElement.dataset.uiStyle = selectedStyle === 'frosted' && theme === 'light' ? 'classic' : selectedStyle;
     reflectSetting();
     window.dispatchEvent(new CustomEvent('cloudshell:theme', { detail: theme }));
   }
@@ -87,8 +90,8 @@
     set,
     setStyle(style) {
       const next = uiStyles.has(style) ? style : 'classic';
-      if (document.documentElement.dataset.uiStyle === next) return;
-      document.documentElement.dataset.uiStyle = next;
+      if (selectedStyle === next) return;
+      selectedStyle = next;
       render(false);
     },
     refreshSystem: refreshNativeTheme,

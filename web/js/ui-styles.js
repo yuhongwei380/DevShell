@@ -18,7 +18,11 @@
       button.disabled = saving;
       button.setAttribute('aria-pressed', String(button.dataset.themeMode === window.DevShellTheme.preference));
     }
-    if (!saving) status.textContent = `当前：${names[style]} · ${window.DevShellTheme.preference === 'system' ? '跟随系统' : window.DevShellTheme.current === 'dark' ? '深色' : '浅色'}`;
+    if (!saving) {
+      const mode = window.DevShellTheme.preference === 'system' ? '跟随系统' : window.DevShellTheme.current === 'dark' ? '深色' : '浅色';
+      const downgraded = style === 'frosted' && window.DevShellTheme.current === 'light';
+      status.textContent = `当前：${names[downgraded ? 'classic' : style]} · ${mode}${downgraded ? '（液态玻璃暂不支持浅色主题）' : ''}`;
+    }
   }
   async function select(patch) {
     if (saving) return;
