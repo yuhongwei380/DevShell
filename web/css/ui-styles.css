@@ -51,7 +51,7 @@
   --glass-terminal-sheen:linear-gradient(150deg,#ffffff16,#ffffff00 48%,#ffffff0d);
   --glass-surface:rgb(24 31 38 / .6); --glass-toolbar:rgb(24 31 38 / .6);
   --glass-sidebar:rgb(21 28 35 / .55); --glass-popup:rgb(24 31 38 / .84); --glass-input:rgb(13 18 24 / .72);
-  --glass-terminal:rgb(15 22 29 / .7); --glass-solid:#181f26; --glass-terminal-solid:#0f161d;
+  --glass-terminal:rgb(15 22 29 / .58); --glass-solid:#181f26; --glass-terminal-solid:#0f161d;
   --glass-edge:inset 0 1px 0 #d9ecff4d,inset 0 -1px 0 #ffc98f1a,inset 0 0 0 1px #ffffff12,inset 0 0 30px -14px #ffffff30;
   --glass-ring:inset 0 0 0 1px #ffffff22;
   --surface:var(--glass-surface); --surface-inset:var(--glass-input);
@@ -64,7 +64,7 @@
   --glass-sheen:linear-gradient(150deg,#ffffffea,#ffffff00 42%,#ffffff00 58%,#ffffff7a);
   --glass-surface:rgb(255 255 255 / .58); --glass-toolbar:rgb(255 255 255 / .62);
   --glass-sidebar:rgb(255 255 255 / .52); --glass-popup:rgb(255 255 255 / .84); --glass-input:rgb(244 247 249 / .75);
-  --glass-terminal:rgb(34 55 70 / .72); --glass-solid:#ffffff; --glass-terminal-solid:#223746;
+  --glass-terminal:rgb(34 55 70 / .62); --glass-solid:#ffffff; --glass-terminal-solid:#223746;
   --glass-edge:inset 0 1px 0 #fffffff2,inset 0 -1px 0 #d9b58c26,inset 0 0 0 1px #64809a22,inset 0 0 30px -16px #5c7c9c16;
   --glass-ring:inset 0 0 0 1px #64809a2e;
   --surface:var(--glass-surface); --surface-inset:var(--glass-input);
@@ -77,10 +77,10 @@
 /* 底层大色斑缓慢漂移，为玻璃提供可折射的流动光色——液态玻璃的「液态」。
    色相取经典强调色同族的蓝；两层光场以不同速度反向漂移形成视差，
    玻璃板后的世界明显在流动，这是与经典主题最直观的差异。 */
-[data-ui-style="frosted"] body::before { content:""; position:fixed; z-index:-1; pointer-events:none; inset:-14%; opacity:.72;
+[data-ui-style="frosted"] body::before { content:""; position:fixed; z-index:-1; pointer-events:none; inset:-14%; opacity:.85;
   background:radial-gradient(38% 44% at 22% 22%,#34607e,#0000 62%),radial-gradient(42% 38% at 76% 14%,#274a6c,#0000 64%),radial-gradient(46% 50% at 70% 80%,#1d3a5c,#0000 62%),radial-gradient(40% 42% at 24% 76%,#3e6f96,#0000 64%);
   filter:blur(90px); animation:liquid-drift 36s ease-in-out infinite alternate; }
-[data-ui-style="frosted"] body::after { content:""; position:fixed; z-index:-1; pointer-events:none; inset:-30%; opacity:.55;
+[data-ui-style="frosted"] body::after { content:""; position:fixed; z-index:-1; pointer-events:none; inset:-30%; opacity:.66;
   background:radial-gradient(42% 46% at 62% 30%,#3a6d95,#0000 60%),radial-gradient(36% 40% at 30% 70%,#20405f,#0000 62%);
   filter:blur(120px); animation:liquid-drift 52s ease-in-out infinite alternate-reverse; }
 [data-ui-style="frosted"][data-theme="light"] body::before {
@@ -114,9 +114,9 @@ html[data-ui-style="frosted"]:not([data-narrow="true"]):not([data-monitor-visibl
 [data-ui-style="frosted"] .session-bar .window-controls { background:var(--surface-inset); }
 [data-ui-style="frosted"] .session-tab { background:transparent; border:0; border-radius:12px; }
 [data-ui-style="frosted"] .session-tab.active { background:var(--glass-popup); box-shadow:var(--glass-edge); }
-[data-ui-style="frosted"] .terminal-panel { background:var(--glass-terminal-sheen),var(--glass-terminal); box-shadow:var(--glass-edge),var(--shadow); border-radius:20px; backdrop-filter:blur(26px) saturate(1.5); -webkit-backdrop-filter:blur(26px) saturate(1.5); }
+[data-ui-style="frosted"][data-theme] .terminal-panel { background:var(--glass-terminal-sheen),var(--glass-terminal); box-shadow:var(--glass-edge),var(--shadow); border-radius:20px; backdrop-filter:blur(30px) saturate(1.7); -webkit-backdrop-filter:blur(30px) saturate(1.7); }
 [data-ui-style="frosted"] .terminal-panel::before,[data-ui-style="frosted"] .terminal-panel::after { display:none; background-image:none; }
-[data-ui-style="frosted"] .terminal-panel :is(.terminal-meta,.terminal-command-bar) { background:#ffffff08; border-color:#ffffff16; backdrop-filter:none; -webkit-backdrop-filter:none; }
+[data-ui-style="frosted"][data-theme] .terminal-panel :is(.terminal-meta,.terminal-command-bar) { background:#ffffff08; border-color:#ffffff16; backdrop-filter:none; -webkit-backdrop-filter:none; }
 [data-ui-style="frosted"] :is(dialog,.connections-drawer,.settings-menu,.popup-menu,.themed-select-popup,.session-tab-menu) { background:var(--glass-sheen),var(--glass-popup); color:var(--text); border-color:var(--border); box-shadow:0 22px 64px #00000055,var(--glass-edge); backdrop-filter:blur(30px) saturate(1.6); -webkit-backdrop-filter:blur(30px) saturate(1.6); }
 [data-ui-style="frosted"] :is(.specs,.cpu-model,.metric,.chart-caption,.process-heading,.disk-row,.file-status,.file-table,.tree-row,.tree-shortcut,.connection-card-text,.drawer-heading h2,dialog h2,.brand) { color:var(--text); }
 [data-ui-style="frosted"] :is(.process-table,.file-table) :is(th,td),[data-ui-style="frosted"] .system-section :is(h2,b,strong) { color:var(--text-secondary); border-color:var(--border); }
@@ -142,7 +142,7 @@ html[data-ui-style="frosted"]:not([data-narrow="true"]):not([data-monitor-visibl
 @media (prefers-reduced-motion:reduce) { [data-ui-style="frosted"] body::before,[data-ui-style="frosted"] body::after { animation:none; } }
 @media (forced-colors:active) {
   [data-ui-style="frosted"] body::before,[data-ui-style="frosted"] body::after { display:none; }
-  [data-ui-style="frosted"] :is(.sidebar,.files-panel,.terminal-panel,dialog,.connections-drawer,.settings-menu,.popup-menu,.themed-select-popup,.session-tab-menu) { background:Canvas; color:CanvasText; outline:1px solid CanvasText; backdrop-filter:none; -webkit-backdrop-filter:none; box-shadow:none; }
+  [data-ui-style="frosted"][data-theme] :is(.sidebar,.files-panel,.terminal-panel,dialog,.connections-drawer,.settings-menu,.popup-menu,.themed-select-popup,.session-tab-menu) { background:Canvas; color:CanvasText; outline:1px solid CanvasText; backdrop-filter:none; -webkit-backdrop-filter:none; box-shadow:none; }
   .ui-style-card[aria-pressed="true"],.ui-style-segmented button[aria-pressed="true"] { border:2px solid Highlight; }
 }
 
