@@ -117,7 +117,7 @@ html[data-ui-style="frosted"]:not([data-narrow="true"]):not([data-monitor-visibl
 [data-ui-style="frosted"] .terminal-panel { background:var(--glass-terminal-sheen),var(--glass-terminal); box-shadow:var(--glass-edge),var(--shadow); border-radius:20px; backdrop-filter:blur(26px) saturate(1.5); -webkit-backdrop-filter:blur(26px) saturate(1.5); }
 [data-ui-style="frosted"] .terminal-panel::before,[data-ui-style="frosted"] .terminal-panel::after { display:none; background-image:none; }
 [data-ui-style="frosted"] .terminal-panel :is(.terminal-meta,.terminal-command-bar) { background:#ffffff08; border-color:#ffffff16; backdrop-filter:none; -webkit-backdrop-filter:none; }
-[data-ui-style="frosted"] :is(dialog,.connections-drawer,.settings-menu,.popup-menu,.themed-select-popup) { background:var(--glass-sheen),var(--glass-popup); color:var(--text); border-color:var(--border); box-shadow:0 22px 64px #00000055,var(--glass-edge); backdrop-filter:blur(30px) saturate(1.6); -webkit-backdrop-filter:blur(30px) saturate(1.6); }
+[data-ui-style="frosted"] :is(dialog,.connections-drawer,.settings-menu,.popup-menu,.themed-select-popup,.session-tab-menu) { background:var(--glass-sheen),var(--glass-popup); color:var(--text); border-color:var(--border); box-shadow:0 22px 64px #00000055,var(--glass-edge); backdrop-filter:blur(30px) saturate(1.6); -webkit-backdrop-filter:blur(30px) saturate(1.6); }
 [data-ui-style="frosted"] :is(.specs,.cpu-model,.metric,.chart-caption,.process-heading,.disk-row,.file-status,.file-table,.tree-row,.tree-shortcut,.connection-card-text,.drawer-heading h2,dialog h2,.brand) { color:var(--text); }
 [data-ui-style="frosted"] :is(.process-table,.file-table) :is(th,td),[data-ui-style="frosted"] .system-section :is(h2,b,strong) { color:var(--text-secondary); border-color:var(--border); }
 [data-ui-style="frosted"] :is(.file-table thead,.files-toolbar,.file-tabs,.file-status,.directory-tree,.commands-toolbar,.transfer-notice) { background:transparent; border-color:var(--border); }
@@ -137,12 +137,12 @@ html[data-ui-style="frosted"]:not([data-narrow="true"]):not([data-monitor-visibl
 @media (prefers-reduced-transparency:reduce) {
   [data-ui-style="frosted"] body::before,[data-ui-style="frosted"] body::after { display:none; }
   :root[data-ui-style="frosted"][data-theme] { --glass-sheen:none; --glass-terminal-sheen:none; --glass-edge:0 0 0 0 transparent; --glass-ring:inset 0 0 0 1px var(--border); --glass-surface:var(--glass-solid); --glass-toolbar:var(--glass-solid); --glass-sidebar:var(--glass-solid); --glass-popup:var(--glass-solid); --glass-terminal:var(--glass-terminal-solid); }
-  [data-ui-style="frosted"] :is(.sidebar,.session-bar,.files-panel,.terminal-panel,dialog,.connections-drawer,.settings-menu,.popup-menu,.themed-select-popup) { backdrop-filter:none; -webkit-backdrop-filter:none; }
+  [data-ui-style="frosted"] :is(.sidebar,.session-bar,.files-panel,.terminal-panel,dialog,.connections-drawer,.settings-menu,.popup-menu,.themed-select-popup,.session-tab-menu) { backdrop-filter:none; -webkit-backdrop-filter:none; }
 }
 @media (prefers-reduced-motion:reduce) { [data-ui-style="frosted"] body::before,[data-ui-style="frosted"] body::after { animation:none; } }
 @media (forced-colors:active) {
   [data-ui-style="frosted"] body::before,[data-ui-style="frosted"] body::after { display:none; }
-  [data-ui-style="frosted"] :is(.sidebar,.files-panel,.terminal-panel,dialog,.connections-drawer,.settings-menu,.popup-menu,.themed-select-popup) { background:Canvas; color:CanvasText; outline:1px solid CanvasText; backdrop-filter:none; -webkit-backdrop-filter:none; box-shadow:none; }
+  [data-ui-style="frosted"] :is(.sidebar,.files-panel,.terminal-panel,dialog,.connections-drawer,.settings-menu,.popup-menu,.themed-select-popup,.session-tab-menu) { background:Canvas; color:CanvasText; outline:1px solid CanvasText; backdrop-filter:none; -webkit-backdrop-filter:none; box-shadow:none; }
   .ui-style-card[aria-pressed="true"],.ui-style-segmented button[aria-pressed="true"] { border:2px solid Highlight; }
 }
 
