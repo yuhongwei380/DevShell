@@ -97,7 +97,7 @@ try {
     return page.$$eval('#server-group-menu button', els => els.map(b => b.textContent.trim()));
   };
   const items = await openMenu(nested.id);
-  assert(items.includes('复制到同名连接') && items.includes('固定到链接栏'), `menu items: ${items}`);
+  assert(items.includes('复制到同名连接') && items.includes('加入收藏夹'), `menu items: ${items}`);
   await page.evaluate(() => [...document.querySelectorAll('#server-group-menu button')].find(button => button.textContent === '复制到同名连接').click());
   // Duplicating now asks first: generate as-is, or generate and edit the clone.
   await page.waitForSelector('#action-dialog[open]');
@@ -175,11 +175,11 @@ try {
   assert(afterDrag.length === 2 && afterDrag.every(entry => entry.groupId === parent.id), `multi drag: ${JSON.stringify(afterDrag.map(entry => entry.groupId))}`);
   await new Promise(resolve => setTimeout(resolve, 250)); // let the list re-render settle
   await openMenu(nested.id, other.id);
-  await page.evaluate(() => [...document.querySelectorAll('#server-group-menu button')].find(button => button.textContent === '固定到链接栏').click());
+  await page.evaluate(() => [...document.querySelectorAll('#server-group-menu button')].find(button => button.textContent === '加入收藏夹').click());
   await page.waitForFunction(id => (appearance.layout['dengshell.pinned.v1'] || []).includes(id), {}, nested.id);
   const flipItems = await openMenu(nested.id, other.id);
-  assert(flipItems.includes('从链接栏取消固定') && !flipItems.includes('固定到链接栏'), `flip items: ${flipItems}`);
-  await page.evaluate(() => [...document.querySelectorAll('#server-group-menu button')].find(button => button.textContent === '从链接栏取消固定').click());
+  assert(flipItems.includes('从收藏夹取消收藏') && !flipItems.includes('加入收藏夹'), `flip items: ${flipItems}`);
+  await page.evaluate(() => [...document.querySelectorAll('#server-group-menu button')].find(button => button.textContent === '从收藏夹取消收藏').click());
   await page.waitForFunction(id => !(appearance.layout['dengshell.pinned.v1'] || []).includes(id), {}, nested.id);
   // 删除分组（保留连接）：连接与子分组移交给选定的接管分组。
   await page.click(`#server-folder-list [data-group-id="${parent.id}"] .server-group-more`);

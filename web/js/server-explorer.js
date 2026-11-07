@@ -257,10 +257,10 @@ function openServerProfileMenu(profile, actions, anchor) {
       }
     } catch (error) { toast(error.message); }
   }));
-  if (!profile.deletedAt && window.DengPinnedNav) buttons.push(serverManagerButton(window.DengPinnedNav.isPinnedFor(profile) ? '从链接栏取消固定' : '固定到链接栏', async () => {
+  if (!profile.deletedAt && window.DengPinnedNav) buttons.push(serverManagerButton(window.DengPinnedNav.isPinnedFor(profile) ? '从收藏夹取消收藏' : '加入收藏夹', async () => {
     closeServerGroupMenu();
     if (window.DengPinnedNav.isPinnedFor(profile)) await window.DengPinnedNav.unpinProfile(profile.id);
-    else { await window.DengPinnedNav.pinProfile(profile.id); toast('已固定到链接栏'); }
+    else { await window.DengPinnedNav.pinProfile(profile.id); toast('已加入收藏夹'); }
   }));
   if (!profile.deletedAt) buttons.push(serverManagerButton('移动到…', () => openServerMoveDialog(profile)));
   if (!profile.deletedAt) buttons.push(serverManagerButton('定位所属分组', () => { closeServerGroupMenu(); serverManager.tab = 'servers'; chooseServerFolder(profile.groupId); serverManager.selectedProfiles.add(profile.id); reflectServerSelection(); const row = [...$('#server-folder-list').querySelectorAll('[data-group-id]')].find(row => row.dataset.groupId === profile.groupId); row?.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }));

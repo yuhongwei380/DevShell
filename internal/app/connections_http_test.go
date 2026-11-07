@@ -242,7 +242,7 @@ func TestProfileDuplicateCarriesStoredCredentials(t *testing.T) {
 	}
 }
 
-// 「复制链接」提交 原名-clone；链接栏与服务器管理共用同一份配置，
+// 「复制链接」/「复制独立会话」提交 原名-clone；收藏夹与服务器管理共用同一份配置，
 // 名称必须保持唯一（重名时 store 追加 2/3… 后缀）。空 name 保留旧的
 // 原样复制行为；克隆渠道端点对不存在的会话必须干净失败。
 func TestProfileDuplicateCloneNamesAndChannelEndpoint(t *testing.T) {

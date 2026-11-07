@@ -221,7 +221,7 @@ try {
   let items = await page.$$('.pinned-item');
   await (await items[0].$('.pinned-item-remove')).click();
   await page.waitForSelector('#action-dialog[open]');
-  assert((await page.$eval('#action-title', e => e.textContent)).includes('取消固定'));
+  assert((await page.$eval('#action-title', e => e.textContent)).includes('取消收藏'));
   await page.click('#action-cancel');
   await page.waitForFunction(() => !document.querySelector('#action-dialog').open);
   assert.equal(await page.$eval('#pinned-bar', el => el.hidden), false, 'the dropdown stays open through the confirmation dialog');

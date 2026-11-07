@@ -339,15 +339,15 @@ try {
   assert(renameFlow.ok, `tab menu rename flow: ${JSON.stringify(renameFlow)}`);
   assert(renameFlow.items.includes('重命名连接') && !renameFlow.items.some(text => text.includes('保存连接')));
   // The pin affordance now lives in the tab menu: an unpinned saved session
-  // offers 保存到链接栏 (and would flip to 取消固定 once pinned).
-  assert(renameFlow.items.includes('保存到链接栏'), `tab menu must offer pinning: ${renameFlow.items}`);
+  // offers 加入收藏夹 (and would flip to 取消收藏 once pinned).
+  assert(renameFlow.items.includes('加入收藏夹'), `tab menu must offer pinning: ${renameFlow.items}`);
   assert.equal(renameFlow.dialogOpen, true);
   assert.equal(renameFlow.prefilled, '起始页建立的连接');
   assert(renameFlow.label?.startsWith('改名后的连接'), `tab label after rename: ${renameFlow.label}`);
   assert.equal(renameFlow.profileName, '改名后的连接');
   checks.push('Right-clicking a tab renames the saved connection; profile, tab label and lists update together');
-  // The pin affordance lives here too: 保存到链接栏 adds the saved session to
-  // the links bar layout, and the menu entry flips to 取消固定 which removes it.
+  // The pin affordance lives here too: 加入收藏夹 adds the saved session to
+  // the favourites layout, and the menu entry flips to 取消收藏 which removes it.
   const pinFlow = await page.evaluate(async () => {
     const state = sessions.get('tabs-replaced'); if (!state) return { ok: false, reason: 'live session missing' };
     state.ready = true;
@@ -357,19 +357,19 @@ try {
       return [...document.querySelectorAll('#session-tab-menu button')].map(b => b.textContent.trim());
     };
     const items1 = openMenu();
-    [...document.querySelectorAll('#session-tab-menu button')].find(b => b.textContent.trim() === '保存到链接栏')?.click();
+    [...document.querySelectorAll('#session-tab-menu button')].find(b => b.textContent.trim() === '加入收藏夹')?.click();
     await new Promise(resolve => setTimeout(resolve, 400));
     const pinnedAfter = (appearance.layout['dengshell.pinned.v1'] || []).includes(state.profileId);
     const items2 = openMenu();
-    [...document.querySelectorAll('#session-tab-menu button')].find(b => b.textContent.trim() === '取消固定')?.click();
+    [...document.querySelectorAll('#session-tab-menu button')].find(b => b.textContent.trim() === '取消收藏')?.click();
     await new Promise(resolve => setTimeout(resolve, 400));
     const pinnedFinal = (appearance.layout['dengshell.pinned.v1'] || []).includes(state.profileId);
     document.querySelector('#session-tab-menu')?.remove();
     state.ready = false;
-    return { ok: pinnedAfter && !pinnedFinal && items2.includes('取消固定'), items1, pinnedAfter, items2, pinnedFinal };
+    return { ok: pinnedAfter && !pinnedFinal && items2.includes('取消收藏'), items1, pinnedAfter, items2, pinnedFinal };
   });
   assert(pinFlow.ok, `tab menu pin round trip: ${JSON.stringify(pinFlow)}`);
-  checks.push('Tab menu pins a saved session to the links bar; 取消固定 removes it');
+  checks.push('Tab menu pins a saved session to the favourites bar; 取消收藏 removes it');
   if (process.env.DENGSHELL_TABS_SCREENSHOT) {
     await page.evaluate(() => { DevShellTheme.set('dark'); DengStartTabs.create(); });
     await page.waitForFunction(() => !document.documentElement.dataset.lightSwitch); await settle();

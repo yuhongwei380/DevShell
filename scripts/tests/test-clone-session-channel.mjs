@@ -3,8 +3,9 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 // Xshell 语义前端回归：双击已连接标签默认「复制同服务器SSH会话」（复用同一条
-// SSH 连接的新渠道标签）；「复制链接」生成「原名-clone」的新配置，链接栏进入时
-// 自动固定到源 chip 之后。会话菜单不再提供「新建同服务器会话」。
+// SSH 连接的新渠道标签，菜单项已按需求取消）；标签菜单「复制独立会话」克隆
+// 「原名-clone」配置并立即拨号打开独立会话；收藏夹 chip 的「复制链接」生成并
+// 自动收藏到源 chip 之后。会话菜单不再提供「新建同服务器会话」。
 const appSource = readFileSync(new URL('../../web/js/app.js', import.meta.url), 'utf8');
 const navSource = readFileSync(new URL('../../web/js/pinned-nav.js', import.meta.url), 'utf8');
 const windowsSource = readFileSync(new URL('../../web/js/session-windows.js', import.meta.url), 'utf8');
@@ -14,9 +15,11 @@ const linkSource = navSource.slice(navSource.indexOf('async function cloneLink('
 for (const [name, source] of [['cloneSessionChannel', cloneSource], ['cloneLink', linkSource]]) assert.ok(source.startsWith(`async function ${name}`), `${name} slice missing; update this test`);
 
 // 标签菜单与双击入口的静态契约。
-assert.ok(windowsSource.includes("'复制同服务器SSH会话'"), 'tab menu must offer 复制同服务器SSH会话');
+assert.ok(!windowsSource.includes("'复制同服务器SSH会话'"), 'tab menu must no longer offer 复制同服务器SSH会话 (double-click keeps the channel copy)');
 assert.ok(!windowsSource.includes('新建同服务器会话'), 'tab menu must no longer offer 新建同服务器会话');
-assert.ok(windowsSource.includes('window.DengPinnedNav.cloneLink(profile)'), 'tab menu must offer 复制链接');
+assert.ok(windowsSource.includes('"复制独立会话"'), 'tab menu must offer 复制独立会话');
+assert.ok(windowsSource.includes('await connect(saved.id)'), '复制独立会话 must open the copied session with a fresh connection');
+assert.ok(!windowsSource.includes('复制链接'), 'tab menu must no longer offer 复制链接');
 assert.ok(appSource.includes('if (!state.localShell && !state.telnet && !state.serial) safe(() => cloneSessionChannel(state))();'), 'double-click on a connected tab must default to opening a same-server session');
 // 非占位标签在 createTerminal 内已自动接入终端；再调一次 openTerminalSocket 会
 // 撞上后端 409「此会话已有终端」，新标签立刻变红并显示 DS-290（真实回归）。
@@ -96,7 +99,7 @@ function linkContext(post, pinned = ['source']) {
   return context;
 }
 
-// 链接栏 chip 的「复制链接」：默认名「原会话名-clone」，自动固定到源 chip 右侧。
+// 收藏夹 chip 的「复制链接」：默认名「原会话名-clone」，自动收藏到源 chip 右侧。
 let linkPosts = [];
 ctx = linkContext(async (path, body) => { linkPosts.push([path, body]); return { id: 'clone-id', name: '源连接-clone' }; }, ['other', 'source', 'third']);
 const saved = await ctx.cloneLink(ctx.profiles[0], { pin: true });
@@ -106,15 +109,15 @@ assert.equal(saved.id, 'clone-id');
 assert.ok(ctx.profiles.some(entry => entry.id === 'clone-id'), 'clone must join the local profile list');
 assert.deepEqual(ctx.pinned, ['other', 'source', 'clone-id', 'third'], 'chip clone pins right after the source');
 assert.equal(ctx.wrote, true);
-assert.match(ctx.messages.join(''), /已生成「源连接-clone」并固定到链接栏/);
+assert.match(ctx.messages.join(''), /已生成「源连接-clone」并加入收藏夹/);
 
-// 标签菜单的「复制链接」只生成链接，不自动固定。
+// 标签菜单的「复制独立会话」用 cloneLink 克隆后再接 connect 打开独立会话。
 ctx = linkContext(async () => ({ id: 'clone-id', name: '源连接-clone' }), ['source']);
 await ctx.cloneLink(ctx.profiles[0]);
 assert.deepEqual(ctx.pinned, ['source']);
 assert.equal(ctx.wrote, false);
 
-// 源连接不在链接栏时，固定的副本追加在末尾。
+// 源连接不在收藏夹时，收藏的副本追加在末尾。
 ctx = linkContext(async () => ({ id: 'clone-id', name: '源连接-clone' }), ['other']);
 await ctx.cloneLink(ctx.profiles[0], { pin: true });
 assert.deepEqual(ctx.pinned, ['other', 'clone-id']);

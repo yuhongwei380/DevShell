@@ -90,9 +90,9 @@ try {
   await finish('after-cancel');
   assert(!await page.evaluate(()=>connecting.has('same')));
   assert.equal(await page.evaluate(()=>sessions.size),3);
-  // The connected tab menu offers the SSH channel clone, and no standalone new-session item.
+  // The connected tab menu offers the independent-session copy, and neither the channel clone item nor a standalone new-session item.
   await page.click('.session-tab[data-session-id="third"]',{button:'right'});
-  assert(await page.$eval('#session-tab-menu',e=>e.textContent.includes('复制同服务器SSH会话')&&!e.textContent.includes('新建同服务器会话')));
+  assert(await page.$eval('#session-tab-menu',e=>e.textContent.includes('复制独立会话')&&!e.textContent.includes('复制同服务器SSH会话')&&!e.textContent.includes('新建同服务器会话')));
   checks.push('cancel/retry isolation, late result cleanup, clone-channel tab menu');
   // Double-clicking a connected tab defaults to a same-server session: a channel on the existing session.
   await page.evaluate(()=>{

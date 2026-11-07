@@ -122,7 +122,7 @@
             <button class="icon-button header-pill" id="security-lock-button" aria-label="立即锁定" title="请先在设置中启用安全锁定" disabled><svg><use href="#i-lock"/></svg></button>
           </div>
           <button id="connection-button" class="connection-button" title="服务器管理" aria-label="服务器管理"><svg><use href="#i-server"/></svg></button>
-          <button id="pinned-toggle" class="connection-button pinned-toggle-button" title="链接栏" aria-label="展开链接栏" aria-haspopup="true" aria-expanded="false" hidden><svg><use href="#i-bookmark"/></svg></button>
+          <button id="pinned-toggle" class="connection-button pinned-toggle-button" title="收藏夹" aria-label="展开收藏夹" aria-haspopup="true" aria-expanded="false" hidden><svg><use href="#i-bookmark"/></svg></button>
           <div id="session-tabs" class="session-tabs"></div>
           <button class="icon-button add-session" id="add-session" aria-label="新会话" title="新会话"><svg><use href="#i-plus"/></svg></button>
           <div class="session-tab-tools">
@@ -134,7 +134,7 @@
           <div class="window-controls" id="window-controls" hidden><button data-window-action="minimise" title="最小化" aria-label="最小化"><svg><use href="#i-minimise"/></svg></button><button data-window-action="toggle-maximise" id="window-maximise" title="最大化" aria-label="最大化"><svg><use href="#i-maximise"/></svg></button><button data-window-action="close" class="window-close" title="关闭窗口" aria-label="关闭窗口"><svg><use href="#i-close"/></svg></button></div>
         </div>
       </nav>
-      <div class="pinned-bar" id="pinned-bar" aria-label="链接栏" hidden></div>
+      <div class="pinned-bar" id="pinned-bar" aria-label="收藏夹" hidden></div>
       <section id="rdp-panel" class="rdp-panel" aria-label="RDP 远程桌面" hidden>
         <header class="rdp-toolbar"><div><strong id="rdp-active-name"></strong><span id="rdp-active-status"></span></div><div><label class="rdp-resolution-label">分辨率<select id="rdp-resolution" title="跟随窗口可避免低分辨率画面被放大；固定分辨率会等比适应窗口"><option value="0x0">跟随窗口 · 清晰</option><option value="1920x1080">1920 × 1080</option><option value="1600x900">1600 × 900</option><option value="1280x800">1280 × 800</option><option value="1024x768">1024 × 768</option></select></label><button id="rdp-secure-attention" type="button" title="向远程 Windows 发送安全注意序列">Ctrl + Alt + Del</button><button id="rdp-active-reconnect" type="button">重新连接</button><button id="rdp-active-disconnect" type="button">断开</button></div></header>
         <div id="rdp-viewport" class="rdp-viewport"><div id="rdp-placeholder" class="rdp-placeholder"><strong id="rdp-placeholder-message">连接中…</strong><p>连接后点击画面即可操作远程桌面。</p></div></div>

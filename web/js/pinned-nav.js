@@ -3,8 +3,8 @@
 // server-manager button) drops a vertical list of the pinned connections
 // under it. Nothing is tiled in the header, so the shell fills the window
 // from the top; opening a connection closes the list, like any menu.
-// Pinning lives in the session tab's right-click menu (“保存到链接栏” /
-// “取消固定”); a quick-connect session is persisted first. Each list click
+// Pinning lives in the session tab's right-click menu (“加入收藏夹” /
+// “取消收藏”); a quick-connect session is persisted first. Each list click
 // opens a fresh session tab, like double-clicking the server list.
 // The id list lives in appearance.layout under one key, whitelisted by the
 // backend layout validator (validSavedLayoutKey in preferences.go).
@@ -143,15 +143,15 @@ window.DengPinnedNav = (() => {
     const remove = node('button', 'pinned-item-remove');
     remove.type = 'button';
     remove.append(icon('close'));
-    remove.title = '关闭（取消固定）';
-    remove.setAttribute('aria-label', `取消固定 ${profile.name}`);
+    remove.title = '关闭（取消收藏）';
+    remove.setAttribute('aria-label', `取消收藏 ${profile.name}`);
     remove.onclick = event => { event.stopPropagation(); safe(() => confirmUnpin(profile))(); };
     return remove;
   }
   // Unpinning is destructive enough to ask first: the close button is the only
   // unpin affordance and always routes through the shared confirmation dialog.
   async function confirmUnpin(profile) {
-    if (!await ask({ title: `取消固定 ${profile.name}？`, description: `将从链接栏移除 ${profile.name}（${profileSubtitle(profile)}）。连接配置与已保存数据不受影响，之后可重新固定。`, confirm: '取消固定' })) return;
+    if (!await ask({ title: `取消收藏 ${profile.name}？`, description: `将从收藏夹移除 ${profile.name}（${profileSubtitle(profile)}）。连接配置与已保存数据不受影响，之后可重新收藏。`, confirm: '取消收藏' })) return;
     await unpin(profile.id);
   }
   // Right-click renames in place: the name is the same field the server
@@ -172,8 +172,9 @@ window.DengPinnedNav = (() => {
     toast(`已重命名为「${saved.name}」`);
   }
   // 复制链接：复制这份已保存连接本身，默认名「原会话名-clone」（重名时后端自动
-  // 加 2/3… 后缀），只生成链接不打开会话。从标签菜单进入只生成；从链接栏 chip
-  // 进入则把新 chip 自动插到源 chip 右侧固定,让链接栏即时反映这次点击。
+  // 加 2/3… 后缀），只生成链接不打开会话。标签菜单里的「复制独立会话」在生成后
+  // 立即重新拨号打开独立会话；从收藏夹 chip 进入则把新 chip 自动插到源 chip
+  // 右侧收藏,让收藏夹即时反映这次点击。
   async function cloneLink(profile, { pin = false } = {}) {
     const saved = await post(`/api/profiles/${encodeURIComponent(profile.id)}/duplicate`, { name: `${profile.name}-clone` });
     const index = profiles.findIndex(entry => entry.id === saved.id);
@@ -189,7 +190,7 @@ window.DengPinnedNav = (() => {
     }
     renderConnections(); renderTabs(); renderSessionInfo();
     render(); reflect();
-    toast(`已生成「${saved.name}」${pin ? '并固定到链接栏' : ''}；可在服务器管理或链接栏中重命名`);
+    toast(`已生成「${saved.name}」${pin ? '并加入收藏夹' : ''}；可在服务器管理或收藏夹中重命名`);
     return saved;
   }
   // 右键菜单：复用标签菜单样式,重命名 / 复制链接 / “保存到服务器管理”三个入口。
@@ -205,7 +206,7 @@ window.DengPinnedNav = (() => {
     rename.type = 'button'; rename.setAttribute('role', 'menuitem'); rename.title = '修改该连接的名称，与服务器管理同步';
     rename.onclick = safe(() => { close(); return renameProfile(profile); });
     const clone = node('button', '', '复制链接');
-    clone.type = 'button'; clone.setAttribute('role', 'menuitem'); clone.title = '复制这份连接生成新链接（默认名「原会话名-clone」），并自动固定到链接栏';
+    clone.type = 'button'; clone.setAttribute('role', 'menuitem'); clone.title = '复制这份连接生成新链接（默认名「原会话名-clone」），并自动加入收藏夹';
     clone.onclick = safe(() => { close(); return cloneLink(profile, { pin: true }); });
     const save = node('button', '', '保存到服务器管理');
     save.type = 'button'; save.setAttribute('role', 'menuitem'); save.title = '把这个连接保存到服务器管理的指定分组（可选择或新建分组）';
@@ -274,7 +275,7 @@ window.DengPinnedNav = (() => {
       confirm.disabled = false;
     }
   }
-  const itemTitle = profile => `${profile.name} · ${profileSubtitle(profile)}\n拖拽调整顺序 · 左键新建会话 · 右键菜单（重命名 / 复制链接 / 保存到服务器管理） · × 关闭（取消固定需确认）`;
+  const itemTitle = profile => `${profile.name} · ${profileSubtitle(profile)}\n拖拽调整顺序 · 左键新建会话 · 右键菜单（重命名 / 复制链接 / 保存到服务器管理） · × 关闭（取消收藏需确认）`;
   function itemFor(profile) {
     const item = node('span', 'pinned-item');
     const open = node('button', 'pinned-item-open');
@@ -302,13 +303,13 @@ window.DengPinnedNav = (() => {
     bar.hidden = !expanded;
     toggle.setAttribute('aria-expanded', String(expanded));
     toggle.classList.toggle('open', expanded);
-    const label = expanded ? '收起链接栏' : '链接栏';
+    const label = expanded ? '收起收藏夹' : '收藏夹';
     toggle.title = label;
     toggle.setAttribute('aria-label', label);
     if (expanded) { bar.scrollTop = 0; anchorPanel(); }
   }
   function emptyRow() {
-    return node('div', 'pinned-empty', '还没有固定的连接。连接服务器后，点会话工具栏里的「固定」即可把它放进来。');
+    return node('div', 'pinned-empty', '还没有收藏的连接。连接服务器后，在会话标签右键菜单里点「加入收藏夹」即可把它放进来。');
   }
   function render() {
     if (!bar) return;
@@ -323,14 +324,14 @@ window.DengPinnedNav = (() => {
     if (expanded) anchorPanel();
   }
   async function pin(id) { await reorderSave.catch(() => {}); pinned = [...pinned, id]; await writePinned(); render(); reflect(); }
-  async function unpin(id) { await reorderSave.catch(() => {}); pinned = pinned.filter(x => x !== id); await writePinned(); render(); reflect(); toast('已从链接栏取消固定'); }
-  // 会话标签右键菜单入口：“保存到链接栏”对已保存连接直接固定；快速连接先按
+  async function unpin(id) { await reorderSave.catch(() => {}); pinned = pinned.filter(x => x !== id); await writePinned(); render(); reflect(); toast('已取消收藏'); }
+  // 会话标签右键菜单入口：“加入收藏夹”对已保存连接直接固定；快速连接先按
   // “保存连接”的方式持久化（凭据随本次会话带走），再固定。
   async function pinCurrent(state = current()) {
     const profile = state && profileFor(state);
     if (!profile) return;
-    if (isPinned(profile.id)) { toast('这个连接已在链接栏'); return; }
-    let note = '已保存到链接栏';
+    if (isPinned(profile.id)) { toast('这个连接已在收藏夹'); return; }
+    let note = '已加入收藏夹';
     if (temporaryProfiles.has(profile.id)) {
       // Pinning a quick-connect session persists it first, like "保存连接",
       // carrying the credentials used this run so the pin reconnects silently.
@@ -342,7 +343,7 @@ window.DengPinnedNav = (() => {
       profiles = profiles.filter(p => p.id !== saved.id);
       profiles.push(saved);
       renderConnections(); renderTabs();
-      if (!saved.hasSecret) note = '已保存到链接栏；这个连接没有保存凭据（本窗口未输入过密码），下次连接仍需输入';
+      if (!saved.hasSecret) note = '已加入收藏夹；这个连接没有保存凭据（本窗口未输入过密码），下次连接仍需输入';
     }
     await pin(profile.id);
     toast(note);
