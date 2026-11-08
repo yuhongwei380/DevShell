@@ -428,6 +428,8 @@ func sshDiagnosticErrorKind(err error) string {
 			return "connection-aborted"
 		case syscall.EPIPE:
 			return "broken-pipe"
+		case syscall.ECONNREFUSED, syscall.Errno(10061): // 10061 = WSAECONNREFUSED
+			return "connection-refused"
 		}
 	}
 	if errors.Is(err, net.ErrClosed) {

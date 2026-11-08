@@ -76,7 +76,7 @@ func authenticationMethodNames(methods []string) string {
 	return strings.Join(labels, "、")
 }
 
-func explainSSHAuthentication(err error, auth string, trace authenticationTrace) error {
+func explainSSHAuthentication(err error, auth string, trace authenticationTrace, target string) error {
 	var known *AuthenticationError
 	if errors.As(err, &known) {
 		return known
@@ -84,15 +84,17 @@ func explainSSHAuthentication(err error, auth string, trace authenticationTrace)
 	// The transport dying before the first authentication negotiation means
 	// the peer (or a middlebox) closed the connection during version/KEX;
 	// credentials were never consulted, so say so and list the actionable
-	// causes instead of wrapping an opaque library error.
+	// causes instead of wrapping an opaque library error. Naming the dialled
+	// address is what tells a stale saved port (e.g. a server that moved
+	// back to 22 while the profile kept 404) apart from a server fault.
 	if len(trace.allowed) == 0 {
 		switch sshDiagnosticErrorKind(err) {
 		case "eof", "connection-reset", "connection-aborted", "broken-pipe":
-			return &AuthenticationError{code: "ssh_handshake_closed", message: "服务器在 SSH 握手阶段关闭了连接，尚未进入身份验证，与密码或密钥无关。常见原因：端口填错或该端口上运行的不是 SSH 服务、服务器并发/速率限制（如 sshd MaxStartups）、hosts.deny 或 fail2ban 拦截，或代理到目标的链路被中断。请核对端口与代理配置后重试；可用系统 OpenSSH 的 ssh -vvv 对照，并查看服务器 sshd 日志。"}
+			return &AuthenticationError{code: "ssh_handshake_closed", message: "已连接 " + target + "，但对方在 SSH 握手阶段关闭了连接，尚未进入身份验证，与密码或密钥无关。常见原因：该端口上没有 SSH 服务或被其他程序占用（例如服务器已更换端口，而此连接仍保存着旧端口）、服务器并发/速率限制（如 sshd MaxStartups）、hosts.deny 或 fail2ban 拦截，或代理到目标的链路被中断。请在服务器管理中核对该连接的端口与代理配置后重试；可用系统 OpenSSH 的 ssh -vvv 对照，并查看服务器 sshd 日志。"}
 		}
 	}
 	if !strings.Contains(err.Error(), "unable to authenticate, attempted methods") {
-		return fmt.Errorf("SSH 握手未完成：%w", err)
+		return fmt.Errorf("SSH 握手未完成（%s）：%w", target, err)
 	}
 	if len(trace.partial) > 0 {
 		return &AuthenticationError{code: "ssh_authentication_unsupported", message: "服务器已接受部分认证，但还要求" + authenticationMethodNames(trace.allowed) + "；当前单一认证模式不能完成此组合。请检查服务器认证策略。"}

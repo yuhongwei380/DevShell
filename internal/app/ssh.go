@@ -310,6 +310,9 @@ func (a *App) ConnectWithHostKeyApproval(ctx context.Context, profileID, secret 
 	dialStart := time.Now()
 	conn, err := dialSSH(dialCtx, address, p.Proxy)
 	if err != nil {
+		if p.Verbose > 0 {
+			a.noteVerboseHandshakeFailure(profileID, fmt.Sprintf("stage=dial target=%s elapsed=%.2fs error=%s", address, time.Since(dialStart).Seconds(), sshDiagnosticErrorKind(err)))
+		}
 		return nil, fmt.Errorf("连接 %s：%w", address, err)
 	}
 	dialElapsed := time.Since(dialStart)
@@ -330,9 +333,9 @@ func (a *App) ConnectWithHostKeyApproval(ctx context.Context, profileID, secret 
 	if err != nil {
 		conn.Close()
 		if p.Verbose > 0 {
-			a.noteVerboseHandshakeFailure(profileID, fmt.Sprintf("dial=%.2fs handshake=%.2fs auth=%s allowed=%s tried=%s partial=%s error=%s", dialElapsed.Seconds(), time.Since(handshakeStart).Seconds(), p.Auth, strings.Join(trace.allowed, ","), strings.Join(trace.tried, ","), strings.Join(trace.partial, ","), sshDiagnosticErrorKind(err)))
+			a.noteVerboseHandshakeFailure(profileID, fmt.Sprintf("stage=handshake target=%s dial=%.2fs handshake=%.2fs auth=%s allowed=%s tried=%s partial=%s error=%s", address, dialElapsed.Seconds(), time.Since(handshakeStart).Seconds(), p.Auth, strings.Join(trace.allowed, ","), strings.Join(trace.tried, ","), strings.Join(trace.partial, ","), sshDiagnosticErrorKind(err)))
 		}
-		return nil, explainSSHAuthentication(err, p.Auth, trace)
+		return nil, explainSSHAuthentication(err, p.Auth, trace, address)
 	}
 	handshakeElapsed := time.Since(handshakeStart)
 	client := ssh.NewClient(sshConn, chans, reqs)

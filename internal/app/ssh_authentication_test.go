@@ -295,9 +295,76 @@ func TestSSHUnencryptedKeyIgnoresAnUnneededCachedPassphrase(t *testing.T) {
 
 func TestTransportFailuresAreNotClassifiedAsWrongCredentials(t *testing.T) {
 	original := errors.New("connection reset by peer")
-	err := explainSSHAuthentication(original, "password", authenticationTrace{})
+	err := explainSSHAuthentication(original, "password", authenticationTrace{}, "example.invalid:22")
 	var classified *AuthenticationError
 	if errors.As(err, &classified) || !errors.Is(err, original) || strings.Contains(err.Error(), "密码错误") {
 		t.Fatal("transport failure misclassified", err)
 	}
+}
+
+// A server that moved back to port 22 while the saved connection kept the old
+// port: the stale port dials a non-SSH listener that answers and closes, which
+// the transport reports as a handshake-stage EOF. The failure must name the
+// dialled address so the stale port is visible, and editing the saved profile
+// must take effect immediately on the next connect.
+func TestStaleSavedPortNamesTheDialledAddressAndEditsTakeEffect(t *testing.T) {
+	a, host, port := authenticationFixture(t, &ssh.ServerConfig{PasswordCallback: func(meta ssh.ConnMetadata, password []byte) (*ssh.Permissions, error) {
+		if meta.User() == "fixture" && string(password) == "fixture-secret" {
+			return nil, nil
+		}
+		return nil, errors.New("rejected by fixture")
+	}})
+	stale, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stale.Close()
+	go func() {
+		for {
+			connection, err := stale.Accept()
+			if err != nil {
+				return
+			}
+			// A non-SSH service: answer the SSH banner as a bad HTTP request
+			// and hang up, exactly like a web port hit by an ssh client.
+			go func() {
+				defer connection.Close()
+				line, _ := bufio.NewReader(connection).ReadString('\n')
+				_, _ = connection.Write([]byte("HTTP/1.1 400 Bad Request\r\n"))
+				_ = line
+			}()
+		}
+	}()
+	staleHost, stalePortText, _ := net.SplitHostPort(stale.Addr().String())
+	stalePort, _ := strconv.Atoi(stalePortText)
+	if staleHost != host {
+		t.Fatalf("fixture host mismatch: %s vs %s", host, staleHost)
+	}
+	p, err := a.store.Save(Profile{Name: "moved server", Host: host, Port: stalePort, User: "fixture", Auth: "password", Secret: "fixture-secret"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = a.Connect(context.Background(), p.ID, "")
+	var closed *AuthenticationError
+	if !errors.As(err, &closed) || closed.Code() != "ssh_handshake_closed" {
+		t.Fatal("stale-port handshake closure not classified", err)
+	}
+	if !strings.Contains(err.Error(), net.JoinHostPort(host, stalePortText)) {
+		t.Fatalf("failure hides the dialled stale port: %v", err)
+	}
+	for _, secret := range []string{"fixture-secret"} {
+		if strings.Contains(err.Error(), secret) {
+			t.Fatal("credential exposed in error")
+		}
+	}
+	// The user path: fix the port in server management, reconnect, done.
+	response := issueRequest(t, a, "POST", "/api/profiles", map[string]any{"id": p.ID, "name": p.Name, "host": host, "port": port, "user": "fixture", "auth": "password", "secret": "fixture-secret"})
+	if response.Code != 200 {
+		t.Fatalf("port edit rejected: %s", response.Body.String())
+	}
+	session, err := a.Connect(context.Background(), p.ID, "")
+	if err != nil {
+		t.Fatalf("connect after port edit failed: %v", err)
+	}
+	a.disconnect(session.ID)
 }
