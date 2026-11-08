@@ -256,11 +256,11 @@ function renderServerManager() {
     tab.setAttribute('aria-selected', String(selected)); tab.tabIndex = selected ? 0 : -1;
     tab.querySelector('span').textContent = String(tabCounts[tab.dataset.serverTab]);
   }
-  // 「一键清理」与新建/备份同排：「已删除」页隐藏其他按钮只留清理，回收站为空则整行隐藏。
+  // 「一键清理」与新建/备份同排：「已删除」页隐藏新建连接与新建分组，回收站非空才显示清理；
+  // 备份、恢复与 RDP 会话始终留在栏内，按钮行不因回收站为空而整行消失。
   const trashTab = serverManager.tab === 'trash';
-  for (const id of ['new-connection', 'new-group', 'export-backup', 'import-backup']) $('#' + id).hidden = trashTab;
+  for (const id of ['new-connection', 'new-group']) $('#' + id).hidden = trashTab;
   $('#purge-trash').hidden = !trashTab || !serverManager.trash.length;
-  $('#server-manager-create').hidden = !trashTab || !serverManager.trash.length;
   target.setAttribute('aria-labelledby', `server-tab-${serverManager.tab}`);
   renderServerExplorer(tree, query);
   if (serverManager.tab === 'servers') {
