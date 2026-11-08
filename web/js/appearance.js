@@ -1,15 +1,15 @@
 'use strict';
 
-let appearance = { uiStyle: window.DEVSHELL?.uiStyle === 'frosted' ? 'frosted' : 'classic', uiFontId: 'builtin:ui-alibaba-puhuiti-3-55', uiTextColors: {}, fontId: 'builtin:jetbrains-mono', fontColors: {}, fontBold: {}, chartStyles: {}, backgroundId: 'builtin:none', backgroundOpacity: .42, backgroundVersion: 2, uiScale: Number(window.DEVSHELL?.uiScale) || 1, terminalFontSize: 14, ansiPalette: '', autoCommandsEnabled: true, localShellEnabled: false, tcpToolsEnabled: true };
+let appearance = { uiStyle: window.DEVSHELL?.uiStyle === 'frosted' ? 'frosted' : 'classic', uiFontId: 'builtin:ui-alibaba-puhuiti-3-55', uiTextColors: {}, fontId: 'builtin:jetbrains-mono', fontColors: {}, fontBold: {}, chartStyles: {}, uiScale: Number(window.DEVSHELL?.uiScale) || 1, terminalFontSize: 14, ansiPalette: '', autoCommandsEnabled: true, localShellEnabled: false, tcpToolsEnabled: true };
 const appearanceMapFields = new Set(['fontColors', 'fontBold', 'chartStyles', 'uiTextColors']);
 const appearanceOwnedElsewhere = new Set(['layout', 'windowWidth', 'windowHeight', 'windowMaximised', 'terminalBold']);
 let appearanceSaved = appearanceSnapshot(appearance);
-let managedAssets = [], managedProxies = [], fontCatalog = null, backgroundCatalog = [], assetKind = 'background';
+let managedAssets = [], managedProxies = [], fontCatalog = null, assetKind = 'font';
 let terminalFontFamily = 'monospace', appearanceReady, appearanceSave = Promise.resolve(), mediaGeneration = 0;
 const fontLoads = new Map(), assetData = new Map();
 const proportionalTerminalFonts = new Set();
 const terminalFallbackFaces = new Map();
-let activeFontID = '', activeBackgroundID = '', effectiveScale = 1, appearanceOperation = 0;
+let activeFontID = '', effectiveScale = 1, appearanceOperation = 0;
 const logicalWidth = () => innerWidth / effectiveScale;
 const logicalHeight = () => innerHeight / effectiveScale;
 const terminalDefaultColor = '#d3e0e8';
@@ -49,31 +49,21 @@ async function staticJSON(path) {
   const response = await fetch(path); if (!response.ok) throw new Error('无法读取内置资源'); return response.json();
 }
 function initializeAppearanceCatalogs() {
-  if (!appearanceReady) appearanceReady = Promise.all([staticJSON('assets/fonts/catalog.json'), staticJSON('assets/backgrounds/catalog.json')]).then(([fonts, backgrounds]) => {
-    fontCatalog = fonts; backgroundCatalog = backgrounds.backgrounds; return fonts;
+  if (!appearanceReady) appearanceReady = staticJSON('assets/fonts/catalog.json').then(fonts => {
+    fontCatalog = fonts; return fonts;
   }).catch(error => { appearanceReady = null; throw error; });
   return appearanceReady;
 }
 function allFonts() { return [...(fontCatalog?.fonts || []).map(font => ({ ...font, id: `builtin:${font.id}` })), ...managedAssets.filter(asset => asset.kind === 'font').map(asset => ({ ...asset, family: `Deng custom ${asset.id}` }))]; }
-function allBackgrounds() { return [{ id: 'builtin:none', name: '纯色 · 专注', kind: 'builtin' }, { id: 'builtin:black', name: '纯色 · 全黑', kind: 'builtin' }, ...backgroundCatalog.map(background => ({ ...background, id: `builtin:${background.id}`, kind: 'builtin' })), ...managedAssets.filter(asset => asset.kind === 'background')]; }
 async function assetURL(asset) {
   if (asset.file) return new URL(asset.file, location.href).href;
   if (!assetData.has(asset.id)) {
-    const pending = api(`/api/assets/${asset.id}/data`).then(async data => {
-      // Large base64 images exceed CSS custom-property size limits. Keep the
-      // image in a Blob and put only its short local URL in --terminal-background.
-      if (asset.kind === 'background') return URL.createObjectURL(await (await fetch(data.dataUrl)).blob());
-      return data.dataUrl;
-    }).catch(error => { if (assetData.get(asset.id) === pending) assetData.delete(asset.id); throw error; });
+    const pending = api(`/api/assets/${asset.id}/data`).then(data => data.dataUrl).catch(error => { if (assetData.get(asset.id) === pending) assetData.delete(asset.id); throw error; });
     assetData.set(asset.id, pending);
   }
   return assetData.get(asset.id);
 }
-function forgetAssetURL(id) {
-  const pending = assetData.get(id); assetData.delete(id);
-  // This also releases an image deleted while its data request was pending.
-  pending?.then(url => { if (url.startsWith('blob:')) URL.revokeObjectURL(url); }, () => {});
-}
+function forgetAssetURL(id) { assetData.delete(id); }
 async function loadFace(font) {
   if (!fontLoads.has(font.id)) fontLoads.set(font.id, (async () => {
     const url = await assetURL(font), face = new FontFace(font.family, `url(${JSON.stringify(url)})`, { weight: font.weightRange || '400', style: 'normal', display: 'block' });
@@ -212,7 +202,6 @@ async function applyAppearance() {
   window.DengChartStyles?.apply(appearance.chartStyles);
   const generation = ++mediaGeneration, next = { ...appearance };
   applyUIScale();
-  document.documentElement.style.setProperty('--background-opacity', String(next.backgroundOpacity));
   applyTerminalAppearanceColors();
   await Promise.all([initializeAppearanceCatalogs(), uiApplying]);
   if (generation !== mediaGeneration) return;
@@ -230,16 +219,6 @@ async function applyAppearance() {
   terminalFont = normalizeTerminalFontSize(next.terminalFontSize);
   document.documentElement.style.setProperty('--terminal-font-size', `${terminalFont}px`);
   for (const state of sessions.values()) { state.term.options.fontSize = terminalFont; state.term.options.fontWeight = boldForFont(next.fontId) ? '700' : '400'; }
-  // Background choices belong to the classic theme; glass never uses images.
-  // Keep the stored choice so switching back restores the original appearance.
-  const background = next.uiStyle === 'frosted' ? { id: 'builtin:none' } : allBackgrounds().find(item => item.id === next.backgroundId) || allBackgrounds()[0];
-  if (activeBackgroundID !== background.id) {
-    // Only the two solid built-ins have no image. Built-in catalogue entries
-    // carry a file and resolve through assetURL like imported backgrounds.
-    const url = background.id === 'builtin:none' || background.id === 'builtin:black' ? '' : await assetURL(background);
-    if (generation !== mediaGeneration) return;
-    document.documentElement.style.setProperty('--terminal-background', url ? `url(${JSON.stringify(url)})` : 'none'); activeBackgroundID = background.id; const panel = $('.terminal-panel'); panel.classList.toggle('has-background', !!url); panel.classList.toggle('solid-black', background.id === 'builtin:black');
-  }
   if (generation !== mediaGeneration) return;
   renderAppearanceControls(); clampAppearancePalette(); requestAnimationFrame(fitActive);
 }
@@ -255,12 +234,11 @@ async function acceptAppearanceConfig(config) {
     appearanceSaved = appearanceSnapshot(appearance);
     appearance = mergeAppearanceChanges(appearance, pending);
   }
-  if ((appearance.backgroundVersion || 0) < 2) { if (Math.abs(appearance.backgroundOpacity - .18) < .000001) appearance.backgroundOpacity = .42; appearance.backgroundVersion = 2; }
   await window.DengUIAppearance?.acceptConfig(config);
   try { await applyAppearance(); } catch (error) {
     toast(`外观资源暂时无法加载，已保留选择：${error.message}`);
     const selected = appearance;
-    appearance = { ...appearance, fontId: 'builtin:jetbrains-mono', backgroundId: 'builtin:none' };
+    appearance = { ...appearance, fontId: 'builtin:jetbrains-mono' };
     await applyAppearance().catch(() => {});
     appearance = selected;
   }
@@ -356,8 +334,6 @@ function applyUIScale() {
   requestAnimationFrame(fitActive);
 }
 function renderAppearanceControls() {
-  $('#background-opacity').value = Math.round(appearance.backgroundOpacity * 100);
-  $('#background-opacity-value').value = `${Math.round(appearance.backgroundOpacity * 100)}%`;
   $('#terminal-size').value = appearance.terminalFontSize;
   $('#ansi-palette').value = ansiPalettes[appearance.ansiPalette] ? appearance.ansiPalette : 'soft';
   $('#font-preview-text').style.fontFamily = terminalFontFamily;
@@ -386,64 +362,55 @@ function positionSettings() {
   menu.style.left = `${Math.max(8, Math.min(rect.left / effectiveScale, logicalWidth() - menu.offsetWidth - 8))}px`;
   menu.style.top = `${rect.bottom / effectiveScale + 6}px`;
 }
-async function openAppearance(kind) {
-  setSettingsMenu(false); assetKind = kind;
+async function openAppearance() {
+  setSettingsMenu(false); assetKind = 'font';
   await initializeAppearanceCatalogs();
-  const isFont = kind === 'font';
-  if (isFont) document.getElementById('ui-appearance-dialog')?.close();
-  $('#appearance-title').textContent = isFont ? '字体设置 · Shell 字体' : '背景管理器';
-  $('#appearance-description').textContent = isFont ? '每款字体单独设置加粗和颜色，点击字体即可应用。' : appearance.uiStyle === 'frosted' ? '背景设置用于经典主题；液态玻璃不使用背景图片，原有选择会保留。' : '背景立即生效，可拖动此面板观察终端。';
-  $('#import-asset span').textContent = isFont ? '导入字体' : '导入背景';
-  $('#asset-picker').accept = isFont ? '.ttf,.otf,.woff,.woff2' : '.png,.jpg,.jpeg,.webp';
-  $('#background-strength').hidden = isFont; $('#font-preview').hidden = !isFont;
-  $('#asset-list').classList.toggle('font-list', isFont);
-  $('#appearance-dialog').dataset.kind = kind;
-  $('#shell-font-navigation').hidden = !isFont; $('#shell-font-online-entry').hidden = !isFont;
+  document.getElementById('ui-appearance-dialog')?.close();
+  $('#appearance-title').textContent = '字体设置 · Shell 字体';
+  $('#appearance-description').textContent = '每款字体单独设置加粗和颜色，点击字体即可应用。';
+  $('#asset-picker').accept = '.ttf,.otf,.woff,.woff2';
+  $('#font-preview').hidden = false;
+  $('#asset-list').classList.add('font-list');
+  $('#appearance-dialog').dataset.kind = 'font';
+  $('#shell-font-navigation').hidden = false; $('#shell-font-online-entry').hidden = false;
   renderAppearanceControls(); renderAssets();
   if (!$('#appearance-dialog').open) $('#appearance-dialog').show();
   positionAppearancePalette();
 }
 function renderAssets() {
-  const isFont = assetKind === 'font', assets = isFont ? allFonts() : allBackgrounds(), list = $('#asset-list');
-  $('#asset-count').textContent = isFont ? '已安装字体' : `${assets.length} 种背景 · 支持 PNG / JPG / WebP`;
+  const assets = allFonts(), list = $('#asset-list');
+  $('#asset-count').textContent = '已安装字体';
   if (list.dataset.kind !== assetKind) { list.replaceChildren(); list.dataset.kind = assetKind; }
   const existing = new Map([...list.children].map(card => [card.dataset.assetId, card]));
   const wanted = new Set(assets.map(asset => asset.id));
   for (const [id, card] of existing) if (!wanted.has(id)) card.remove();
   assets.forEach((asset, index) => {
-    const card = existing.get(asset.id) || createAssetCard(asset, isFont);
+    const card = existing.get(asset.id) || createAssetCard(asset);
     card._asset = asset;
-    const selected = (isFont ? appearance.fontId : appearance.backgroundId) === asset.id;
+    const selected = appearance.fontId === asset.id;
     card.classList.toggle('selected', selected);
     const choose = card.querySelector('.asset-choice'); choose.setAttribute('aria-pressed', String(selected)); choose.title = `使用 ${asset.name}`;
     card.querySelector('.asset-caption strong').textContent = asset.name;
-    card.querySelector('.asset-caption span').textContent = isFont && proportionalTerminalFonts.has(asset.id) ? `${selected ? '使用中 · ' : ''}英文采用等宽回退` : selected ? '正在使用 ✓' : asset.id.startsWith('builtin:') ? '内置' : asset.libraryId ? '已下载 · 可离线使用' : '自定义';
-    if (isFont) reflectFontCardControls(card);
+    card.querySelector('.asset-caption span').textContent = proportionalTerminalFonts.has(asset.id) ? `${selected ? '使用中 · ' : ''}英文采用等宽回退` : selected ? '正在使用 ✓' : asset.id.startsWith('builtin:') ? '内置' : asset.libraryId ? '已下载 · 可离线使用' : '自定义';
+    reflectFontCardControls(card);
     // Existing cards retain their inputs, disclosure state, keyboard focus and scroll position.
     if (list.children[index] !== card) list.insertBefore(card, list.children[index] || null);
   });
 }
-function createAssetCard(asset, isFont) {
-  const card = node('article', 'asset-card'); card.dataset.assetId = asset.id; card._asset = asset;
+function createAssetCard(asset) {
+  const card = node('article', 'asset-card'); card.dataset.assetId = asset.id; card._asset = asset; card.dataset.fontId = asset.id;
   const choose = node('button', 'asset-choice'); choose.type = 'button';
-  const thumb = node('div', isFont ? 'font-sample' : 'background-thumb');
-  if (isFont) {
-    thumb.textContent = 'Aa 012 中文'; card.dataset.fontId = asset.id;
-    thumb.style.fontFamily = `"${asset.family}", "Deng CJK", monospace`;
-    loadFace(asset).catch(error => { if (thumb.isConnected) thumb.textContent = '预览不可用'; console.warn(error.message); });
-  } else if (asset.id === 'builtin:black') thumb.classList.add('solid-black-thumb');
-  else if (asset.id !== 'builtin:none') {
-    assetURL(asset).then(url => { if (thumb.isConnected) thumb.style.backgroundImage = `url(${JSON.stringify(url)})`; }).catch(() => { if (thumb.isConnected) thumb.textContent = '无法读取'; });
-  } else thumb.append(icon('terminal'));
+  const thumb = node('div', 'font-sample');
+  thumb.textContent = 'Aa 012 中文';
+  thumb.style.fontFamily = `"${asset.family}", "Deng CJK", monospace`;
+  loadFace(asset).catch(error => { if (thumb.isConnected) thumb.textContent = '预览不可用'; console.warn(error.message); });
   const caption = node('div', 'asset-caption'); caption.append(node('strong'), node('span'));
-  choose.append(...(isFont ? [caption] : [thumb, caption])); choose.onclick = safe(() => chooseAppearance(isFont ? { fontId: asset.id } : { backgroundId: asset.id }));
+  choose.append(caption); choose.onclick = safe(() => chooseAppearance({ fontId: asset.id }));
   card.append(choose);
-  if (isFont) {
-    createFontCardControls(card, asset);
-    const sampleChoice = node('button', 'font-sample-choice'); sampleChoice.type = 'button';
-    sampleChoice.setAttribute('aria-label', `使用 ${asset.name}`); sampleChoice.onclick = choose.onclick;
-    sampleChoice.append(thumb); card.querySelector('.font-card-toolbar').prepend(sampleChoice);
-  }
+  createFontCardControls(card, asset);
+  const sampleChoice = node('button', 'font-sample-choice'); sampleChoice.type = 'button';
+  sampleChoice.setAttribute('aria-label', `使用 ${asset.name}`); sampleChoice.onclick = choose.onclick;
+  sampleChoice.append(thumb); card.querySelector('.font-card-toolbar').prepend(sampleChoice);
   if (!asset.id.startsWith('builtin:')) {
     const actions = node('div', 'asset-actions'), rename = node('button', '', '改名'), del = node('button', 'danger-button', '删除'); rename.type = del.type = 'button';
     rename.onclick = safe(async () => { const name = await ask({ title: '修改名称', input: true, value: card._asset.name }); if (!name?.trim()) return; await flushFontStyleSave(); await post(`/api/assets/${asset.id}`, { name }); await loadProfiles(); });
@@ -590,7 +557,7 @@ async function importAsset() {
   const kind = assetKind, button = $('#import-asset');
   if (!native()?.ChooseAsset) { $('#asset-picker').click(); return; }
   button.disabled = true;
-  try { await flushFontStyleSave(); const asset = await native().ChooseAsset(kind); if (!asset) return; await loadProfiles(); await chooseAppearance(kind === 'font' ? { fontId: asset.id } : { backgroundId: asset.id }); toast('已导入并应用'); }
+  try { await flushFontStyleSave(); const asset = await native().ChooseAsset(kind); if (!asset) return; await loadProfiles(); await chooseAppearance({ fontId: asset.id }); toast('已导入并应用'); }
   finally { button.disabled = false; }
 }
 function renderProxyChoices() {
@@ -674,8 +641,7 @@ function initializeAppearance() {
       else { setSettingsMenu(false); $('#settings-button').focus(); }
     }
   });
-  $('#manage-backgrounds').onclick = safe(() => openAppearance('background'));
-  $('#manage-shell-fonts').onclick = safe(() => openAppearance('font'));
+  $('#manage-shell-fonts').onclick = safe(() => openAppearance());
   $('#switch-ui-fonts').onclick = safe(() => window.DengUIAppearance.open());
   $('#online-shell-fonts').onclick = safe(() => window.DengFontLibrary.open('font'));
   $('#manage-proxies').onclick = showProxies; $('#manage-profile-proxies').onclick = showProxies;
@@ -699,17 +665,15 @@ function initializeAppearance() {
   $('#close-appearance').onclick = () => $('#appearance-dialog').close(); $('#import-asset').onclick = safe(importAsset);
   $('#asset-picker').onchange = safe(async event => {
     const file = event.target.files[0], kind = assetKind; event.target.value = ''; if (!file) return;
-    if (file.size > (kind === 'font' ? 64 : 32) * 1024 * 1024) throw new Error('文件太大，请选择更小的文件');
+    if (file.size > 64 * 1024 * 1024) throw new Error('文件太大，请选择更小的文件');
     const button = $('#import-asset'); button.disabled = true;
     try {
       const dataURL = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error('无法读取文件')); reader.readAsDataURL(file); });
       await flushFontStyleSave();
       const asset = await post('/api/assets', { kind, name: file.name.replace(/\.[^.]+$/, ''), filename: file.name, data: dataURL.split(',')[1] });
-      await loadProfiles(); await chooseAppearance(kind === 'font' ? { fontId: asset.id } : { backgroundId: asset.id }); toast('已导入并应用');
+      await loadProfiles(); await chooseAppearance({ fontId: asset.id }); toast('已导入并应用');
     } finally { button.disabled = false; }
   });
-  $('#background-opacity').oninput = event => { appearance.backgroundOpacity = Number(event.target.value) / 100; document.documentElement.style.setProperty('--background-opacity', appearance.backgroundOpacity); renderAppearanceControls(); };
-  $('#background-opacity').onchange = safe(() => persistAppearance({}));
   $('#terminal-size').onchange = safe(event => chooseAppearance({ terminalFontSize: Number(event.target.value) }));
   $('#ui-scale').onchange = safe(event => chooseAppearance({ uiScale: Number(event.target.value) }));
   $('#ansi-palette').onchange = safe(event => chooseAppearance({ ansiPalette: event.target.value }));

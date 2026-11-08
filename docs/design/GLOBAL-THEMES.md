@@ -2,7 +2,7 @@
 
 对应入口：设置 → 外观配置 → **全局主题**。持久化字段：`appearance.uiStyle`
 （`classic`（默认）| `frosted`），与 `theme`（light/dark/system）、
-字体、ANSI 预设、背景选择、布局全部正交。
+字体、ANSI 预设、布局全部正交。
 
 ## 互联网案例与结论
 
@@ -38,7 +38,7 @@
   背景，监控面板从工具栏下方开始、与 Shell 和 SFTP 顶部对齐；监控信息、
   目录与文件列表不设嵌套卡片与列表内框（表头不粘顶、随内容滚动），
   主要通过留白、标题与选中状态区分内容。
-- 液态玻璃不使用背景图（保存的 `backgroundId` 原样保留，切回经典即恢复）。
+- 液态玻璃不用背景图。
 - 回退：`@supports not (backdrop-filter)` 或 `prefers-reduced-transparency` →
   全部收敛到同色实底（--glass-solid / --glass-terminal-solid）；
   `forced-colors:active` → Canvas/CanvasText + 系统描边；原生窗口保持不透明，

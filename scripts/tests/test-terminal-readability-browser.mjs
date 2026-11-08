@@ -49,32 +49,19 @@ try {
  const foregrounds=[[0,0,0],[0,0,0],[0,0,255],[16,16,16],[255,0,0],[0,255,0],[0,0,255],[0,0,255],[143,181,209],[0,0,0],[0,0,0],[255,255,255],[0,0,255],[0,0,255],[42,90,130]];
  for(const theme of ['dark','light']){
   await page.evaluate(theme=>DevShellTheme.set(theme),theme);
-  for(const backgroundId of ['builtin:none','builtin:paperfolds'])for(const opacity of backgroundId==='builtin:none'?[0]:[0,.42,1]){
-   await page.evaluate(async settings=>{await chooseAppearance(settings);await qaRender()},{backgroundId,backgroundOpacity:opacity});
-   const rendered=await page.evaluate(()=>{
-    const panel=document.querySelector('.terminal-panel'),image=getComputedStyle(panel,'::before'),shade=getComputedStyle(panel,'::after');
-    return{dom:qaDOM(),option:current().term.options.minimumContrastRatio,raw:qaCell(0,2),background:{display:image.display,image:image.backgroundImage,opacity:Number(image.opacity),shadeDisplay:shade.display,shadeOpacity:Number(shade.opacity)}};
-   });
-   if(backgroundId==='builtin:none')assert.equal(rendered.background.display,'none');
-   else{
-    assert.notEqual(rendered.background.display,'none',`${theme}: selected image is hidden`);
-    assert.notEqual(rendered.background.image,'none');assert.equal(rendered.background.opacity,opacity);
-    assert.notEqual(rendered.background.shadeDisplay,'none');assert(Math.abs(rendered.background.shadeOpacity-opacity*.35)<.0001);
-   }
-   assert.equal(rendered.option,1);assert.deepEqual(rendered.raw.fg,[0,0,255]);
-   for(let row=0;row<foregrounds.length;row++)assert.deepEqual(rendered.dom.rows[row][0].fg,foregrounds[row],`${theme}/${backgroundId}/${opacity}/row ${row}`);
-   for(const row of [0,1,2])assert.deepEqual(rendered.dom.rows[row][0].bg,[0,0,0],'background must persist across newlines');
-   assert.deepEqual(rendered.dom.rows[10][0].bg,[255,255,255]);assert.deepEqual(rendered.dom.rows[11][0].bg,[0,0,0]);assert(rendered.dom.rows[14][0].underline);
-   checks.push({theme,backgroundId,opacity,renderedColors:'exact match'});
-  }
+  await page.evaluate(async()=>{await qaRender()});
+  const rendered=await page.evaluate(()=>({dom:qaDOM(),option:current().term.options.minimumContrastRatio,raw:qaCell(0,2)}));
+  assert.equal(rendered.option,1);assert.deepEqual(rendered.raw.fg,[0,0,255]);
+  for(let row=0;row<foregrounds.length;row++)assert.deepEqual(rendered.dom.rows[row][0].fg,foregrounds[row],`${theme}/row ${row}`);
+  for(const row of [0,1,2])assert.deepEqual(rendered.dom.rows[row][0].bg,[0,0,0],'background must persist across newlines');
+  assert.deepEqual(rendered.dom.rows[10][0].bg,[255,255,255]);assert.deepEqual(rendered.dom.rows[11][0].bg,[0,0,0]);assert(rendered.dom.rows[14][0].underline);
+  checks.push({theme,renderedColors:'exact match'});
   const copied=await page.evaluate(()=>{const t=current().term;t.select(0,1,30);const result=t.getSelection();t.clearSelection();return result});assert(copied.startsWith('INHERITED 跨行继承黑底黑字'));
-  const change=await page.evaluate(async()=>{const before=qaDOM();const slider=document.querySelector('#background-opacity');slider.value='15';slider.dispatchEvent(new Event('input',{bubbles:true}));await new Promise(r=>setTimeout(r,60));return{before:before.rows[0][0],after:qaDOM().rows[0][0],opacity:getComputedStyle(document.querySelector('.terminal-panel'),'::before').opacity}});
-  assert.deepEqual(change.after,change.before,'changing image opacity must not recolor the terminal');assert.equal(Number(change.opacity),.15);
  }
  if(streamsPath){
   const streams=JSON.parse(fs.readFileSync(streamsPath));
   for(const theme of ['dark','light']){
-   await page.evaluate(async theme=>{DevShellTheme.set(theme);await chooseAppearance({backgroundId:'builtin:paperfolds',backgroundOpacity:.42,terminalFontSize:16});},theme);
+   await page.evaluate(async theme=>{DevShellTheme.set(theme);await chooseAppearance({terminalFontSize:16});},theme);
    for(const stream of streams){
     await page.evaluate(async stream=>{const t=current().term;t.reset();t.resize(stream.cols,36);await qaWrite('\x1b[?25l'+stream.text.replaceAll('\n','\r\n'));},stream);
     const model=await page.evaluate(cells=>cells.map(c=>qaCell(c.x,c.y)),stream.cells);
@@ -97,5 +84,5 @@ try {
  }
  assert.deepEqual(errors,[]);
  fs.writeFileSync(stage+'/ansi-colors-browser.json',JSON.stringify({passed:true,checks,resources,copy:'preserved',errors},null,2));
- console.log(`PASS: ${checks.length} appearance combinations and ${resources.length} complete streams; exact rendered colors, inherited backgrounds, Chinese cells, grid, underline and copy`);
+ console.log(`PASS: ${checks.length} theme checks and ${resources.length} complete streams; exact rendered colors, inherited ANSI backgrounds, Chinese cells, grid, underline and copy`);
 }finally{await browser.close()}

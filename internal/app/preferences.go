@@ -19,16 +19,13 @@ type Appearance struct {
 	FontColors        map[string]string         `json:"fontColors,omitempty"`
 	FontBold          map[string]bool           `json:"fontBold"`
 	ChartStyles       map[string]ChartLineStyle `json:"chartStyles"`
-	BackgroundID      string                    `json:"backgroundId"`
-	BackgroundOpacity float64                   `json:"backgroundOpacity"`
-	BackgroundVersion int                       `json:"backgroundVersion"`
 	UIScale           float64                   `json:"uiScale"`
 	TerminalFontSize  float64                   `json:"terminalFontSize"`
 	TerminalBold      bool                      `json:"terminalBold,omitempty"` // Legacy input only; migrated to the selected font.
 	// UIStyle selects the global workbench style drawn in CSS (chrome,
 	// panels, dialogs and accents — not just a background picture). Each
 	// style paints its own light and dark variant and stays orthogonal to
-	// Theme, fonts, ANSI colours, background choice and layout.
+	// Theme, fonts, ANSI colours and layout.
 	UIStyle             string `json:"uiStyle"` // classic (default) | frosted
 	Theme               string `json:"theme"`
 	AnsiPalette         string `json:"ansiPalette,omitempty"` // soft (default) | vivid | bright
@@ -64,16 +61,16 @@ type Appearance struct {
 	// the existing local-prompt command set rather than changing behaviour.
 	TcpToolsEnabled bool `json:"tcpToolsEnabled"`
 	// Themes holds named, standalone appearance snapshots created in
-	// 「设置 → 外观配置 → 主题管理」. Each theme bundles colours, fonts, the
-	// ANSI preset, background and chart styles so one click re-applies the
+	// 「设置 → 外观配置 → 主题管理」. Each theme bundles colours, fonts,
+	// the ANSI preset and chart styles so one click re-applies the
 	// whole look; storing the list never changes the live appearance.
 	Themes []AppearanceTheme          `json:"themes,omitempty"`
 	Layout map[string]json.RawMessage `json:"layout"`
 }
 
 // AppearanceTheme is one saved appearance snapshot. Applying a theme patches
-// exactly these keys through the normal appearance validation, so fonts or
-// backgrounds removed in the meantime fail at apply time instead of
+// exactly these keys through the normal appearance validation, so fonts
+// removed in the meantime fail at apply time instead of
 // corrupting the live appearance.
 type AppearanceTheme struct {
 	ID                  string                    `json:"id"`
@@ -86,8 +83,6 @@ type AppearanceTheme struct {
 	FontColors          map[string]string         `json:"fontColors,omitempty"`
 	FontBold            map[string]bool           `json:"fontBold,omitempty"`
 	AnsiPalette         string                    `json:"ansiPalette,omitempty"`
-	BackgroundID        string                    `json:"backgroundId,omitempty"`
-	BackgroundOpacity   *float64                  `json:"backgroundOpacity,omitempty"`
 	TerminalFontSize    float64                   `json:"terminalFontSize,omitempty"`
 	ChartStyles         map[string]ChartLineStyle `json:"chartStyles,omitempty"`
 	PromptUsernameColor string                    `json:"promptUsernameColor,omitempty"`
@@ -95,15 +90,13 @@ type AppearanceTheme struct {
 }
 
 func defaultAppearance() Appearance {
-	return Appearance{UIFontID: defaultUIFontID, UITextColors: map[string]string{}, FontID: "builtin:jetbrains-mono", FontColors: map[string]string{}, FontBold: map[string]bool{}, ChartStyles: map[string]ChartLineStyle{}, BackgroundID: "builtin:none", BackgroundOpacity: .42, BackgroundVersion: 2, UIScale: 1, TerminalFontSize: 14, UIStyle: "classic", Theme: "system", MonitorVisible: true, FilesPosition: "right", FollowTerminal: true, MinimizeAction: "ask", AutoCommandsEnabled: true, TcpToolsEnabled: true, Layout: map[string]json.RawMessage{}}
+	return Appearance{UIFontID: defaultUIFontID, UITextColors: map[string]string{}, FontID: "builtin:jetbrains-mono", FontColors: map[string]string{}, FontBold: map[string]bool{}, ChartStyles: map[string]ChartLineStyle{}, UIScale: 1, TerminalFontSize: 14, UIStyle: "classic", Theme: "system", MonitorVisible: true, FilesPosition: "right", FollowTerminal: true, MinimizeAction: "ask", AutoCommandsEnabled: true, TcpToolsEnabled: true, Layout: map[string]json.RawMessage{}}
 }
 
 // retiredUIStyle names the polar/twilight workbench styles removed in
 // November 2026; saved values migrate to classic on load.
 func retiredUIStyle(value string) bool { return value == "polar" || value == "twilight" }
 
-// Old releases combined 18% image opacity with a dark multiply tint. Keep
-// explicit strengths, including zero, while replacing that old default once.
 func (value *Appearance) UnmarshalJSON(data []byte) error {
 	type plain Appearance
 	next := plain(defaultAppearance())
@@ -113,12 +106,6 @@ func (value *Appearance) UnmarshalJSON(data []byte) error {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
-	}
-	if _, versioned := fields["backgroundVersion"]; !versioned || next.BackgroundVersion < 2 {
-		if math.Abs(next.BackgroundOpacity-.18) < .000001 {
-			next.BackgroundOpacity = .42
-		}
-		next.BackgroundVersion = 2
 	}
 	if next.UIFontID == "" || retiredBuiltinUIFont(next.UIFontID) {
 		next.UIFontID = defaultUIFontID
@@ -224,10 +211,6 @@ func cloneAppearanceTheme(theme AppearanceTheme) AppearanceTheme {
 		}
 		theme.ChartStyles = styles
 	}
-	if theme.BackgroundOpacity != nil {
-		opacity := *theme.BackgroundOpacity
-		theme.BackgroundOpacity = &opacity
-	}
 	return theme
 }
 
@@ -275,9 +258,6 @@ func normalizeAppearanceThemes(themes []AppearanceTheme) error {
 		if theme.AnsiPalette != "" && theme.AnsiPalette != "soft" && theme.AnsiPalette != "vivid" && theme.AnsiPalette != "bright" {
 			return errors.New("主题 ANSI 预设应为 soft、vivid 或 bright")
 		}
-		if theme.BackgroundOpacity != nil && (math.IsNaN(*theme.BackgroundOpacity) || math.IsInf(*theme.BackgroundOpacity, 0) || *theme.BackgroundOpacity < 0 || *theme.BackgroundOpacity > 1) {
-			return errors.New("主题背景强度应为 0%–100%")
-		}
 		if theme.TerminalFontSize != 0 && (math.IsNaN(theme.TerminalFontSize) || math.IsInf(theme.TerminalFontSize, 0) || theme.TerminalFontSize < 8 || theme.TerminalFontSize > 40 || math.Trunc(theme.TerminalFontSize*2) != theme.TerminalFontSize*2) {
 			return errors.New("主题终端字号应为 8–40，步进为 0.5 px")
 		}
@@ -313,9 +293,9 @@ func normalizeAppearanceThemes(themes []AppearanceTheme) error {
 			}
 			*color = strings.ToLower(*color)
 		}
-		for _, id := range []string{theme.UIFontID, theme.FontID, theme.BackgroundID} {
+		for _, id := range []string{theme.UIFontID, theme.FontID} {
 			if len(id) > 64 {
-				return errors.New("主题引用的字体或背景标识过长")
+				return errors.New("主题引用的字体标识过长")
 			}
 		}
 	}
@@ -404,9 +384,6 @@ func (s *Store) saveAppearanceLocked(value Appearance) (Appearance, error) {
 	if math.IsNaN(value.UIScale) || math.IsInf(value.UIScale, 0) || value.UIScale < .5 || value.UIScale > 2 {
 		return Appearance{}, errors.New("界面缩放应为 50%–200%")
 	}
-	if math.IsNaN(value.BackgroundOpacity) || math.IsInf(value.BackgroundOpacity, 0) || value.BackgroundOpacity < 0 || value.BackgroundOpacity > 1 {
-		return Appearance{}, errors.New("背景强度应为 0%–100%")
-	}
 	if math.IsNaN(value.TerminalFontSize) || math.IsInf(value.TerminalFontSize, 0) || value.TerminalFontSize < 8 || value.TerminalFontSize > 40 || math.Trunc(value.TerminalFontSize*2) != value.TerminalFontSize*2 {
 		return Appearance{}, errors.New("终端字号应为 8–40，步进为 0.5 px")
 	}
@@ -427,7 +404,6 @@ func (s *Store) saveAppearanceLocked(value Appearance) (Appearance, error) {
 		value.UITextColors[key] = strings.ToLower(color)
 	}
 	value.TerminalBold = false
-	value.BackgroundVersion = 2
 	for id, color := range value.FontColors {
 		if (!validBuiltinAssetID(id) && !validAssetID(id)) || !validTerminalColor(color) {
 			return Appearance{}, errors.New("字体颜色应为 #RRGGBB 格式")
@@ -439,19 +415,16 @@ func (s *Store) saveAppearanceLocked(value Appearance) (Appearance, error) {
 			return Appearance{}, errors.New("字体样式引用了无效的字体")
 		}
 	}
-	for kind, id := range map[string]string{"font": value.FontID, "background": value.BackgroundID} {
-		if validBuiltinAssetID(id) {
-			continue
-		}
+	if !validBuiltinAssetID(value.FontID) {
 		found := false
 		for _, asset := range s.config.Assets {
-			if asset.ID == id && asset.Kind == kind {
+			if asset.ID == value.FontID && asset.Kind == "font" {
 				found = true
 				break
 			}
 		}
 		if !found {
-			return Appearance{}, errors.New("所选字体或背景不存在，请重新选择")
+			return Appearance{}, errors.New("所选字体不存在，请重新选择")
 		}
 	}
 	old := s.config.Appearance

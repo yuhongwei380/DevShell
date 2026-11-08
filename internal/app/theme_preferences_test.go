@@ -16,7 +16,7 @@ func TestAppearanceThemesPatchAndPersistence(t *testing.T) {
 	}
 	raw := `{"themes":[` +
 		`{"id":"11111111-1111-4111-8111-111111111111","name":"夜间工作","theme":"dark","uiStyle":"frosted","fontId":"builtin:jetbrains-mono",` +
-		`"ansiPalette":"vivid","backgroundId":"builtin:none","backgroundOpacity":0,"terminalFontSize":16,` +
+		`"ansiPalette":"vivid","terminalFontSize":16,` +
 		`"fontColors":{"builtin:jetbrains-mono":"#ABCDEF"},"chartStyles":{"upload":{"color":"#ff0000","width":3,"dashed":true}},` +
 		`"promptUsernameColor":"#AABBCC"},` +
 		`{"id":"22222222-2222-4222-8222-222222222222","name":"浅色","theme":"light"}]}`
@@ -27,12 +27,9 @@ func TestAppearanceThemesPatchAndPersistence(t *testing.T) {
 	if len(saved.Themes) != 2 || saved.Themes[0].Name != "夜间工作" || saved.Themes[1].Theme != "light" || saved.Themes[0].UIStyle != "frosted" {
 		t.Fatal("themes not stored", saved.Themes)
 	}
-	// 颜色统一小写；opacity 为 0 必须保留（与未设置可区分）。
+	// 颜色统一小写。
 	if saved.Themes[0].FontColors["builtin:jetbrains-mono"] != "#abcdef" || saved.Themes[0].PromptUsernameColor != "#aabbcc" {
 		t.Fatal("theme colors not normalized", saved.Themes[0])
-	}
-	if saved.Themes[0].BackgroundOpacity == nil || *saved.Themes[0].BackgroundOpacity != 0 {
-		t.Fatal("zero background opacity lost")
 	}
 	// 公开结果与存储隔离：改动返回值不得污染配置。
 	saved.Themes[0].Name = "改名"
@@ -75,7 +72,6 @@ func TestAppearanceThemesValidation(t *testing.T) {
 		{"无效明暗", `{"themes":[{"id":"a1","name":"甲","theme":"sepia"}]}`, "明暗"},
 		{"无效工作台样式", `{"themes":[{"id":"a1","name":"甲","uiStyle":"paper"}]}`, "工作台样式"},
 		{"无效 ANSI", `{"themes":[{"id":"a1","name":"甲","ansiPalette":"retro"}]}`, "ANSI"},
-		{"背景强度越界", `{"themes":[{"id":"a1","name":"甲","backgroundOpacity":1.5}]}`, "背景强度"},
 		{"字号越界", `{"themes":[{"id":"a1","name":"甲","terminalFontSize":6}]}`, "字号"},
 		{"字号步进", `{"themes":[{"id":"a1","name":"甲","terminalFontSize":14.3}]}`, "字号"},
 		{"字体颜色格式", `{"themes":[{"id":"a1","name":"甲","fontColors":{"builtin:jetbrains-mono":"red"}}]}`, "字体颜色"},

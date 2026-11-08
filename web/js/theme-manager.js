@@ -1,11 +1,11 @@
 /* 主题管理（设置 → 外观配置 → 主题管理）：把当前整套外观（界面与终端字体
-   颜色、ANSI 预设、背景与强度、终端字号、曲线样式、提示符颜色、明暗模式）
+   颜色、ANSI 预设、终端字号、曲线样式、提示符颜色、明暗模式）
    保存为独立主题，应用时整套生效。主题列表整体存进 appearance.themes，
    只增删列表本身不会改变当前外观；应用走普通的字段级补丁与校验，引用的
-   字体或背景若已被删除会在应用时报错回滚，而不是留下半套外观。 */
+   字体若已被删除会在应用时报错回滚，而不是留下半套外观。 */
 'use strict';
 window.DengThemeManager = (() => {
-  const snapshotKeys = ['theme', 'uiStyle', 'uiFontId', 'uiTextColors', 'fontId', 'fontColors', 'fontBold', 'ansiPalette', 'backgroundId', 'backgroundOpacity', 'terminalFontSize', 'chartStyles', 'promptUsernameColor', 'promptHostnameColor'];
+  const snapshotKeys = ['theme', 'uiStyle', 'uiFontId', 'uiTextColors', 'fontId', 'fontColors', 'fontBold', 'ansiPalette', 'terminalFontSize', 'chartStyles', 'promptUsernameColor', 'promptHostnameColor'];
   const mapKeys = new Set(['uiTextColors', 'fontColors', 'fontBold', 'chartStyles']);
   const ansiLabels = { soft: '柔和', vivid: '高饱和', bright: '鲜亮' };
   const themeLabels = { system: '跟随系统', light: '浅色', dark: '深色' };
@@ -25,8 +25,6 @@ window.DengThemeManager = (() => {
     const bits = [themeLabels[theme.theme || 'system'] || '跟随系统'];
     if (theme.terminalFontSize) bits.push(`终端字号 ${theme.terminalFontSize}`);
     bits.push(`ANSI ${ansiLabels[theme.ansiPalette] || '柔和'}`);
-    const backgroundId = theme.backgroundId || 'builtin:none';
-    bits.push(`背景 ${backgroundId === 'builtin:none' ? '无' : allBackgrounds().find(item => item.id === backgroundId)?.name || '自定义'}`);
     if (Object.keys(theme.fontColors || {}).length) bits.push('自定义终端颜色');
     return bits.join(' · ');
   }
@@ -146,7 +144,7 @@ window.DengThemeManager = (() => {
   }
   function initialize() {
     dialog = document.createElement('dialog'); dialog.id = 'theme-manager-dialog';
-    dialog.innerHTML = `<form id="theme-manager-form" novalidate><div class="dialog-heading"><h2 id="theme-manager-title">主题管理</h2><button type="button" class="icon-button" id="close-theme-manager" aria-label="关闭主题管理"><svg><use href="#i-close"/></svg></button></div><p>把当前整套外观（明暗模式、界面与终端字体颜色、ANSI 预设、背景与强度、终端字号、曲线样式、提示符颜色）保存为独立主题；应用时整套生效，字体与背景缺失会报错并保持原样。</p><div class="theme-create"><input id="theme-new-name" maxlength="48" placeholder="新主题名称" aria-label="新主题名称"><button type="button" id="theme-create-button" class="primary-button"><svg><use href="#i-plus"/></svg>从当前外观新建</button></div><div class="theme-list" id="theme-list"></div><p id="theme-manager-error" role="alert"></p></form>`;
+    dialog.innerHTML = `<form id="theme-manager-form" novalidate><div class="dialog-heading"><h2 id="theme-manager-title">主题管理</h2><button type="button" class="icon-button" id="close-theme-manager" aria-label="关闭主题管理"><svg><use href="#i-close"/></svg></button></div><p>把当前整套外观（明暗模式、界面与终端字体颜色、ANSI 预设、终端字号、曲线样式、提示符颜色）保存为独立主题；应用时整套生效，字体缺失会报错并保持原样。</p><div class="theme-create"><input id="theme-new-name" maxlength="48" placeholder="新主题名称" aria-label="新主题名称"><button type="button" id="theme-create-button" class="primary-button"><svg><use href="#i-plus"/></svg>从当前外观新建</button></div><div class="theme-list" id="theme-list"></div><p id="theme-manager-error" role="alert"></p></form>`;
     document.body.append(dialog);
     const form = dialog.querySelector('form');
     list = form.querySelector('#theme-list');

@@ -51,7 +51,7 @@ func TestConfigSchemaMigrationPreservesCredentialsAndLiteralGroups(t *testing.T)
 	if len(s.config.Commands) != 1 || len(s.config.Keys) != 1 || len(s.config.Proxies) != 1 || len(s.config.Assets) != 1 || s.config.HostKeys["host:22"] != "SHA256:kept" {
 		t.Fatal("lost ancillary settings")
 	}
-	if s.config.Appearance.BackgroundOpacity != 0 || s.config.Appearance.UIScale != 1.25 {
+	if s.config.Appearance.UIScale != 1.25 || s.config.Appearance.TerminalFontSize != 16 {
 		t.Fatal("explicit appearance changed")
 	}
 	files, _ := filepath.Glob(filepath.Join(dir, "config.pre-v2.*.enc"))

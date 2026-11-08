@@ -23,7 +23,7 @@ VIAddVersionKey /LANG=2052 "LegalCopyright" "DevShell contributors · MIT"
 !define MUI_UNICON "${ICON}"
 !define MUI_ABORTWARNING
 !define MUI_WELCOMEPAGE_TITLE "安装 DevShell"
-!define MUI_WELCOMEPAGE_TEXT "将 DevShell 安装到当前用户目录，并创建开始菜单和桌面快捷方式。$\r$\n$\r$\n若 DevShell 正在运行，安装器会提示关闭并自动继续。请先保存编辑并完成传输。原有 data 配置、密钥、字体和背景会保留；旧版安装位置与数据会自动沿用。$\r$\n$\r$\n应用首次启动会检查 WebView2，缺少时提供安装指引。"
+!define MUI_WELCOMEPAGE_TEXT "将 DevShell 安装到当前用户目录，并创建开始菜单和桌面快捷方式。$\r$\n$\r$\n若 DevShell 正在运行，安装器会提示关闭并自动继续。请先保存编辑并完成传输。原有 data 配置、密钥和字体会保留；旧版安装位置与数据会自动沿用。$\r$\n$\r$\n应用首次启动会检查 WebView2，缺少时提供安装指引。"
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "${LICENSE_FILE}"
 !insertmacro MUI_PAGE_DIRECTORY
@@ -31,7 +31,7 @@ VIAddVersionKey /LANG=2052 "LegalCopyright" "DevShell contributors · MIT"
 !define MUI_FINISHPAGE_RUN "$INSTDIR\DevShell.exe"
 !define MUI_FINISHPAGE_RUN_TEXT "启动 DevShell"
 !insertmacro MUI_PAGE_FINISH
-!define MUI_UNCONFIRMPAGE_TEXT_TOP "卸载会移除程序和快捷方式，并保留 data 中的连接凭据、个人配置、密钥、字体和背景；重新安装到原位置后连接照常可用。"
+!define MUI_UNCONFIRMPAGE_TEXT_TOP "卸载会移除程序和快捷方式，并保留 data 中的连接凭据、个人配置、密钥和字体；重新安装到原位置后连接照常可用。"
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "SimpChinese"

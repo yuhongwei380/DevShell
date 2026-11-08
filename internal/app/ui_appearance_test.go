@@ -82,7 +82,7 @@ func TestUITextColorsMigrationValidationAndPatchIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, patch := range []string{
-		`{"fontColors":{"builtin:fira-code":"#123456"},"fontBold":{"builtin:fira-code":true},"backgroundOpacity":0.6,"uiFontId":"builtin:ui-alibaba-puhuiti-3-55","uiTextColors":{"light":"#ABCDEF"}}`,
+		`{"fontColors":{"builtin:fira-code":"#123456"},"fontBold":{"builtin:fira-code":true},"uiFontId":"builtin:ui-alibaba-puhuiti-3-55","uiTextColors":{"light":"#ABCDEF"}}`,
 		`{"uiTextColors":{"dark":"#FEDCBA"}}`,
 		`{"uiTextColors":{"light":"#243B4E"}}`,
 	} {
@@ -117,7 +117,7 @@ func TestUITextColorsMigrationValidationAndPatchIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := reopened.List().Appearance
-	if len(got.UITextColors) != 1 || got.UITextColors["dark"] != "#fedcba" || got.UIFontID != "builtin:ui-alibaba-puhuiti-3-55" || got.FontColors["builtin:fira-code"] != "#123456" || !got.FontBold["builtin:fira-code"] || got.BackgroundOpacity != .6 {
+	if len(got.UITextColors) != 1 || got.UITextColors["dark"] != "#fedcba" || got.UIFontID != "builtin:ui-alibaba-puhuiti-3-55" || got.FontColors["builtin:fira-code"] != "#123456" || !got.FontBold["builtin:fira-code"] {
 		t.Fatalf("patch/reset changed unrelated settings: %+v", got)
 	}
 }
@@ -139,7 +139,7 @@ func TestUIFontImportKindsAreSeparate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, patch := range []string{`{"uiFontId":"` + terminal.ID + `"}`, `{"fontId":"` + ui.ID + `"}`, `{"backgroundId":"` + ui.ID + `"}`} {
+	for _, patch := range []string{`{"uiFontId":"` + terminal.ID + `"}`, `{"fontId":"` + ui.ID + `"}`} {
 		if _, err = s.PatchAppearance(preferencePatch(t, patch)); err == nil {
 			t.Fatal("asset kinds were mixed", patch)
 		}

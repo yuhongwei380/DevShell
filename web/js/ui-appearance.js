@@ -185,7 +185,7 @@ window.DengUIAppearance = (() => {
     }
     dialog.addEventListener('close', () => { if (colorSaveTimer) { clearTimeout(colorSaveTimer); colorSaveTimer = null; chooseAppearance({ uiTextColors: { ...appearance.uiTextColors } }).catch(error => toast(error.message)); } });
     dialog.querySelector('#close-ui-appearance').onclick = () => dialog.close();
-    dialog.querySelector('#switch-shell-fonts').onclick = safe(async () => { dialog.close(); await openAppearance('font'); });
+    dialog.querySelector('#switch-shell-fonts').onclick = safe(async () => { dialog.close(); await openAppearance(); });
     dialog.querySelector('#online-ui-fonts').onclick = safe(() => window.DengFontLibrary.open('ui-font'));
     dialog.querySelector('#import-ui-font').onclick = safe(importFont);
     dialog.querySelector('#ui-font-picker').onchange = safe(async event => {

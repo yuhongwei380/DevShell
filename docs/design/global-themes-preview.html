@@ -188,7 +188,6 @@
       <button role="menuitem" id="manage-ui-appearance"><svg><use href="#i-type"/></svg>界面字体与文字颜色<span>界面字体</span></button>
       <button role="menuitem" id="manage-shell-fonts"><svg><use href="#i-type"/></svg>Shell 字体与颜色<span>终端字体</span></button>
       <button role="menuitem" id="manage-ui-styles" aria-haspopup="dialog" aria-controls="ui-styles-dialog"><svg><use href="#i-layout"/></svg>全局主题<span>整套界面材质</span></button>
-      <button role="menuitem" id="manage-backgrounds"><svg><use href="#i-image"/></svg>背景管理器<span>终端背景</span></button>
       <button role="menuitem" id="manage-chart-styles"><svg><use href="#i-network"/></svg>曲线样式<span>网速与延迟</span></button>
       <button role="menuitem" id="manage-themes"><svg><use href="#i-swatch"/></svg>主题管理<span>保存整套外观</span></button>
       <div class="scale-setting"><label for="ansi-palette">终端 ANSI 颜色</label><select id="ansi-palette" aria-label="终端 ANSI 颜色预设"><option value="soft">柔和</option><option value="vivid">高饱和</option><option value="bright">鲜亮</option></select></div>
@@ -203,13 +202,13 @@
   </div>
 
   <dialog id="ui-styles-dialog" aria-labelledby="ui-styles-title" aria-describedby="ui-styles-description">
-    <div class="dialog-heading"><div><h2 id="ui-styles-title">全局主题</h2><p id="ui-styles-description">整套界面材质即时切换；字体、ANSI、背景与布局保持不变。</p></div><button type="button" class="icon-button" id="close-ui-styles" aria-label="关闭全局主题"><svg><use href="#i-close"/></svg></button></div>
+    <div class="dialog-heading"><div><h2 id="ui-styles-title">全局主题</h2><p id="ui-styles-description">整套界面材质即时切换；字体、ANSI 与布局保持不变。</p></div><button type="button" class="icon-button" id="close-ui-styles" aria-label="关闭全局主题"><svg><use href="#i-close"/></svg></button></div>
     <fieldset><legend>明暗模式</legend><div class="ui-style-segmented" role="group" aria-label="明暗模式">
       <button type="button" data-theme-mode="light">浅色</button><button type="button" data-theme-mode="dark">深色</button><button type="button" data-theme-mode="system">跟随系统</button>
     </div></fieldset>
     <fieldset><legend>工作台样式</legend><div class="ui-style-grid">
-      <button type="button" class="ui-style-card" data-ui-style="classic"><span class="ui-style-swatch ui-style-swatch-classic" aria-hidden="true"><i></i><b></b><em></em></span><span class="ui-style-card-heading">经典 <span class="ui-style-selected">✓</span></span><small>沿用熟悉的蓝灰配色；背景图与强度照常可用。</small><span class="ui-style-card-meta">不透明面板 · 全部背景可选</span></button>
-      <button type="button" class="ui-style-card" data-ui-style="frosted"><span class="ui-style-swatch ui-style-swatch-frosted" aria-hidden="true"><i></i><b></b><em></em></span><span class="ui-style-card-heading">液态玻璃 <span class="ui-style-selected">✓</span></span><small>经典配色原样保留，面板化作半透明折射玻璃；边缘聚光高光，底层光色流动。</small><span class="ui-style-card-meta">经典配色 · 玻璃材质 · 不使用背景图（原选择保留）</span></button>
+      <button type="button" class="ui-style-card" data-ui-style="classic"><span class="ui-style-swatch ui-style-swatch-classic" aria-hidden="true"><i></i><b></b><em></em></span><span class="ui-style-card-heading">经典 <span class="ui-style-selected">✓</span></span><small>沿用熟悉的蓝灰配色，面板不透明。</small><span class="ui-style-card-meta">不透明面板 · 经典配色</span></button>
+      <button type="button" class="ui-style-card" data-ui-style="frosted"><span class="ui-style-swatch ui-style-swatch-frosted" aria-hidden="true"><i></i><b></b><em></em></span><span class="ui-style-card-heading">液态玻璃 <span class="ui-style-selected">✓</span></span><small>经典配色原样保留，面板化作半透明折射玻璃；边缘聚光高光，底层光色流动。</small><span class="ui-style-card-meta">经典配色 · 玻璃材质</span></button>
     </div></fieldset>
     <p class="ui-style-status" id="ui-style-status" role="status"></p>
   </dialog>

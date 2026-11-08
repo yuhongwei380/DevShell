@@ -1,16 +1,12 @@
 package app
 
 import (
-	"bytes"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"image"
-	_ "image/jpeg"
-	_ "image/png"
 	"io"
 	"net/http"
 	"os"
@@ -20,7 +16,6 @@ import (
 )
 
 const maxFontBytes = 64 << 20
-const maxBackgroundBytes = 32 << 20
 
 type ManagedAsset struct {
 	ID          string    `json:"id"`
@@ -45,10 +40,8 @@ func assetLimit(kind string) (int64, error) {
 	switch kind {
 	case "font", "ui-font":
 		return maxFontBytes, nil
-	case "background":
-		return maxBackgroundBytes, nil
 	default:
-		return 0, errors.New("资源类型应为字体或背景")
+		return 0, errors.New("资源类型应为字体")
 	}
 }
 
@@ -246,9 +239,6 @@ func (s *Store) DeleteAsset(id string) error {
 	if s.config.Appearance.FontID == id {
 		s.config.Appearance.FontID = defaultAppearance().FontID
 	}
-	if s.config.Appearance.BackgroundID == id {
-		s.config.Appearance.BackgroundID = defaultAppearance().BackgroundID
-	}
 	if err := s.writeLocked(); err != nil {
 		s.config.Assets, s.config.Appearance = oldAssets, oldAppearance
 		if removed {
@@ -317,92 +307,7 @@ func validateAsset(kind, filename string, data []byte) (string, error) {
 		}
 		return mime, nil
 	}
-	if ext != ".png" && ext != ".jpg" && ext != ".jpeg" && ext != ".webp" {
-		return "", errors.New("背景支持 PNG、JPEG、WebP 图片")
-	}
-	if len(data) >= 12 && string(data[:4]) == "RIFF" && string(data[8:12]) == "WEBP" {
-		if err := validateWebP(data); err != nil {
-			return "", err
-		}
-		return "image/webp", nil
-	}
-	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
-	if err != nil || (format != "png" && format != "jpeg") {
-		return "", errors.New("图片无法读取，请选择有效的 PNG、JPEG 或 WebP 文件")
-	}
-	if err := validateImageSize(cfg.Width, cfg.Height); err != nil {
-		return "", err
-	}
-	if _, _, err := image.Decode(bytes.NewReader(data)); err != nil {
-		return "", errors.New("图片内容不完整或损坏")
-	}
-	return "image/" + format, nil
-}
-
-func validateImageSize(width, height int) error {
-	if width < 1 || height < 1 || width > 32768 || height > 32768 || int64(width)*int64(height) > 32_000_000 {
-		return errors.New("背景图片不能超过 3200 万像素或单边 32768 像素")
-	}
-	return nil
-}
-
-func validateWebP(data []byte) error {
-	if uint64(binary.LittleEndian.Uint32(data[4:8]))+8 != uint64(len(data)) {
-		return errors.New("WebP 图片长度无效")
-	}
-	found := false
-	for offset := 12; offset < len(data); {
-		if len(data)-offset < 8 {
-			return errors.New("WebP 图片内容不完整")
-		}
-		tag := string(data[offset : offset+4])
-		size := uint64(binary.LittleEndian.Uint32(data[offset+4 : offset+8]))
-		start, end := uint64(offset+8), uint64(offset+8)+size
-		if end > uint64(len(data)) {
-			return errors.New("WebP 图片内容不完整")
-		}
-		chunk := data[start:end]
-		width, height := 0, 0
-		switch tag {
-		case "VP8 ":
-			if len(chunk) < 10 || !bytes.Equal(chunk[3:6], []byte{0x9d, 0x01, 0x2a}) {
-				return errors.New("WebP 图片帧无效")
-			}
-			width = int(binary.LittleEndian.Uint16(chunk[6:8]) & 0x3fff)
-			height = int(binary.LittleEndian.Uint16(chunk[8:10]) & 0x3fff)
-			found = true
-		case "VP8L":
-			if len(chunk) < 5 || chunk[0] != 0x2f {
-				return errors.New("WebP 图片帧无效")
-			}
-			bits := binary.LittleEndian.Uint32(chunk[1:5])
-			width, height = int(bits&0x3fff)+1, int((bits>>14)&0x3fff)+1
-			found = true
-		case "VP8X":
-			if len(chunk) != 10 {
-				return errors.New("WebP 图片头无效")
-			}
-			width = int(chunk[4]) | int(chunk[5])<<8 | int(chunk[6])<<16
-			height = int(chunk[7]) | int(chunk[8])<<8 | int(chunk[9])<<16
-			width++
-			height++
-		case "ANIM", "ANMF":
-			return errors.New("请使用静态 WebP 背景图片")
-		}
-		if width != 0 || height != 0 {
-			if err := validateImageSize(width, height); err != nil {
-				return err
-			}
-		}
-		offset = int(end + size%2)
-		if offset > len(data) {
-			return errors.New("WebP 图片内容不完整")
-		}
-	}
-	if !found {
-		return errors.New("WebP 图片缺少图像内容")
-	}
-	return nil
+	return "", errors.New("不支持该资源类型")
 }
 
 func validateFont(data []byte) (string, error) {

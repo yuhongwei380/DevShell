@@ -1,4 +1,4 @@
-:root { --view-width:100vw; --view-height:100dvh; --sidebar-default:304px; --files-default:clamp(150px,25vh,300px); --sidebar-width:var(--sidebar-default); --files-height:var(--files-default); --terminal-background:none; --background-opacity:.42; --terminal-foreground:#d3e0e8; }
+:root { --view-width:100vw; --view-height:100dvh; --sidebar-default:304px; --files-default:clamp(150px,25vh,300px); --sidebar-width:var(--sidebar-default); --files-height:var(--files-default); --terminal-foreground:#d3e0e8; }
 body { transform-origin:0 0; }
 .brand-logo { width:26px; height:26px; flex-shrink:0; }
 .session-bar { --wails-draggable:drag; user-select:none; gap:5px; min-width:0; }
@@ -29,11 +29,6 @@ body { transform-origin:0 0; }
 .window-controls .window-close:hover { background:#c2696e; color:white; }
 .frameless .session-row { padding-right:7px; }
 .terminal-panel { isolation:isolate; }
-/* 纯色 · 全黑：用户显式选择，压过明暗主题的渐变底色。 */
-.terminal-panel.solid-black { background:#000!important; }
-.terminal-panel::before { content:""; position:absolute; inset:0; z-index:0; background-image:var(--terminal-background); background-size:cover; background-position:center; background-color:transparent; background-blend-mode:normal; opacity:var(--background-opacity); filter:brightness(.6); pointer-events:none; }
-/* Dim the backdrop without changing the terminal's ANSI foreground/background. */
-.terminal-panel.has-background::after { content:""; position:absolute; inset:0; z-index:0; background:rgb(13 24 32); opacity:calc(var(--background-opacity) * .35); pointer-events:none; }
 .terminal-panel > * { position:relative; z-index:1; }
 .terminal-output,.terminal-session,dialog textarea { font-family:var(--terminal-family,monospace); }
 /* Match measurement and rendering; contextual ligatures must not change cells. */
@@ -71,18 +66,11 @@ dialog { max-width:calc(var(--view-width) - 24px); max-height:calc(var(--view-he
 .manager-dialog .dialog-heading > button { flex-shrink:0; }
 .manager-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:12px 0 18px; font-size:11px; color:var(--muted); }
 .manager-toolbar button { flex-shrink:0; }
-.background-strength { display:flex; align-items:center; gap:12px; margin:12px 0 20px; background:var(--surface-inset,#f4f7fa); padding:12px 14px; border-radius:12px; }
-.background-strength label { margin:0; flex:none; display:flex; flex-direction:row; gap:7px; white-space:nowrap; }
-.background-strength input { padding:0; border:0; min-width:60px; flex:1; width:auto; accent-color:#7b9db4; }
-.background-strength > span { font-size:10px; color:var(--muted); }
 .asset-list { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
 .asset-card { min-width:0; overflow:hidden; border-radius:13px; background:var(--surface-inset,#f4f7fa); }
 .asset-card.selected { background:var(--surface-selected,#e8f0f6); }
 .asset-choice { display:block; width:100%; text-align:left; }
 .asset-choice:hover { background:var(--surface-hover,#edf2f6); }
-.background-thumb { width:100%; height:100px; background-color:#1b2e3a; background-size:cover; background-position:center; display:grid; place-items:center; color:#9ab5c7; }
-.background-thumb.solid-black-thumb { background-color:#000; }
-.background-thumb svg { width:30px; height:30px; opacity:.7; }
 .asset-caption { display:flex; flex-direction:column; gap:6px; padding:12px; }
 .asset-caption strong { font-size:12px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .asset-caption span { font-size:10px; color:var(--muted); }
@@ -118,8 +106,6 @@ dialog { max-width:calc(var(--view-width) - 24px); max-height:calc(var(--view-he
 [data-narrow="true"] .file-tabs { padding-inline:8px; gap:1px; }
 [data-narrow="true"] .file-tab { padding-inline:9px; }
 [data-narrow="true"] .asset-list { grid-template-columns:repeat(2,minmax(0,1fr)); }
-[data-narrow="true"] .background-strength { flex-wrap:wrap; }
-[data-narrow="true"] .background-strength > span { display:none; }
 [data-narrow="true"] .form-row { gap:8px; }
 [data-narrow="true"] dialog { padding:18px; }
 [data-narrow="true"] .window-controls button { width:27px; }
@@ -144,9 +130,6 @@ dialog { max-width:calc(var(--view-width) - 24px); max-height:calc(var(--view-he
 #monitor-backdrop { position:fixed; inset:42px 0 0; z-index:8; background:#10243733; }
 [data-narrow="true"][data-monitor-open="true"] .sidebar { display:flex; position:fixed; left:8px; top:48px; bottom:12px; width:var(--sidebar-width); max-width:calc(var(--view-width) - 16px); z-index:9; border-radius:16px; box-shadow:0 8px 40px #152c4333; background:var(--surface-inset,#f0f3f7); }
 .font-preview select { background:#2c4454; color:#d7e1e8; }
-.background-strength input { appearance:none; -webkit-appearance:none; height:4px; background:var(--border,#dde6ed); border-radius:4px; }
-.background-strength input::-webkit-slider-thumb { appearance:none; width:14px; height:14px; border-radius:50%; background:#7b9db4; cursor:pointer; }
-.terminal-panel:not(.has-background)::before { display:none; }
 
 /* A movable utility palette leaves the terminal visible and interactive. */
 #appearance-dialog { position:fixed; inset:auto; margin:0; width:470px; max-width:calc(var(--view-width) - 16px); max-height:min(680px,calc(var(--view-height) - 16px)); padding:0; z-index:25; overflow:hidden; border-radius:17px; box-shadow:0 12px 46px #152d4338; }
@@ -163,9 +146,6 @@ dialog { max-width:calc(var(--view-width) - 24px); max-height:calc(var(--view-he
 #appearance-dialog .asset-caption { padding:9px 10px; gap:4px; }
 #appearance-dialog .asset-caption strong { font-size:11px; }
 #appearance-dialog .asset-caption span { font-size:9px; }
-#appearance-dialog .background-thumb { height:100px; }
-#appearance-dialog .background-strength { flex-wrap:wrap; gap:10px; padding:10px 12px; margin:0 0 12px; }
-#appearance-dialog .background-strength > span { display:block; flex-basis:100%; }
 #appearance-dialog .font-preview { padding:11px 13px; margin:0 0 12px; }
 #appearance-dialog .font-preview pre { margin:7px 0 10px; line-height:1.5; }
 .font-preview-options { display:flex; gap:20px; align-items:center; }
