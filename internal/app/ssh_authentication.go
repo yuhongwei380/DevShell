@@ -81,6 +81,16 @@ func explainSSHAuthentication(err error, auth string, trace authenticationTrace)
 	if errors.As(err, &known) {
 		return known
 	}
+	// The transport dying before the first authentication negotiation means
+	// the peer (or a middlebox) closed the connection during version/KEX;
+	// credentials were never consulted, so say so and list the actionable
+	// causes instead of wrapping an opaque library error.
+	if len(trace.allowed) == 0 {
+		switch sshDiagnosticErrorKind(err) {
+		case "eof", "connection-reset", "connection-aborted", "broken-pipe":
+			return &AuthenticationError{code: "ssh_handshake_closed", message: "服务器在 SSH 握手阶段关闭了连接，尚未进入身份验证，与密码或密钥无关。常见原因：端口填错或该端口上运行的不是 SSH 服务、服务器并发/速率限制（如 sshd MaxStartups）、hosts.deny 或 fail2ban 拦截，或代理到目标的链路被中断。请核对端口与代理配置后重试；可用系统 OpenSSH 的 ssh -vvv 对照，并查看服务器 sshd 日志。"}
+		}
+	}
 	if !strings.Contains(err.Error(), "unable to authenticate, attempted methods") {
 		return fmt.Errorf("SSH 握手未完成：%w", err)
 	}

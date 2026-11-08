@@ -1,10 +1,12 @@
 package app
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"net"
@@ -149,6 +151,63 @@ func TestSSHPasswordModeDetectsUnsupportedServerMethod(t *testing.T) {
 	var classified *AuthenticationError
 	if !errors.As(err, &classified) || classified.Code() != "ssh_authentication_unsupported" || !strings.Contains(err.Error(), "公钥") || !strings.Contains(err.Error(), "不能证明密码错误") {
 		t.Fatal("server method policy was misreported", err)
+	}
+}
+
+// A peer that closes the TCP connection during the version exchange must be
+// explained as a handshake close (not an opaque EOF), and its -vvv trace must
+// be retrievable under the exact key the frontend polls: handshake-<profileID>.
+func TestSSHServerClosesDuringHandshakeExplainsAndTraces(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var workers sync.WaitGroup
+	workers.Add(1)
+	go func() {
+		defer workers.Done()
+		for {
+			connection, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			workers.Add(1)
+			go func() {
+				defer workers.Done()
+				defer connection.Close()
+				// Consume the client version line and hang up without answering:
+				// the client sees a clean FIN during the version exchange, which
+				// is the handshake failed: EOF shape from the field report.
+				_, _ = bufio.NewReader(connection).ReadString('\n')
+			}()
+		}
+	}()
+	a, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { a.Close(); listener.Close(); workers.Wait() })
+	host, portText, _ := net.SplitHostPort(listener.Addr().String())
+	response := issueRequest(t, a, "POST", "/api/quick-connect", map[string]any{"command": "ssh -vvv demo@" + host + ":" + portText})
+	if response.Code != 200 {
+		t.Fatal(response.Body.String())
+	}
+	var p Profile
+	json.Unmarshal(response.Body.Bytes(), &p)
+	if p.Verbose != 3 || len(p.ID) <= 12 {
+		t.Fatalf("verbose quick-connect profile unexpected: %+v", p)
+	}
+	_, err = a.Connect(context.Background(), p.ID, "unused-secret")
+	t.Log("DEBUG kind:", sshDiagnosticErrorKind(err), "err:", err)
+	var classified *AuthenticationError
+	if !errors.As(err, &classified) || classified.Code() != "ssh_handshake_closed" || !strings.Contains(err.Error(), "握手") || strings.Contains(err.Error(), "unused-secret") {
+		t.Fatal("handshake close was not explained", err)
+	}
+	a.sshDiagnostics.mu.Lock()
+	events := a.sshDiagnostics.verboseEvents["handshake-"+p.ID]
+	a.sshDiagnostics.mu.Unlock()
+	if len(events) != 1 || events[0].Kind != "verbose-handshake-failed" || !strings.Contains(events[0].Detail, "error=eof") {
+		t.Fatalf("handshake trace not retrievable under the full profile key: %+v", events)
 	}
 }
 
