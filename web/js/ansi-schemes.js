@@ -164,7 +164,7 @@ window.DengAnsiSchemes = (() => {
   }
   function initialize() {
     dialog = document.createElement('dialog'); dialog.id = 'ansi-schemes-dialog';
-    dialog.innerHTML = `<form id="ansi-schemes-form" novalidate><div class="dialog-heading"><h2 id="ansi-schemes-title">配色方案</h2><button type="button" class="icon-button" id="close-ansi-schemes" aria-label="关闭配色方案"><svg><use href="#i-close"/></svg></button></div><p>支持导入多套 iTerm Color Scheme（.itermcolors）文件，方案名称沿用导入文件名，同名导入即覆盖；仅应用其 16 色 ANSI，配色文件的背景、前景、光标等其他键会被忽略，终端仍保持透明背景、文字颜色仍随字体。</p><div class="scheme-toolbar"><button type="button" id="scheme-import-button" class="primary-button"><svg><use href="#i-plus"/></svg>导入 iTerm 配色…</button><span id="scheme-count"></span></div><div class="scheme-list" id="scheme-list"></div><p id="scheme-error" role="alert"></p></form>`;
+    dialog.innerHTML = `<form id="ansi-schemes-form" novalidate><div class="dialog-heading"><h2 id="ansi-schemes-title">配色方案</h2><button type="button" class="icon-button" id="close-ansi-schemes" aria-label="关闭配色方案"><svg><use href="#i-close"/></svg></button></div><p>支持导入多套 .itermcolors 配色方案，名称沿用导入文件名，同名导入即覆盖；仅应用其 16 色 ANSI，背景、前景、光标等其他键会被忽略。</p><div class="scheme-toolbar"><button type="button" id="scheme-import-button" class="primary-button"><svg><use href="#i-plus"/></svg>导入 iTerm 配色…</button><span id="scheme-count"></span></div><div class="scheme-list" id="scheme-list"></div><p id="scheme-error" role="alert"></p></form>`;
     document.body.append(dialog);
     const form = dialog.querySelector('form');
     list = form.querySelector('#scheme-list');
