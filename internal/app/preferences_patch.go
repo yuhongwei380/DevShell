@@ -31,18 +31,19 @@ func (s *Store) PatchAppearance(patch map[string]json.RawMessage) (Appearance, e
 		"promptHostnameColor": &value.PromptHostnameColor, "minimizeAction": &value.MinimizeAction,
 		"externalEditor": &value.ExternalEditor, "updateMirror": &value.UpdateMirror,
 		"autoCommandsEnabled": &value.AutoCommandsEnabled, "tcpToolsEnabled": &value.TcpToolsEnabled,
+		"ansiScheme": &value.AnsiScheme,
 	}
 	for key, raw := range patch {
 		var err error
 		switch key {
 		case "chartStyles":
 			err = mergePreferenceMap(value.ChartStyles, raw)
-		case "themes":
-			// 主题列表整体替换（null 清空）：字段级校验在 saveAppearanceLocked
-			// 的 normalizeAppearanceThemes 内完成。
-			var themes []AppearanceTheme
-			if err = json.Unmarshal(raw, &themes); err == nil {
-				value.Themes = themes
+		case "ansiSchemes":
+			// 配色方案列表整体替换（null 清空）：命名与色板校验在
+			// saveAppearanceLocked 的 normalizeAnsiSchemes 内完成。
+			var schemes []AnsiScheme
+			if err = json.Unmarshal(raw, &schemes); err == nil {
+				value.AnsiSchemes = schemes
 			}
 		case "uiTextColors":
 			err = mergePreferenceMap(value.UITextColors, raw)
@@ -76,13 +77,6 @@ func (s *Store) PatchAppearance(patch map[string]json.RawMessage) (Appearance, e
 				return Appearance{}, errors.New("终端 ANSI 颜色预设只能是 soft、vivid、bright 或 custom")
 			}
 			value.AnsiPalette = preset
-		case "ansiColors":
-			// 自定义 ANSI 色板按键增量合并（单项设 null 删除）；完整性与格式
-			// 由 saveAppearanceLocked 校验，空 map 归一为 nil。
-			if value.AnsiColors == nil {
-				value.AnsiColors = map[string]string{}
-			}
-			err = mergePreferenceMap(value.AnsiColors, raw)
 		case "windowWidth", "windowHeight", "windowMaximised":
 			return Appearance{}, errors.New("窗口尺寸由桌面窗口保存，不能通过界面设置覆盖")
 		default:

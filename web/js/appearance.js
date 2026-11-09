@@ -1,7 +1,7 @@
 'use strict';
 
 let appearance = { uiStyle: window.DEVSHELL?.uiStyle === 'frosted' ? 'frosted' : 'classic', uiFontId: 'builtin:ui-alibaba-puhuiti-3-55', uiTextColors: {}, fontId: 'builtin:jetbrains-mono', fontColors: {}, fontBold: {}, chartStyles: {}, uiScale: Number(window.DEVSHELL?.uiScale) || 1, terminalFontSize: 14, ansiPalette: '', autoCommandsEnabled: true, localShellEnabled: false, tcpToolsEnabled: true };
-const appearanceMapFields = new Set(['fontColors', 'fontBold', 'chartStyles', 'uiTextColors', 'ansiColors']);
+const appearanceMapFields = new Set(['fontColors', 'fontBold', 'chartStyles', 'uiTextColors']);
 const appearanceOwnedElsewhere = new Set(['layout', 'windowWidth', 'windowHeight', 'windowMaximised', 'terminalBold']);
 let appearanceSaved = appearanceSnapshot(appearance);
 let managedAssets = [], managedProxies = [], fontCatalog = null, assetKind = 'font';
@@ -37,32 +37,10 @@ const ansiPalettes = {
 const ansiColorKeys = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white', 'brightBlack', 'brightRed', 'brightGreen', 'brightYellow', 'brightBlue', 'brightMagenta', 'brightCyan', 'brightWhite'];
 const completeAnsiColors = colors => !!colors && ansiColorKeys.every(key => validFontColor(colors[key]));
 function terminalTheme() {
-  const palette = appearance.ansiPalette === 'custom' && completeAnsiColors(appearance.ansiColors) ? appearance.ansiColors : (ansiPalettes[appearance.ansiPalette] || ansiPalettes.soft);
+  // custom 表示应用了导入的配色方案：按名称在方案库里找色板，缺失或残缺回落柔和。
+  const scheme = appearance.ansiPalette === 'custom' ? (appearance.ansiSchemes || []).find(item => item.name === appearance.ansiScheme) : null;
+  const palette = scheme && completeAnsiColors(scheme.colors) ? scheme.colors : (ansiPalettes[appearance.ansiPalette] || ansiPalettes.soft);
   return { background: '#00000000', foreground: colorForFont(), cursor: colorForFont(), selectionBackground: '#7195aa66', ...palette };
-}
-// iTerm Color Schemes（.itermcolors）是 XML plist：客户端解析，只取
-// 「Ansi 0..15 Color」16 键，把 0~1 分量换算为 #RRGGBB；背景、前景、光标等
-// 非 ANSI 键忽略——终端背景保持透明、前景仍随字体颜色。
-const plistTag = node => node.tagName.toLowerCase();
-function plistDict(dict) { const result = {}; let key = ''; for (const child of dict.children) { if (plistTag(child) === 'key') { key = child.textContent; continue; } if (key) { result[key] = plistValue(child); key = ''; } } return result; }
-function plistValue(node) { const tag = plistTag(node); if (tag === 'dict') return plistDict(node); if (tag === 'real' || tag === 'integer') return Number(node.textContent); if (tag === 'string') return node.textContent; if (tag === 'true') return true; if (tag === 'false') return false; return null; }
-function itermColorToHex(entry, index) {
-  const channel = name => { const value = Number(entry?.[name]); if (!Number.isFinite(value)) throw new Error(`iTerm 配色缺少「Ansi ${index} Color」的 ${name}`); return Math.round(Math.min(1, Math.max(0, value)) * 255); };
-  const hex = value => value.toString(16).padStart(2, '0');
-  return `#${hex(channel('Red Component'))}${hex(channel('Green Component'))}${hex(channel('Blue Component'))}`;
-}
-function parseItermAnsiColors(text) {
-  const parsed = new DOMParser().parseFromString(text, 'application/xml');
-  if (parsed.querySelector('parsererror')) throw new Error('无法解析 iTerm 配色文件');
-  const plist = parsed.documentElement, dict = plist?.firstElementChild;
-  if (!plist || plistTag(plist) !== 'plist' || !dict || plistTag(dict) !== 'dict') throw new Error('不是有效的 iTerm 配色文件');
-  const top = plistDict(dict), colors = {};
-  for (let index = 0; index < ansiColorKeys.length; index++) {
-    const entry = top[`Ansi ${index} Color`];
-    if (!entry || typeof entry !== 'object') throw new Error(`iTerm 配色缺少「Ansi ${index} Color」`);
-    colors[ansiColorKeys[index]] = itermColorToHex(entry, index);
-  }
-  return colors;
 }
 function applyTerminalAppearanceColors() {
   const color = colorForFont();
@@ -362,7 +340,9 @@ function applyUIScale() {
 }
 function renderAppearanceControls() {
   $('#terminal-size').value = appearance.terminalFontSize;
-  $('#ansi-palette').value = appearance.ansiPalette === 'custom' ? (completeAnsiColors(appearance.ansiColors) ? 'custom' : 'soft') : (ansiPalettes[appearance.ansiPalette] ? appearance.ansiPalette : 'soft');
+  window.DengAnsiSchemes?.syncOptions();
+  const activeScheme = appearance.ansiPalette === 'custom' ? (appearance.ansiSchemes || []).find(item => item.name === appearance.ansiScheme) : null;
+  $('#ansi-palette').value = activeScheme && completeAnsiColors(activeScheme.colors) ? `scheme:${activeScheme.name}` : (ansiPalettes[appearance.ansiPalette] ? appearance.ansiPalette : 'soft');
   $('#font-preview-text').style.fontFamily = terminalFontFamily;
   $('#font-preview-text').style.fontSize = `${appearance.terminalFontSize}px`;
   $('#font-preview-text').style.fontWeight = boldForFont() ? '700' : '400';
@@ -704,22 +684,10 @@ function initializeAppearance() {
   $('#terminal-size').onchange = safe(event => chooseAppearance({ terminalFontSize: Number(event.target.value) }));
   $('#ui-scale').onchange = safe(event => chooseAppearance({ uiScale: Number(event.target.value) }));
   $('#ansi-palette').onchange = safe(async event => {
-    if (event.target.value !== 'custom') { await chooseAppearance({ ansiPalette: event.target.value }); return; }
-    if (!completeAnsiColors(appearance.ansiColors)) {
-      renderAppearanceControls();
-      toast('自定义色板为空，请先导入 iTerm 配色');
-      $('#iterm-picker').click();
-      return;
-    }
-    await chooseAppearance({ ansiPalette: 'custom' });
-  });
-  $('#import-iterm').onclick = safe(() => $('#iterm-picker').click());
-  $('#iterm-picker').onchange = safe(async event => {
-    const file = event.target.files[0]; event.target.value = ''; if (!file) return;
-    if (file.size > 256 * 1024) throw new Error('配色文件太大，请选择更小的 .itermcolors 文件');
-    const colors = parseItermAnsiColors(await file.text());
-    await chooseAppearance({ ansiPalette: 'custom', ansiColors: colors });
-    toast(`已导入 iTerm 配色「${file.name.replace(/\.itermcolors$/i, '')}」，应用其 16 色 ANSI`);
+    // 导入的方案由配色方案页维护，值前缀 scheme:；选中即应用该方案。
+    const value = event.target.value;
+    if (value.startsWith('scheme:')) { await chooseAppearance({ ansiPalette: 'custom', ansiScheme: value.slice(7) }); return; }
+    await chooseAppearance({ ansiPalette: value });
   });
   $('#profile-proxy').onchange = updateProxyFields;
   $('#close-proxies').onclick = () => $('#proxies-dialog').close(); $('#new-proxy').onclick = () => editProxy();

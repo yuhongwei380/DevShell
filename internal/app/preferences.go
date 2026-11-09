@@ -29,22 +29,24 @@ type Appearance struct {
 	UIStyle     string `json:"uiStyle"` // classic (default) | frosted
 	Theme       string `json:"theme"`
 	AnsiPalette string `json:"ansiPalette,omitempty"` // soft (default) | vivid | bright | custom
-	// AnsiColors holds the 16 standard ANSI colours used while AnsiPalette
-	// is custom — typically imported from an iTerm2 Color Scheme
-	// (.itermcolors). Presets keep the map stored but inert, so switching
-	// back to custom restores the last imported palette.
-	AnsiColors          map[string]string `json:"ansiColors,omitempty"`
-	WindowWidth         int               `json:"windowWidth"`
-	WindowHeight        int               `json:"windowHeight"`
-	WindowMaximised     bool              `json:"windowMaximised"`
-	OnboardingCompleted bool              `json:"onboardingCompleted"`
-	MonitorVisible      bool              `json:"monitorVisible"`
-	FilesPosition       string            `json:"filesPosition"`
-	FollowTerminal      bool              `json:"followTerminal"`
-	PromptUsernameColor string            `json:"promptUsernameColor"`
-	PromptHostnameColor string            `json:"promptHostnameColor"`
-	MinimizeAction      string            `json:"minimizeAction"`
-	ExternalEditor      string            `json:"externalEditor"`
+	// AnsiSchemes holds the named ANSI colour schemes imported from iTerm2
+	// Color Schemes (.itermcolors), managed under 「设置 → 外观配置 →
+	// 配色方案」. Each scheme carries the 16 standard ANSI colours and the
+	// name taken from the imported file. AnsiScheme names the active one
+	// while AnsiPalette is custom; presets keep the list stored but inert.
+	AnsiSchemes         []AnsiScheme `json:"ansiSchemes,omitempty"`
+	AnsiScheme          string       `json:"ansiScheme,omitempty"`
+	WindowWidth         int          `json:"windowWidth"`
+	WindowHeight        int          `json:"windowHeight"`
+	WindowMaximised     bool         `json:"windowMaximised"`
+	OnboardingCompleted bool         `json:"onboardingCompleted"`
+	MonitorVisible      bool         `json:"monitorVisible"`
+	FilesPosition       string       `json:"filesPosition"`
+	FollowTerminal      bool         `json:"followTerminal"`
+	PromptUsernameColor string       `json:"promptUsernameColor"`
+	PromptHostnameColor string       `json:"promptHostnameColor"`
+	MinimizeAction      string       `json:"minimizeAction"`
+	ExternalEditor      string       `json:"externalEditor"`
 	// UpdateMirror is the optional GitHub accelerator origin (ghproxy-style
 	// URL prefix) used for update manifest and artifact fetches. Empty means
 	// direct connections; signature, build and SHA-256 checks still apply.
@@ -64,35 +66,17 @@ type Appearance struct {
 	// telnet terminal sessions (both implemented in-app, Windows and macOS).
 	// Lives under Settings → Other features. Default on: the commands extend
 	// the existing local-prompt command set rather than changing behaviour.
-	TcpToolsEnabled bool `json:"tcpToolsEnabled"`
-	// Themes holds named, standalone appearance snapshots created in
-	// 「设置 → 外观配置 → 主题管理」. Each theme bundles colours, fonts,
-	// the ANSI preset and chart styles so one click re-applies the
-	// whole look; storing the list never changes the live appearance.
-	Themes []AppearanceTheme          `json:"themes,omitempty"`
-	Layout map[string]json.RawMessage `json:"layout"`
+	TcpToolsEnabled bool                       `json:"tcpToolsEnabled"`
+	Layout          map[string]json.RawMessage `json:"layout"`
 }
 
-// AppearanceTheme is one saved appearance snapshot. Applying a theme patches
-// exactly these keys through the normal appearance validation, so fonts
-// removed in the meantime fail at apply time instead of
-// corrupting the live appearance.
-type AppearanceTheme struct {
-	ID                  string                    `json:"id"`
-	Name                string                    `json:"name"`
-	Theme               string                    `json:"theme,omitempty"`
-	UIStyle             string                    `json:"uiStyle,omitempty"`
-	UIFontID            string                    `json:"uiFontId,omitempty"`
-	UITextColors        map[string]string         `json:"uiTextColors,omitempty"`
-	FontID              string                    `json:"fontId,omitempty"`
-	FontColors          map[string]string         `json:"fontColors,omitempty"`
-	FontBold            map[string]bool           `json:"fontBold,omitempty"`
-	AnsiPalette         string                    `json:"ansiPalette,omitempty"`
-	AnsiColors          map[string]string         `json:"ansiColors,omitempty"`
-	TerminalFontSize    float64                   `json:"terminalFontSize,omitempty"`
-	ChartStyles         map[string]ChartLineStyle `json:"chartStyles,omitempty"`
-	PromptUsernameColor string                    `json:"promptUsernameColor,omitempty"`
-	PromptHostnameColor string                    `json:"promptHostnameColor,omitempty"`
+// AnsiScheme is one saved iTerm2-derived ANSI colour scheme: the 16 standard
+// ANSI colours keyed black…brightWhite, under a name taken from the imported
+// .itermcolors file. Applying a scheme sets AnsiPalette to custom and points
+// AnsiScheme at it; the list itself never changes the live appearance.
+type AnsiScheme struct {
+	Name   string            `json:"name"`
+	Colors map[string]string `json:"colors"`
 }
 
 func defaultAppearance() Appearance {
@@ -120,11 +104,6 @@ func (value *Appearance) UnmarshalJSON(data []byte) error {
 	// 在加载时迁回 classic，否则之后的任何外观保存都会被枚举校验拒绝。
 	if retiredUIStyle(next.UIStyle) {
 		next.UIStyle = "classic"
-	}
-	for index := range next.Themes {
-		if retiredUIStyle(next.Themes[index].UIStyle) {
-			next.Themes[index].UIStyle = "classic"
-		}
 	}
 	if strings.HasPrefix(next.FontID, "builtin:") && !builtinTerminalFont(next.FontID) {
 		next.FontID = "builtin:jetbrains-mono"
@@ -173,65 +152,30 @@ func cloneAppearance(value Appearance) Appearance {
 		bold[id] = enabled
 	}
 	value.FontBold = bold
-	if value.AnsiColors != nil {
-		ansi := make(map[string]string, len(value.AnsiColors))
-		for key, color := range value.AnsiColors {
-			ansi[key] = color
+	if value.AnsiSchemes != nil {
+		schemes := make([]AnsiScheme, len(value.AnsiSchemes))
+		for index, scheme := range value.AnsiSchemes {
+			schemes[index] = cloneAnsiScheme(scheme)
 		}
-		value.AnsiColors = ansi
+		value.AnsiSchemes = schemes
 	}
 	layout := make(map[string]json.RawMessage, len(value.Layout))
 	for key, item := range value.Layout {
 		layout[key] = append(json.RawMessage(nil), item...)
 	}
 	value.Layout = layout
-	if value.Themes != nil {
-		themes := make([]AppearanceTheme, len(value.Themes))
-		for index, theme := range value.Themes {
-			themes[index] = cloneAppearanceTheme(theme)
-		}
-		value.Themes = themes
-	}
 	return value
 }
 
-func cloneAppearanceTheme(theme AppearanceTheme) AppearanceTheme {
-	if theme.UITextColors != nil {
-		colors := make(map[string]string, len(theme.UITextColors))
-		for key, color := range theme.UITextColors {
+func cloneAnsiScheme(scheme AnsiScheme) AnsiScheme {
+	if scheme.Colors != nil {
+		colors := make(map[string]string, len(scheme.Colors))
+		for key, color := range scheme.Colors {
 			colors[key] = color
 		}
-		theme.UITextColors = colors
+		scheme.Colors = colors
 	}
-	if theme.FontColors != nil {
-		colors := make(map[string]string, len(theme.FontColors))
-		for id, color := range theme.FontColors {
-			colors[id] = color
-		}
-		theme.FontColors = colors
-	}
-	if theme.FontBold != nil {
-		bold := make(map[string]bool, len(theme.FontBold))
-		for id, enabled := range theme.FontBold {
-			bold[id] = enabled
-		}
-		theme.FontBold = bold
-	}
-	if theme.ChartStyles != nil {
-		styles := make(map[string]ChartLineStyle, len(theme.ChartStyles))
-		for id, style := range theme.ChartStyles {
-			styles[id] = style
-		}
-		theme.ChartStyles = styles
-	}
-	if theme.AnsiColors != nil {
-		ansi := make(map[string]string, len(theme.AnsiColors))
-		for key, color := range theme.AnsiColors {
-			ansi[key] = color
-		}
-		theme.AnsiColors = ansi
-	}
-	return theme
+	return scheme
 }
 
 // printableToken keeps stored ids and map keys on one printable line so
@@ -240,93 +184,24 @@ func printableToken(value string, limit int) bool {
 	return value != "" && len(value) <= limit && !strings.ContainsFunc(value, unicode.IsControl)
 }
 
-// normalizeAppearanceThemes validates the saved theme list in place: stable
-// ids, unique display names, and every captured value inside the ranges the
-// live appearance itself enforces. Themes are stored verbatim otherwise; a
-// theme referencing a since-deleted font or background only fails when it is
-// applied, through the ordinary appearance save validation.
-func normalizeAppearanceThemes(themes []AppearanceTheme) error {
-	seenIDs := make(map[string]struct{}, len(themes))
-	seenNames := make(map[string]struct{}, len(themes))
-	for index := range themes {
-		theme := &themes[index]
-		if !printableToken(theme.ID, 64) {
-			return errors.New("主题标识无效")
+// normalizeAnsiSchemes validates the saved ANSI colour scheme list in place:
+// unique names and a complete 16-key palette per scheme. Colours are
+// lowercased; everything else is stored verbatim so a scheme imported from a
+// .itermcolors file round-trips unchanged.
+func normalizeAnsiSchemes(schemes []AnsiScheme) error {
+	seenNames := make(map[string]struct{}, len(schemes))
+	for index := range schemes {
+		scheme := &schemes[index]
+		scheme.Name = strings.TrimSpace(scheme.Name)
+		if scheme.Name == "" || len([]rune(scheme.Name)) > 48 || strings.ContainsFunc(scheme.Name, unicode.IsControl) {
+			return errors.New("配色方案名称应为 1–48 个字符，且不能包含换行")
 		}
-		if _, duplicate := seenIDs[theme.ID]; duplicate {
-			return errors.New("主题标识重复")
+		if _, duplicate := seenNames[scheme.Name]; duplicate {
+			return errors.New("配色方案名称重复")
 		}
-		seenIDs[theme.ID] = struct{}{}
-		theme.Name = strings.TrimSpace(theme.Name)
-		if theme.Name == "" || len([]rune(theme.Name)) > 48 || strings.ContainsFunc(theme.Name, unicode.IsControl) {
-			return errors.New("主题名称应为 1–48 个字符，且不能包含换行")
-		}
-		if _, duplicate := seenNames[theme.Name]; duplicate {
-			return errors.New("主题名称重复")
-		}
-		seenNames[theme.Name] = struct{}{}
-		if theme.Theme != "" && theme.Theme != "system" && theme.Theme != "light" && theme.Theme != "dark" {
-			return errors.New("主题明暗应为 system、light 或 dark")
-		}
-		if theme.UIStyle != "" {
-			switch theme.UIStyle {
-			case "classic", "frosted":
-			default:
-				return errors.New("主题工作台样式应为 classic 或 frosted")
-			}
-		}
-		if theme.AnsiPalette != "" && theme.AnsiPalette != "soft" && theme.AnsiPalette != "vivid" && theme.AnsiPalette != "bright" && theme.AnsiPalette != "custom" {
-			return errors.New("主题 ANSI 预设应为 soft、vivid、bright 或 custom")
-		}
-		if len(theme.AnsiColors) == 0 {
-			theme.AnsiColors = nil
-		}
-		if theme.AnsiColors != nil {
-			if err := normalizeAnsiColors(theme.AnsiColors); err != nil {
-				return errors.New("主题" + err.Error())
-			}
-		} else if theme.AnsiPalette == "custom" {
-			return errors.New("主题自定义 ANSI 颜色必须包含全部 16 个标准色键")
-		}
-		if theme.TerminalFontSize != 0 && (math.IsNaN(theme.TerminalFontSize) || math.IsInf(theme.TerminalFontSize, 0) || theme.TerminalFontSize < 8 || theme.TerminalFontSize > 40 || math.Trunc(theme.TerminalFontSize*2) != theme.TerminalFontSize*2) {
-			return errors.New("主题终端字号应为 8–40，步进为 0.5 px")
-		}
-		if len(theme.UITextColors) > 1024 || len(theme.FontColors) > 1024 || len(theme.FontBold) > 1024 {
-			return errors.New("主题保存的颜色条目过多")
-		}
-		for key, color := range theme.UITextColors {
-			if !printableToken(key, 64) {
-				return errors.New("主题界面颜色引用了无效的名称")
-			}
-			if color != "" && !validTerminalColor(color) {
-				return errors.New("主题界面颜色应为 #RRGGBB 格式")
-			}
-			theme.UITextColors[key] = strings.ToLower(color)
-		}
-		for id, color := range theme.FontColors {
-			if (!validBuiltinAssetID(id) && !validAssetID(id)) || !validTerminalColor(color) {
-				return errors.New("主题字体颜色应为 #RRGGBB 格式")
-			}
-			theme.FontColors[id] = strings.ToLower(color)
-		}
-		for id := range theme.FontBold {
-			if !validBuiltinAssetID(id) && !validAssetID(id) {
-				return errors.New("主题字体样式引用了无效的字体")
-			}
-		}
-		if err := validateChartStyles(theme.ChartStyles); err != nil {
-			return err
-		}
-		for _, color := range []*string{&theme.PromptUsernameColor, &theme.PromptHostnameColor} {
-			if *color != "" && !validTerminalColor(*color) {
-				return errors.New("主题提示符颜色应为空或 #RRGGBB 格式")
-			}
-			*color = strings.ToLower(*color)
-		}
-		for _, id := range []string{theme.UIFontID, theme.FontID} {
-			if len(id) > 64 {
-				return errors.New("主题引用的字体标识过长")
-			}
+		seenNames[scheme.Name] = struct{}{}
+		if err := normalizeAnsiColors(scheme.Colors); err != nil {
+			return errors.New("配色方案「" + scheme.Name + "」" + err.Error())
 		}
 	}
 	return nil
@@ -438,17 +313,34 @@ func (s *Store) saveAppearanceLocked(value Appearance) (Appearance, error) {
 	default:
 		return Appearance{}, errors.New("终端 ANSI 颜色预设只能是 soft、vivid、bright 或 custom")
 	}
-	// 空 map 归一为 nil；预设（soft/vivid/bright）下即便存有自定义色板也保持
-	// 存储但不生效，切回 custom 即恢复最近一次导入的配色。
-	if len(value.AnsiColors) == 0 {
-		value.AnsiColors = nil
+	// 空列表归一为 nil；预设（soft/vivid/bright）下已导入的方案保持
+	// 存储但不生效。custom 必须命中列表中的方案名，否则回退 soft，
+	// 悬空引用不会进入终端。
+	if len(value.AnsiSchemes) == 0 {
+		value.AnsiSchemes = nil
 	}
-	if value.AnsiColors != nil {
-		if err := normalizeAnsiColors(value.AnsiColors); err != nil {
+	if len(value.AnsiSchemes) > 64 {
+		return Appearance{}, errors.New("配色方案最多 64 套，请先删除部分方案")
+	}
+	if value.AnsiSchemes != nil {
+		if err := normalizeAnsiSchemes(value.AnsiSchemes); err != nil {
 			return Appearance{}, err
 		}
-	} else if value.AnsiPalette == "custom" {
-		return Appearance{}, errors.New("自定义 ANSI 颜色必须包含全部 16 个标准色键")
+	}
+	value.AnsiScheme = strings.TrimSpace(value.AnsiScheme)
+	if value.AnsiPalette == "custom" {
+		found := false
+		for _, scheme := range value.AnsiSchemes {
+			if scheme.Name == value.AnsiScheme {
+				found = true
+				break
+			}
+		}
+		if !found {
+			value.AnsiPalette, value.AnsiScheme = "soft", ""
+		}
+	} else {
+		value.AnsiScheme = ""
 	}
 	if err := validateSavedLayout(value.Layout); err != nil {
 		return Appearance{}, err
@@ -464,12 +356,6 @@ func (s *Store) saveAppearanceLocked(value Appearance) (Appearance, error) {
 	}
 	if len(value.FontBold) > 1024 {
 		return Appearance{}, errors.New("已保存的字体样式过多")
-	}
-	if len(value.Themes) > 32 {
-		return Appearance{}, errors.New("已保存的主题过多，请先删除部分主题")
-	}
-	if err := normalizeAppearanceThemes(value.Themes); err != nil {
-		return Appearance{}, err
 	}
 	value = cloneAppearance(value)
 	for key, color := range value.UITextColors {
