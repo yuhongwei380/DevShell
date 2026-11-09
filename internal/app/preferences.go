@@ -13,33 +13,38 @@ import (
 // Appearance is stored alongside connection settings, so native and browser
 // windows use the same selection and custom assets survive application upgrades.
 type Appearance struct {
-	UIFontID          string                    `json:"uiFontId"`
-	UITextColors      map[string]string         `json:"uiTextColors"`
-	FontID            string                    `json:"fontId"`
-	FontColors        map[string]string         `json:"fontColors,omitempty"`
-	FontBold          map[string]bool           `json:"fontBold"`
-	ChartStyles       map[string]ChartLineStyle `json:"chartStyles"`
-	UIScale           float64                   `json:"uiScale"`
-	TerminalFontSize  float64                   `json:"terminalFontSize"`
-	TerminalBold      bool                      `json:"terminalBold,omitempty"` // Legacy input only; migrated to the selected font.
+	UIFontID         string                    `json:"uiFontId"`
+	UITextColors     map[string]string         `json:"uiTextColors"`
+	FontID           string                    `json:"fontId"`
+	FontColors       map[string]string         `json:"fontColors,omitempty"`
+	FontBold         map[string]bool           `json:"fontBold"`
+	ChartStyles      map[string]ChartLineStyle `json:"chartStyles"`
+	UIScale          float64                   `json:"uiScale"`
+	TerminalFontSize float64                   `json:"terminalFontSize"`
+	TerminalBold     bool                      `json:"terminalBold,omitempty"` // Legacy input only; migrated to the selected font.
 	// UIStyle selects the global workbench style drawn in CSS (chrome,
 	// panels, dialogs and accents — not just a background picture). Each
 	// style paints its own light and dark variant and stays orthogonal to
 	// Theme, fonts, ANSI colours and layout.
-	UIStyle             string `json:"uiStyle"` // classic (default) | frosted
-	Theme               string `json:"theme"`
-	AnsiPalette         string `json:"ansiPalette,omitempty"` // soft (default) | vivid | bright
-	WindowWidth         int    `json:"windowWidth"`
-	WindowHeight        int    `json:"windowHeight"`
-	WindowMaximised     bool   `json:"windowMaximised"`
-	OnboardingCompleted bool   `json:"onboardingCompleted"`
-	MonitorVisible      bool   `json:"monitorVisible"`
-	FilesPosition       string `json:"filesPosition"`
-	FollowTerminal      bool   `json:"followTerminal"`
-	PromptUsernameColor string `json:"promptUsernameColor"`
-	PromptHostnameColor string `json:"promptHostnameColor"`
-	MinimizeAction      string `json:"minimizeAction"`
-	ExternalEditor      string `json:"externalEditor"`
+	UIStyle     string `json:"uiStyle"` // classic (default) | frosted
+	Theme       string `json:"theme"`
+	AnsiPalette string `json:"ansiPalette,omitempty"` // soft (default) | vivid | bright | custom
+	// AnsiColors holds the 16 standard ANSI colours used while AnsiPalette
+	// is custom — typically imported from an iTerm2 Color Scheme
+	// (.itermcolors). Presets keep the map stored but inert, so switching
+	// back to custom restores the last imported palette.
+	AnsiColors          map[string]string `json:"ansiColors,omitempty"`
+	WindowWidth         int               `json:"windowWidth"`
+	WindowHeight        int               `json:"windowHeight"`
+	WindowMaximised     bool              `json:"windowMaximised"`
+	OnboardingCompleted bool              `json:"onboardingCompleted"`
+	MonitorVisible      bool              `json:"monitorVisible"`
+	FilesPosition       string            `json:"filesPosition"`
+	FollowTerminal      bool              `json:"followTerminal"`
+	PromptUsernameColor string            `json:"promptUsernameColor"`
+	PromptHostnameColor string            `json:"promptHostnameColor"`
+	MinimizeAction      string            `json:"minimizeAction"`
+	ExternalEditor      string            `json:"externalEditor"`
 	// UpdateMirror is the optional GitHub accelerator origin (ghproxy-style
 	// URL prefix) used for update manifest and artifact fetches. Empty means
 	// direct connections; signature, build and SHA-256 checks still apply.
@@ -83,6 +88,7 @@ type AppearanceTheme struct {
 	FontColors          map[string]string         `json:"fontColors,omitempty"`
 	FontBold            map[string]bool           `json:"fontBold,omitempty"`
 	AnsiPalette         string                    `json:"ansiPalette,omitempty"`
+	AnsiColors          map[string]string         `json:"ansiColors,omitempty"`
 	TerminalFontSize    float64                   `json:"terminalFontSize,omitempty"`
 	ChartStyles         map[string]ChartLineStyle `json:"chartStyles,omitempty"`
 	PromptUsernameColor string                    `json:"promptUsernameColor,omitempty"`
@@ -167,6 +173,13 @@ func cloneAppearance(value Appearance) Appearance {
 		bold[id] = enabled
 	}
 	value.FontBold = bold
+	if value.AnsiColors != nil {
+		ansi := make(map[string]string, len(value.AnsiColors))
+		for key, color := range value.AnsiColors {
+			ansi[key] = color
+		}
+		value.AnsiColors = ansi
+	}
 	layout := make(map[string]json.RawMessage, len(value.Layout))
 	for key, item := range value.Layout {
 		layout[key] = append(json.RawMessage(nil), item...)
@@ -210,6 +223,13 @@ func cloneAppearanceTheme(theme AppearanceTheme) AppearanceTheme {
 			styles[id] = style
 		}
 		theme.ChartStyles = styles
+	}
+	if theme.AnsiColors != nil {
+		ansi := make(map[string]string, len(theme.AnsiColors))
+		for key, color := range theme.AnsiColors {
+			ansi[key] = color
+		}
+		theme.AnsiColors = ansi
 	}
 	return theme
 }
@@ -255,8 +275,18 @@ func normalizeAppearanceThemes(themes []AppearanceTheme) error {
 				return errors.New("主题工作台样式应为 classic 或 frosted")
 			}
 		}
-		if theme.AnsiPalette != "" && theme.AnsiPalette != "soft" && theme.AnsiPalette != "vivid" && theme.AnsiPalette != "bright" {
-			return errors.New("主题 ANSI 预设应为 soft、vivid 或 bright")
+		if theme.AnsiPalette != "" && theme.AnsiPalette != "soft" && theme.AnsiPalette != "vivid" && theme.AnsiPalette != "bright" && theme.AnsiPalette != "custom" {
+			return errors.New("主题 ANSI 预设应为 soft、vivid、bright 或 custom")
+		}
+		if len(theme.AnsiColors) == 0 {
+			theme.AnsiColors = nil
+		}
+		if theme.AnsiColors != nil {
+			if err := normalizeAnsiColors(theme.AnsiColors); err != nil {
+				return errors.New("主题" + err.Error())
+			}
+		} else if theme.AnsiPalette == "custom" {
+			return errors.New("主题自定义 ANSI 颜色必须包含全部 16 个标准色键")
 		}
 		if theme.TerminalFontSize != 0 && (math.IsNaN(theme.TerminalFontSize) || math.IsInf(theme.TerminalFontSize, 0) || theme.TerminalFontSize < 8 || theme.TerminalFontSize > 40 || math.Trunc(theme.TerminalFontSize*2) != theme.TerminalFontSize*2) {
 			return errors.New("主题终端字号应为 8–40，步进为 0.5 px")
@@ -308,6 +338,31 @@ func validTerminalColor(value string) bool {
 	}
 	_, err := strconv.ParseUint(value[1:], 16, 24)
 	return err == nil
+}
+
+// ansiColorKeys lists the 16 standard ANSI colour slots xterm applies in
+// order (normal 0–7, bright 8–15). A custom palette must cover all of them.
+var ansiColorKeys = []string{
+	"black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
+	"brightBlack", "brightRed", "brightGreen", "brightYellow", "brightBlue", "brightMagenta", "brightCyan", "brightWhite",
+}
+
+// normalizeAnsiColors validates a custom ANSI palette in place and lowercases
+// the hex values. Empty maps are the caller's business: they normalize to nil
+// before this runs, and a custom palette without one fails with the same
+// missing-key error.
+func normalizeAnsiColors(colors map[string]string) error {
+	if len(colors) != len(ansiColorKeys) {
+		return errors.New("自定义 ANSI 颜色必须包含全部 16 个标准色键")
+	}
+	for _, key := range ansiColorKeys {
+		color, ok := colors[key]
+		if !ok || !validTerminalColor(color) {
+			return errors.New("自定义 ANSI 颜色必须包含全部 16 个标准色键，且取值应为 #RRGGBB 格式")
+		}
+		colors[key] = strings.ToLower(color)
+	}
+	return nil
 }
 
 func (s *Store) SaveAppearance(value Appearance) (Appearance, error) {
@@ -377,6 +432,23 @@ func (s *Store) saveAppearanceLocked(value Appearance) (Appearance, error) {
 	case "classic", "frosted":
 	default:
 		return Appearance{}, errors.New("工作台样式应为 classic 或 frosted")
+	}
+	switch value.AnsiPalette {
+	case "", "soft", "vivid", "bright", "custom":
+	default:
+		return Appearance{}, errors.New("终端 ANSI 颜色预设只能是 soft、vivid、bright 或 custom")
+	}
+	// 空 map 归一为 nil；预设（soft/vivid/bright）下即便存有自定义色板也保持
+	// 存储但不生效，切回 custom 即恢复最近一次导入的配色。
+	if len(value.AnsiColors) == 0 {
+		value.AnsiColors = nil
+	}
+	if value.AnsiColors != nil {
+		if err := normalizeAnsiColors(value.AnsiColors); err != nil {
+			return Appearance{}, err
+		}
+	} else if value.AnsiPalette == "custom" {
+		return Appearance{}, errors.New("自定义 ANSI 颜色必须包含全部 16 个标准色键")
 	}
 	if err := validateSavedLayout(value.Layout); err != nil {
 		return Appearance{}, err

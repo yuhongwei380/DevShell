@@ -5,9 +5,9 @@
    字体若已被删除会在应用时报错回滚，而不是留下半套外观。 */
 'use strict';
 window.DengThemeManager = (() => {
-  const snapshotKeys = ['theme', 'uiStyle', 'uiFontId', 'uiTextColors', 'fontId', 'fontColors', 'fontBold', 'ansiPalette', 'terminalFontSize', 'chartStyles', 'promptUsernameColor', 'promptHostnameColor'];
-  const mapKeys = new Set(['uiTextColors', 'fontColors', 'fontBold', 'chartStyles']);
-  const ansiLabels = { soft: '柔和', vivid: '高饱和', bright: '鲜亮' };
+  const snapshotKeys = ['theme', 'uiStyle', 'uiFontId', 'uiTextColors', 'fontId', 'fontColors', 'fontBold', 'ansiPalette', 'ansiColors', 'terminalFontSize', 'chartStyles', 'promptUsernameColor', 'promptHostnameColor'];
+  const mapKeys = new Set(['uiTextColors', 'fontColors', 'fontBold', 'chartStyles', 'ansiColors']);
+  const ansiLabels = { soft: '柔和', vivid: '高饱和', bright: '鲜亮', custom: '自定义' };
   const themeLabels = { system: '跟随系统', light: '浅色', dark: '深色' };
   let dialog, list, nameInput, errorText, busy = false, confirmId = '';
 

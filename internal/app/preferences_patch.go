@@ -72,10 +72,17 @@ func (s *Store) PatchAppearance(patch map[string]json.RawMessage) (Appearance, e
 			err = mergePreferenceMap(value.Layout, raw)
 		case "ansiPalette":
 			var preset string
-			if json.Unmarshal(raw, &preset) != nil || (preset != "soft" && preset != "vivid" && preset != "bright") {
-				return Appearance{}, errors.New("终端 ANSI 颜色预设只能是 soft、vivid 或 bright")
+			if json.Unmarshal(raw, &preset) != nil || (preset != "soft" && preset != "vivid" && preset != "bright" && preset != "custom") {
+				return Appearance{}, errors.New("终端 ANSI 颜色预设只能是 soft、vivid、bright 或 custom")
 			}
 			value.AnsiPalette = preset
+		case "ansiColors":
+			// 自定义 ANSI 色板按键增量合并（单项设 null 删除）；完整性与格式
+			// 由 saveAppearanceLocked 校验，空 map 归一为 nil。
+			if value.AnsiColors == nil {
+				value.AnsiColors = map[string]string{}
+			}
+			err = mergePreferenceMap(value.AnsiColors, raw)
 		case "windowWidth", "windowHeight", "windowMaximised":
 			return Appearance{}, errors.New("窗口尺寸由桌面窗口保存，不能通过界面设置覆盖")
 		default:
