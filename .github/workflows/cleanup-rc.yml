@@ -1,8 +1,9 @@
 name: Cleanup RC releases
 
-# One-shot housekeeping after the v26.11.0 official release: delete every
+# Housekeeping after each official release (last run: v26.11.2): delete every
 # -rc. Release (assets included) and every rc tag. Idempotent: once nothing
 # matches the filter the job is a no-op. Official vX.Y.Z tags are never touched.
+# Trigger: push to master that touches this file, after release assets are live.
 
 on:
   push:
