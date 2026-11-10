@@ -166,14 +166,14 @@ func TestAnsiSchemesLoadLegacyConfig(t *testing.T) {
 	}
 }
 
-// 可选非 ANSI 键（前景/光标/选区）随方案保存并小写归一；「background」等未知键
-// 与非法取值拒绝——终端背景保持透明，不由方案决定。
+// 可选非 ANSI 键（前景/光标/选区/背景）随方案保存并小写归一，颜色可带
+// Alpha 字节（#RRGGBBAA）；未知键与非法取值拒绝。
 func TestAnsiSchemesExtraColorKeys(t *testing.T) {
 	store, err := OpenStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	withExtras := strings.Replace(fullAnsiColors, `"brightWhite":"#ECF0F1"`, `"brightWhite":"#ECF0F1","foreground":"#F8F8F2","cursor":"#F1FA8C","cursorAccent":"#282A36","selectionBackground":"#44475A","selectionForeground":"#F8F8F2"`, 1)
+	withExtras := strings.Replace(fullAnsiColors, `"brightWhite":"#ECF0F1"`, `"brightWhite":"#ECF0F1","foreground":"#F8F8F2","cursor":"#F1FA8C","cursorAccent":"#282A36","selectionBackground":"#44475A","selectionForeground":"#F8F8F2","background":"#282A36E6"`, 1)
 	saved, err := store.PatchAppearance(preferencePatch(t, `{"ansiSchemes":[{"name":"Dracula","colors":`+withExtras+`}]}`))
 	if err != nil {
 		t.Fatal(err)
@@ -182,16 +182,32 @@ func TestAnsiSchemesExtraColorKeys(t *testing.T) {
 	if colors["foreground"] != "#f8f8f2" || colors["cursor"] != "#f1fa8c" || colors["cursorAccent"] != "#282a36" || colors["selectionBackground"] != "#44475a" || colors["selectionForeground"] != "#f8f8f2" {
 		t.Fatal("extra colour keys not stored lowercased", colors)
 	}
+	if colors["background"] != "#282a36e6" {
+		t.Fatal("background colour with alpha not stored lowercased", colors)
+	}
 	if colors["red"] != "#c0392b" {
 		t.Fatal("standard keys must survive alongside extras", colors)
 	}
 	invalid := []struct{ name, raw, want string }{
-		{"background 键", `{"ansiSchemes":[{"name":"甲","colors":` + strings.Replace(fullAnsiColors, `"brightWhite":"#ECF0F1"`, `"brightWhite":"#ECF0F1","background":"#282A36"`, 1) + `}]}`, "只允许"},
 		{"可选键取值非法", `{"ansiSchemes":[{"name":"甲","colors":` + strings.Replace(fullAnsiColors, `"brightWhite":"#ECF0F1"`, `"brightWhite":"#ECF0F1","foreground":"white"`, 1) + `}]}`, "#RRGGBB"},
+		{"可选键透明度位数非法", `{"ansiSchemes":[{"name":"甲","colors":` + strings.Replace(fullAnsiColors, `"brightWhite":"#ECF0F1"`, `"brightWhite":"#ECF0F1","background":"#282A366"`, 1) + `}]}`, "#RRGGBB"},
 	}
 	for _, item := range invalid {
 		if _, err := store.PatchAppearance(preferencePatch(t, item.raw)); err == nil || !strings.Contains(err.Error(), item.want) {
 			t.Fatalf("%s: want %q, got %v", item.name, item.want, err)
 		}
+	}
+	// ansiSchemeBackground 开关：nil（缺省）= 跟随方案背景色，布尔可来回切换。
+	if saved.AnsiSchemeBackground != nil {
+		t.Fatal("default should stay unset (on)", *saved.AnsiSchemeBackground)
+	}
+	if saved, err = store.PatchAppearance(preferencePatch(t, `{"ansiSchemeBackground":false}`)); err != nil || saved.AnsiSchemeBackground == nil || *saved.AnsiSchemeBackground {
+		t.Fatal("off should persist", err, saved.AnsiSchemeBackground)
+	}
+	if saved, err = store.PatchAppearance(preferencePatch(t, `{"ansiSchemeBackground":true}`)); err != nil || saved.AnsiSchemeBackground == nil || !*saved.AnsiSchemeBackground {
+		t.Fatal("on should persist", err, saved.AnsiSchemeBackground)
+	}
+	if _, err = store.PatchAppearance(preferencePatch(t, `{"ansiSchemeBackground":"yes"}`)); err == nil || !strings.Contains(err.Error(), "格式无效") {
+		t.Fatal("non-boolean switch should be rejected", err)
 	}
 }

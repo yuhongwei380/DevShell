@@ -32,6 +32,7 @@ func (s *Store) PatchAppearance(patch map[string]json.RawMessage) (Appearance, e
 		"externalEditor": &value.ExternalEditor, "updateMirror": &value.UpdateMirror,
 		"autoCommandsEnabled": &value.AutoCommandsEnabled, "tcpToolsEnabled": &value.TcpToolsEnabled,
 		"ansiScheme": &value.AnsiScheme,
+		"ansiSchemeBackground": &value.AnsiSchemeBackground,
 	}
 	for key, raw := range patch {
 		var err error

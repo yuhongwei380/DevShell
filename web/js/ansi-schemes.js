@@ -2,29 +2,37 @@
    Scheme（.itermcolors），方案名称沿用导入文件名，同名导入即覆盖；可在本页
    应用、重命名与两步确认删除。列表整体存进 appearance.ansiSchemes，当前应用的
    方案名存进 appearance.ansiScheme（ansiPalette 为 custom）。解析在客户端完成：
-   「Ansi 0..15 Color」16 键必须齐全；「Foreground / Cursor / Cursor Text /
-   Selection / Selected Text Color」为可选键，文件含哪个就换算为 #RRGGBB 存哪个，
-   应用时随 16 色一并生效（前景色生效时终端文字随方案而非字体）；背景等其他键
-   忽略——终端背景保持透明。悬空的方案引用由后端回落到柔和。 */
+   「Ansi 0..15 Color」16 键必须齐全；「Foreground / Background / Cursor /
+   Cursor Text / Selection / Selected Text Color」为可选键，文件含哪个就换算为
+   #RRGGBB（含 Alpha Component 时为 #RRGGBBAA）存哪个，应用时随 16 色一并生效
+   （前景色生效时终端文字随方案而非字体；背景色默认作终端底色，本页可关闭回到
+   完全透明）。Bold、链接、光标参考线、徽标等 iTerm 专属键在 xterm 无对应能力，
+   导入时忽略。悬空的方案引用由后端回落到柔和。 */
 'use strict';
 window.DengAnsiSchemes = (() => {
   // iTerm Color Schemes（.itermcolors）是 XML plist 的最小解析。
   const plistTag = node => node.tagName.toLowerCase();
   function plistDict(dict) { const result = {}; let key = ''; for (const child of dict.children) { if (plistTag(child) === 'key') { key = child.textContent; continue; } if (key) { result[key] = plistValue(child); key = ''; } } return result; }
   function plistValue(node) { const tag = plistTag(node); if (tag === 'dict') return plistDict(node); if (tag === 'real' || tag === 'integer') return Number(node.textContent); if (tag === 'string') return node.textContent; if (tag === 'true') return true; if (tag === 'false') return false; return null; }
+  // iTerm 颜色字典可带「Alpha Component」（0..1）；满值省略，其余换算为 #RRGGBBAA 尾字节。
+  function itermAlphaHex(entry) {
+    const value = Number(entry?.['Alpha Component']);
+    if (!Number.isFinite(value) || value >= 1) return '';
+    return Math.round(Math.min(1, Math.max(0, value)) * 255).toString(16).padStart(2, '0');
+  }
   function itermColorToHex(entry, index) {
     const channel = name => { const value = Number(entry?.[name]); if (!Number.isFinite(value)) throw new Error(`iTerm 配色缺少「Ansi ${index} Color」的 ${name}`); return Math.round(Math.min(1, Math.max(0, value)) * 255); };
     const hex = value => value.toString(16).padStart(2, '0');
-    return `#${hex(channel('Red Component'))}${hex(channel('Green Component'))}${hex(channel('Blue Component'))}`;
+    return `#${hex(channel('Red Component'))}${hex(channel('Green Component'))}${hex(channel('Blue Component'))}${itermAlphaHex(entry)}`;
   }
   // 可选非 ANSI 键：iTerm 方案常缺这些键，缺三通道即视为没有，不报错。
-  const itermExtraLabels = { foreground: 'Foreground Color', cursor: 'Cursor Color', cursorAccent: 'Cursor Text Color', selectionBackground: 'Selection Color', selectionForeground: 'Selected Text Color' };
+  const itermExtraLabels = { foreground: 'Foreground Color', background: 'Background Color', cursor: 'Cursor Color', cursorAccent: 'Cursor Text Color', selectionBackground: 'Selection Color', selectionForeground: 'Selected Text Color' };
   function itermOptionalColorToHex(entry) {
     if (!entry || typeof entry !== 'object') return '';
     const channels = ['Red Component', 'Green Component', 'Blue Component'].map(name => Number(entry[name]));
     if (!channels.every(Number.isFinite)) return '';
     const hex = value => Math.round(Math.min(1, Math.max(0, value)) * 255).toString(16).padStart(2, '0');
-    return `#${hex(channels[0])}${hex(channels[1])}${hex(channels[2])}`;
+    return `#${hex(channels[0])}${hex(channels[1])}${hex(channels[2])}${itermAlphaHex(entry)}`;
   }
   function parseItermAnsiColors(text) {
     const parsed = new DOMParser().parseFromString(text, 'application/xml');
@@ -89,7 +97,7 @@ window.DengAnsiSchemes = (() => {
       lastName = name;
     }
     await chooseAppearance({ ansiSchemes: next, ansiPalette: 'custom', ansiScheme: lastName });
-    toast(files.length === 1 ? `已导入 iTerm 配色「${lastName}」，已应用其 16 色 ANSI 与前景、光标、选区色` : `已导入 ${files.length} 套 iTerm 配色，已应用「${lastName}」`);
+    toast(files.length === 1 ? `已导入 iTerm 配色「${lastName}」，已应用其 16 色 ANSI 与文件携带的前景、背景、光标、选区等附加色` : `已导入 ${files.length} 套 iTerm 配色，已应用「${lastName}」`);
   }
   function applyScheme(scheme) {
     return run(async () => {
@@ -137,7 +145,10 @@ window.DengAnsiSchemes = (() => {
       if (validFontColor(scheme.colors?.[key])) chip.style.background = scheme.colors[key];
       swatches.append(chip);
     }
-    const note = document.createElement('span'); note.className = 'scheme-summary'; note.textContent = active ? '当前应用 · 16 色 ANSI + 前景/光标/选区' : '16 色 ANSI + 前景/光标/选区';
+    // 摘要按方案实际携带的附加色动态生成，背景色在场时提醒默认会铺底。
+    const schemeExtraNames = { foreground: '前景', background: '背景', cursor: '光标', cursorAccent: '光标文字', selectionBackground: '选区', selectionForeground: '选区文字' };
+    const note = document.createElement('span'); note.className = 'scheme-summary';
+    note.textContent = `${active ? '当前应用 · ' : ''}16 色 ANSI${Object.entries(schemeExtraNames).filter(([key]) => scheme.colors?.[key]).map(([, label]) => ` + ${label}`).join('')}`;
     info.append(title, swatches, note);
     const actions = document.createElement('div'); actions.className = 'scheme-actions';
     const button = (action, label, primary = false) => {
@@ -176,15 +187,21 @@ window.DengAnsiSchemes = (() => {
     empty.hidden = items.length > 0;
     list.append(empty);
     if (countText) countText.textContent = items.length ? `已导入 ${items.length} 套，最多 64 套` : '';
+    if (dialog) { const toggle = dialog.querySelector('#scheme-background-toggle'); if (toggle) toggle.checked = appearance.ansiSchemeBackground !== false; }
   }
   function initialize() {
     dialog = document.createElement('dialog'); dialog.id = 'ansi-schemes-dialog';
-    dialog.innerHTML = `<form id="ansi-schemes-form" novalidate><div class="dialog-heading"><h2 id="ansi-schemes-title">配色方案</h2><button type="button" class="icon-button" id="close-ansi-schemes" aria-label="关闭配色方案"><svg><use href="#i-close"/></svg></button></div><p>支持导入多套 .itermcolors 配色方案，名称沿用导入文件名，同名导入即覆盖；应用其 16 色 ANSI，文件包含相应键时并应用前景、光标与选区颜色；背景等其他键会被忽略，终端保持透明背景。</p><div class="scheme-toolbar"><button type="button" id="scheme-import-button" class="primary-button"><svg><use href="#i-plus"/></svg>导入 iTerm 配色…</button><span id="scheme-count"></span></div><div class="scheme-list" id="scheme-list"></div><p id="scheme-error" role="alert"></p></form>`;
+    dialog.innerHTML = `<form id="ansi-schemes-form" novalidate><div class="dialog-heading"><h2 id="ansi-schemes-title">配色方案</h2><button type="button" class="icon-button" id="close-ansi-schemes" aria-label="关闭配色方案"><svg><use href="#i-close"/></svg></button></div><p>支持导入多套 .itermcolors 配色方案，名称沿用导入文件名，同名导入即覆盖；应用其 16 色 ANSI，文件包含相应键时并应用前景、背景、光标与选区颜色（背景默认作终端底色，含文件自带的 Alpha 透明度，可用下方开关关闭回到完全透明）；Bold、链接、光标参考线、徽标等 iTerm 专属键暂无对应能力，导入时忽略。</p><div class="scheme-toolbar"><button type="button" id="scheme-import-button" class="primary-button"><svg><use href="#i-plus"/></svg>导入 iTerm 配色…</button><label class="scheme-bg-toggle" title="开启后，含背景色的方案会把终端文字区铺为该背景色（含其透明度）；关闭则保持完全透明"><input type="checkbox" id="scheme-background-toggle">终端背景跟随方案背景色</label><span id="scheme-count"></span></div><div class="scheme-list" id="scheme-list"></div><p id="scheme-error" role="alert"></p></form>`;
     document.body.append(dialog);
     const form = dialog.querySelector('form');
     list = form.querySelector('#scheme-list');
     countText = form.querySelector('#scheme-count');
     errorText = form.querySelector('#scheme-error');
+    const backgroundToggle = form.querySelector('#scheme-background-toggle');
+    backgroundToggle.onchange = () => run(async () => {
+      await chooseAppearance({ ansiSchemeBackground: backgroundToggle.checked });
+      toast(backgroundToggle.checked ? '终端背景已改为跟随方案背景色' : '终端背景已恢复完全透明');
+    });
     const picker = document.querySelector('#iterm-picker');
     form.querySelector('#scheme-import-button').onclick = () => { if (!busy) picker?.click(); };
     if (picker) picker.addEventListener('change', () => {

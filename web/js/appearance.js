@@ -19,7 +19,7 @@ const fontColorPresets = [
   { name: '淡紫', color: '#d9b8ff' }, { name: '珊瑚', color: '#f1b7ac' },
   { name: '石墨', color: '#243447' }, { name: '纯白', color: '#ffffff' },
 ];
-const validFontColor = color => typeof color === 'string' && /^#[\da-f]{6}$/i.test(color);
+const validFontColor = color => typeof color === 'string' && /^#(?:[\da-f]{6}|[\da-f]{8})$/i.test(color);
 // Frosted glass paints a dark reading base even in light mode, so its default
 // 液态玻璃沿用经典终端墨色（不改色板，只加玻璃材质）；每款字体的自定义色始终优先。
 const colorForFont = (id = appearance.fontId) => validFontColor(appearance.fontColors?.[id]) ? appearance.fontColors[id].toLowerCase() : terminalDefaultColor;
@@ -43,12 +43,14 @@ function activeAnsiScheme() {
   return scheme && completeAnsiColors(scheme.colors) ? scheme : null;
 }
 // 方案的可选非 ANSI 键与 xterm 主题属性同名（foreground/cursor/cursorAccent/
-// selectionBackground/selectionForeground），随色板一并展开即生效；文件没有的
-// 键保持字体前景与内置选区色。背景不在其中——终端背景始终透明。
+// selectionBackground/selectionForeground/background），随色板一并展开即生效；
+// 文件没有的键保持字体前景与内置选区色。background 即 iTerm 方案的背景色
+// （含其 Alpha 透明度），默认作终端底色，配色方案页可关闭回到完全透明。
 function terminalTheme() {
   // custom 表示应用了导入的配色方案：按名称在方案库里找色板，缺失或残缺回落柔和。
   const scheme = activeAnsiScheme();
-  const palette = scheme ? scheme.colors : (ansiPalettes[appearance.ansiPalette] || ansiPalettes.soft);
+  const palette = { ...(scheme ? scheme.colors : (ansiPalettes[appearance.ansiPalette] || ansiPalettes.soft)) };
+  if (appearance.ansiSchemeBackground === false) delete palette.background;
   return { background: '#00000000', foreground: colorForFont(), cursor: colorForFont(), selectionBackground: '#7195aa66', ...palette };
 }
 function applyTerminalAppearanceColors() {

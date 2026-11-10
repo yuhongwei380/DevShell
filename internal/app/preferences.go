@@ -36,6 +36,11 @@ type Appearance struct {
 	// while AnsiPalette is custom; presets keep the list stored but inert.
 	AnsiSchemes         []AnsiScheme `json:"ansiSchemes,omitempty"`
 	AnsiScheme          string       `json:"ansiScheme,omitempty"`
+	// AnsiSchemeBackground toggles whether the active scheme's Background
+	// Colour (with its iTerm alpha) fills the terminal, like iTerm2 does.
+	// nil keeps the default: on. Switching it off restores the fully
+	// transparent canvas for every scheme.
+	AnsiSchemeBackground *bool `json:"ansiSchemeBackground,omitempty"`
 	WindowWidth         int          `json:"windowWidth"`
 	WindowHeight        int          `json:"windowHeight"`
 	WindowMaximised     bool         `json:"windowMaximised"`
@@ -73,10 +78,11 @@ type Appearance struct {
 // AnsiScheme is one saved iTerm2-derived ANSI colour scheme: the 16 standard
 // ANSI colours keyed black…brightWhite, under a name taken from the imported
 // .itermcolors file, plus the optional non-ANSI slots (foreground, cursor,
-// cursorAccent, selectionBackground, selectionForeground) carried over when
-// the file declares them; background stays untouched (transparent terminal).
-// Applying a scheme sets AnsiPalette to custom and points AnsiScheme at it;
-// the list itself never changes the live appearance.
+// cursorAccent, selectionBackground, selectionForeground, background) carried
+// over when the file declares them; colours may carry an alpha byte
+// (#RRGGBBAA) mirroring the file's Alpha Component. Applying a scheme sets
+// AnsiPalette to custom and points AnsiScheme at it; the list itself never
+// changes the live appearance.
 type AnsiScheme struct {
 	Name   string            `json:"name"`
 	Colors map[string]string `json:"colors"`
@@ -219,6 +225,17 @@ func validTerminalColor(value string) bool {
 	return err == nil
 }
 
+// validAnsiColor accepts the #RRGGBB terminal colours plus an optional alpha
+// byte (#RRGGBBAA) mirroring the Alpha Component of iTerm2 colour entries;
+// only ANSI scheme slots use it.
+func validAnsiColor(value string) bool {
+	if (len(value) != 7 && len(value) != 9) || value[0] != '#' {
+		return false
+	}
+	_, err := strconv.ParseUint(value[1:], 16, 32)
+	return err == nil
+}
+
 // ansiColorKeys lists the 16 standard ANSI colour slots xterm applies in
 // order (normal 0–7, bright 8–15). A custom palette must cover all of them.
 var ansiColorKeys = []string{
@@ -228,12 +245,14 @@ var ansiColorKeys = []string{
 
 // ansiExtraColorKeys are the optional non-ANSI slots an imported scheme may
 // carry, named after the xterm theme properties they map onto: default text,
-// cursor, text under the cursor, and selection fill/foreground. Absent keys
-// keep the app defaults (font colour, built-in selection tint); background is
-// deliberately absent — the terminal stays transparent.
+// cursor, text under the cursor, selection fill/foreground, and the terminal
+// background (with its iTerm alpha, honoured when AnsiSchemeBackground is on
+// — the default). Absent keys keep the app defaults (font colour, built-in
+// selection tint, fully transparent canvas). iTerm keys without an xterm
+// counterpart (bold, link, cursor guide, badge) are never imported.
 var ansiExtraColorKeys = map[string]struct{}{
 	"foreground": {}, "cursor": {}, "cursorAccent": {},
-	"selectionBackground": {}, "selectionForeground": {},
+	"selectionBackground": {}, "selectionForeground": {}, "background": {},
 }
 
 // normalizeAnsiColors validates a custom ANSI palette in place and lowercases
@@ -246,8 +265,8 @@ func normalizeAnsiColors(colors map[string]string) error {
 	}
 	for _, key := range ansiColorKeys {
 		color, ok := colors[key]
-		if !ok || !validTerminalColor(color) {
-			return errors.New("自定义 ANSI 颜色必须包含全部 16 个标准色键，且取值应为 #RRGGBB 格式")
+		if !ok || !validAnsiColor(color) {
+			return errors.New("自定义 ANSI 颜色必须包含全部 16 个标准色键，且取值应为 #RRGGBB 或 #RRGGBBAA 格式")
 		}
 		colors[key] = strings.ToLower(color)
 	}
@@ -259,10 +278,10 @@ extraKeys:
 			}
 		}
 		if _, optional := ansiExtraColorKeys[key]; !optional {
-			return errors.New("自定义 ANSI 颜色除 16 个标准色键外只允许 foreground、cursor、cursorAccent、selectionBackground、selectionForeground")
+			return errors.New("自定义 ANSI 颜色除 16 个标准色键外只允许 foreground、cursor、cursorAccent、selectionBackground、selectionForeground、background")
 		}
-		if !validTerminalColor(color) {
-			return errors.New("自定义 ANSI 颜色可选色键的取值应为 #RRGGBB 格式")
+		if !validAnsiColor(color) {
+			return errors.New("自定义 ANSI 颜色可选色键的取值应为 #RRGGBB 或 #RRGGBBAA 格式")
 		}
 		colors[key] = strings.ToLower(color)
 	}

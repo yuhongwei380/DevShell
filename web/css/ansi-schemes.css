@@ -6,6 +6,8 @@
 #ansi-schemes-dialog>p,#ansi-schemes-dialog form>p{margin:0;color:var(--muted,#5b6f7f);font-size:11.5px;line-height:1.5}
 .scheme-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .scheme-toolbar span{color:var(--muted,#5b6f7f);font-size:11px;white-space:nowrap}
+.scheme-bg-toggle{display:inline-flex;align-items:center;gap:6px;color:var(--muted,#5b6f7f);font-size:11.5px;white-space:nowrap;cursor:pointer}
+.scheme-bg-toggle input{accent-color:var(--accent);margin:0}
 #scheme-import-button{flex:none;width:auto;align-self:flex-start;display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:8px;font-size:12px;line-height:1.4;white-space:nowrap}
 #scheme-import-button svg{width:14px;height:14px}
 .scheme-list{display:grid;gap:6px}
