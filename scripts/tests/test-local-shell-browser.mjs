@@ -1,10 +1,11 @@
 // Browser fixture for the local shell feature (issue #4 slice A).
-// Windows: the feature is removed — the 设置 → 其他功能 row is hidden, the
-// switch cannot be turned on (backend rejects it), and “+” always opens the
-// start tab. Other supported platforms (macOS shipped, Linux for CI): the
-// switch defaults to 关闭, turning it on makes “+” open a real local terminal
-// with a typing round-trip, the tab is marked · 本机, exit disconnects and the
-// switch persists across reload. In every case the “+” button reads 新会话.
+// Windows without WSL: the feature keeps the default — the 设置 → 其他功能 row
+// is hidden, the switch cannot be turned on (backend rejects it), and “+”
+// always opens the start tab. Supported platforms (macOS shipped, Windows with
+// an installed WSL distro, Linux for CI): the switch defaults to 关闭, turning
+// it on makes “+” open a real local terminal with a typing round-trip, the tab
+// is marked · 本机, exit disconnects and the switch persists across reload. In
+// every case the “+” button reads 新会话.
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 const [stage, chrome, modulePath] = process.argv.slice(2);

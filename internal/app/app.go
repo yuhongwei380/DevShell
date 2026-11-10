@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -153,7 +152,7 @@ func (a *App) Handler(assets fs.FS) http.Handler {
 				break
 			}
 		}
-		data, _ := json.Marshal(map[string]any{"securityLock": lockState, "base": a.baseURL, "token": a.token, "theme": preferences.Theme, "uiStyle": preferences.UIStyle, "uiScale": preferences.UIScale, "uiPreferences": uiPreferences, "uiFontRuntime": a.uiFontRuntime(), "version": ApplicationVersion, "displayVersion": ApplicationDisplayVersion, "build": ApplicationBuild, "updateMirror": preferences.UpdateMirror, "releaseNotes": notes, "localShellSupported": runtime.GOOS != "windows"})
+		data, _ := json.Marshal(map[string]any{"securityLock": lockState, "base": a.baseURL, "token": a.token, "theme": preferences.Theme, "uiStyle": preferences.UIStyle, "uiScale": preferences.UIScale, "uiPreferences": uiPreferences, "uiFontRuntime": a.uiFontRuntime(), "version": ApplicationVersion, "displayVersion": ApplicationDisplayVersion, "build": ApplicationBuild, "updateMirror": preferences.UpdateMirror, "releaseNotes": notes, "localShellSupported": localShellSupported()})
 		fmt.Fprintf(w, "window.DEVSHELL = %s;", data)
 	})
 	mux.HandleFunc("GET /api/ui-fonts/runtime", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, a.uiFontRuntime()) })

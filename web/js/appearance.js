@@ -665,7 +665,7 @@ function initializeAppearance() {
   $('#switch-ui-fonts').onclick = safe(() => window.DengUIAppearance.open());
   $('#online-shell-fonts').onclick = safe(() => window.DengFontLibrary.open('font'));
   $('#manage-proxies').onclick = showProxies; $('#manage-profile-proxies').onclick = showProxies;
-  // 本地终端仅部分平台支持（Windows 已移除）：不支持时整行不显示，开关无法打开。
+  // 本地终端按平台支持位显示：Windows 仅在装有 WSL 时为 true；不支持时整行不显示，开关无法打开。
   if (window.DEVSHELL?.localShellSupported === false) $('#feature-local-shell')?.closest('.placement-setting')?.setAttribute('hidden', '');
   $('#feature-auto-commands').onchange = safe(async event => {
     const enabled = event.target.value === 'true';

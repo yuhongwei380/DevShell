@@ -21,8 +21,10 @@ const localShellMaxSessions = 32
 
 // localShellState owns every locally spawned shell (Settings → 其他功能 switch).
 // Like serial it is independent from the SSH session map: a local tab has no
-// SFTP, monitoring, shell integration or window handoff. Windows spawns
-// cmd.exe; macOS spawns the user's login shell at the home directory.
+// SFTP, monitoring, shell integration or window handoff. macOS spawns the
+// user's login shell at the home directory; Windows spawns the default WSL
+// distro when WSL is installed and stays unsupported (start-tab default)
+// otherwise.
 type localShellState struct {
 	mu       sync.Mutex
 	sessions map[string]*localShellSession
@@ -57,23 +59,17 @@ func (s *localShellSession) Close() {
 	})
 }
 
-// localShellCommand resolves the per-platform local shell launch. Windows uses
-// cmd.exe (the user's explicit default), macOS uses $SHELL (zsh on modern
-// defaults) as a login shell, matching what a native terminal tab opens.
+// localShellCommand resolves the per-platform local shell launch. macOS uses
+// $SHELL (zsh on modern defaults) as a login shell, matching what a native
+// terminal tab opens; Windows uses the default WSL distro when one is
+// installed, and keeps the historical default (no local shell) otherwise.
 func localShellCommand() (string, []string, string, error) {
 	switch runtime.GOOS {
 	case "windows":
-		command := os.Getenv("ComSpec")
-		if command == "" {
-			command = "cmd.exe"
+		if !wslAvailable() {
+			return "", nil, "", errors.New("未检测到 WSL 发行版，Windows 本地终端需要先安装 WSL（wsl --install）")
 		}
-		if _, err := os.Stat(command); err != nil {
-			command = `C:\Windows\System32\cmd.exe`
-			if _, err := os.Stat(command); err != nil {
-				return "", nil, "", errors.New("找不到 cmd.exe，无法启动本地终端")
-			}
-		}
-		return command, nil, "命令提示符", nil
+		return wslExecutable(), nil, "本地终端 · WSL", nil
 	case "darwin":
 		shell := os.Getenv("SHELL")
 		if shell == "" {

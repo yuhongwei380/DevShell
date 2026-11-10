@@ -10,13 +10,14 @@ import (
 	"testing"
 	"testing/fstest"
 	"time"
+	"unicode/utf16"
 )
 
 // TestLocalShellPTYRoundTrip drives a real local shell over the PTY layer on
 // supported platforms: the echo marker must come back through the master
 // side, resize must be accepted, and `exit` must end the relay read with a
-// waitable exit. Windows has no local shell at all — there the PTY layer must
-// refuse to spawn one.
+// waitable exit. On Windows this only runs when WSL has a distro (the ConPTY
+// transport); machines without WSL have no local shell to drive.
 func TestLocalShellPTYRoundTrip(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -26,11 +27,8 @@ func TestLocalShellPTYRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Skip("no local shell available:", err)
 	}
-	if runtime.GOOS == "windows" {
-		if _, err := startShellPTY(command, args, home, 100, 30); err == nil {
-			t.Fatal("Windows must not start a local shell")
-		}
-		return
+	if !stdioConsoleBacked() {
+		t.Skip("stdio redirected to file/pipe: conhost drops ConPTY attach for children of this process")
 	}
 	pty, err := startShellPTY(command, args, home, 100, 30)
 	if err != nil {
@@ -94,10 +92,11 @@ func TestLocalShellSessionHTTPContract(t *testing.T) {
 		return response
 	}
 	response := request("POST", "/api/local-shell/sessions", map[string]any{})
-	if runtime.GOOS == "windows" {
-		// Windows has no local shell: the spawn endpoint must reject it.
+	if !localShellSupported() {
+		// Unsupported machines (Windows without WSL): the spawn endpoint must
+		// reject the session outright.
 		if response.Code == 200 {
-			t.Fatal("Windows must reject local shell sessions")
+			t.Fatal("unsupported platforms must reject local shell sessions")
 		}
 		return
 	}
@@ -145,9 +144,10 @@ func TestLocalShellSessionHTTPContract(t *testing.T) {
 	}
 }
 
-// TestLocalShellSwitchRejectedOnWindows pins the platform gate on the
-// preference: Windows may keep the field false but can never turn it on.
-func TestLocalShellSwitchRejectedOnWindows(t *testing.T) {
+// TestLocalShellSwitchPlatformGate pins the platform gate on the preference:
+// Windows may turn the switch on only while WSL reports an installed distro;
+// machines without WSL keep the historical default (on rejected, off allowed).
+func TestLocalShellSwitchPlatformGate(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("platform gate applies to Windows only")
 	}
@@ -166,10 +166,46 @@ func TestLocalShellSwitchRejectedOnWindows(t *testing.T) {
 		handler.ServeHTTP(response, req)
 		return response
 	}
-	if response := patch(`{"localShellEnabled":true}`); response.Code == 200 {
-		t.Fatalf("Windows accepted the local shell switch: %s", response.Body.String())
+	response := patch(`{"localShellEnabled":true}`)
+	if wslAvailable() {
+		if response.Code != 200 {
+			t.Fatalf("Windows with WSL must accept the local shell switch: %d %s", response.Code, response.Body.String())
+		}
+	} else if response.Code == 200 {
+		t.Fatalf("Windows without WSL accepted the local shell switch: %s", response.Body.String())
 	}
 	if response := patch(`{"localShellEnabled":false}`); response.Code != 200 {
 		t.Fatalf("turning the switch off must stay allowed: %d %s", response.Code, response.Body.String())
+	}
+}
+
+// TestWslDistroNamesParsing pins the `wsl -l -q` decoder: modern wsl.exe
+// writes UTF-16LE (with or without BOM) whose NUL bytes must not leak into
+// names, and machines without distros must decode to an empty list.
+func TestWslDistroNamesParsing(t *testing.T) {
+	utf16le := func(parts ...string) []byte {
+		var raw []byte
+		for _, part := range parts {
+			for _, unit := range utf16.Encode([]rune(part)) {
+				raw = append(raw, byte(unit), byte(unit>>8))
+			}
+		}
+		return raw
+	}
+	observed := utf16le("Ubuntu\r\n\r\ndocker-desktop\r\n\r\n\r\n")
+	if names := wslDistroNames(observed); len(names) != 2 || names[0] != "Ubuntu" || names[1] != "docker-desktop" {
+		t.Fatalf("UTF-16LE distro list decoded wrong: %q", names)
+	}
+	withBOM := append([]byte{0xFF, 0xFE}, utf16le("Debian\r\n")...)
+	if names := wslDistroNames(withBOM); len(names) != 1 || names[0] != "Debian" {
+		t.Fatalf("BOM-prefixed list decoded wrong: %q", names)
+	}
+	if names := wslDistroNames([]byte("Ubuntu\r\ndocker-desktop\r\n")); len(names) != 2 {
+		t.Fatalf("plain UTF-8 fallback decoded wrong: %q", names)
+	}
+	for _, empty := range [][]byte{nil, {}, utf16le("\r\n\r\n")} {
+		if names := wslDistroNames(empty); len(names) != 0 {
+			t.Fatalf("no distro must decode to none, got %q", names)
+		}
 	}
 }

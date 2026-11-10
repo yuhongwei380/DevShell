@@ -66,3 +66,7 @@ func (p *shellPTY) Close() error {
 	})
 	return p.file.Close()
 }
+
+// stdioConsoleBacked mirrors the Windows guard; a Unix PTY does not depend on
+// the parent's own stdio, so it is always usable here.
+func stdioConsoleBacked() bool { return true }

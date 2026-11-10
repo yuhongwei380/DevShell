@@ -31,7 +31,7 @@ func (s *Store) PatchAppearance(patch map[string]json.RawMessage) (Appearance, e
 		"promptHostnameColor": &value.PromptHostnameColor, "minimizeAction": &value.MinimizeAction,
 		"externalEditor": &value.ExternalEditor, "updateMirror": &value.UpdateMirror,
 		"autoCommandsEnabled": &value.AutoCommandsEnabled, "tcpToolsEnabled": &value.TcpToolsEnabled,
-		"ansiScheme": &value.AnsiScheme,
+		"ansiScheme":           &value.AnsiScheme,
 		"ansiSchemeBackground": &value.AnsiSchemeBackground,
 	}
 	for key, raw := range patch {
@@ -53,12 +53,16 @@ func (s *Store) PatchAppearance(patch map[string]json.RawMessage) (Appearance, e
 		case "fontBold":
 			err = mergePreferenceMap(value.FontBold, raw)
 		case "localShellEnabled":
-			// 本地终端功能仅 macOS 支持（Windows 已移除）：Windows 上开启请求一律拒绝。
+			// 本地终端平台门槛：macOS 直接支持；Windows 仅在装有 WSL 发行版时
+			// 支持，否则保持默认（关闭且开关行隐藏），开启请求拒绝。
 			var enabled bool
 			if json.Unmarshal(raw, &enabled) != nil {
 				return Appearance{}, errors.New("本地终端开关必须是布尔值")
 			}
-			if enabled && runtime.GOOS == "windows" {
+			if enabled && !localShellSupported() {
+				if runtime.GOOS == "windows" {
+					return Appearance{}, errors.New("未检测到 WSL 发行版，Windows 本地终端需要先安装 WSL")
+				}
 				return Appearance{}, errors.New("当前平台不支持本地终端")
 			}
 			value.LocalShellEnabled = enabled
