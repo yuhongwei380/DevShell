@@ -1,9 +1,11 @@
 /* 配色方案管理（设置 → 外观配置 → 配色方案）：支持导入多套 iTerm Color
    Scheme（.itermcolors），方案名称沿用导入文件名，同名导入即覆盖；可在本页
    应用、重命名与两步确认删除。列表整体存进 appearance.ansiSchemes，当前应用的
-   方案名存进 appearance.ansiScheme（ansiPalette 为 custom）。解析在客户端完成，
-   只取「Ansi 0..15 Color」16 键换算为 #RRGGBB；背景、前景、光标等非 ANSI 键
-   忽略——终端背景保持透明、前景仍随字体颜色。悬空的方案引用由后端回落到柔和。 */
+   方案名存进 appearance.ansiScheme（ansiPalette 为 custom）。解析在客户端完成：
+   「Ansi 0..15 Color」16 键必须齐全；「Foreground / Cursor / Cursor Text /
+   Selection / Selected Text Color」为可选键，文件含哪个就换算为 #RRGGBB 存哪个，
+   应用时随 16 色一并生效（前景色生效时终端文字随方案而非字体）；背景等其他键
+   忽略——终端背景保持透明。悬空的方案引用由后端回落到柔和。 */
 'use strict';
 window.DengAnsiSchemes = (() => {
   // iTerm Color Schemes（.itermcolors）是 XML plist 的最小解析。
@@ -15,6 +17,15 @@ window.DengAnsiSchemes = (() => {
     const hex = value => value.toString(16).padStart(2, '0');
     return `#${hex(channel('Red Component'))}${hex(channel('Green Component'))}${hex(channel('Blue Component'))}`;
   }
+  // 可选非 ANSI 键：iTerm 方案常缺这些键，缺三通道即视为没有，不报错。
+  const itermExtraLabels = { foreground: 'Foreground Color', cursor: 'Cursor Color', cursorAccent: 'Cursor Text Color', selectionBackground: 'Selection Color', selectionForeground: 'Selected Text Color' };
+  function itermOptionalColorToHex(entry) {
+    if (!entry || typeof entry !== 'object') return '';
+    const channels = ['Red Component', 'Green Component', 'Blue Component'].map(name => Number(entry[name]));
+    if (!channels.every(Number.isFinite)) return '';
+    const hex = value => Math.round(Math.min(1, Math.max(0, value)) * 255).toString(16).padStart(2, '0');
+    return `#${hex(channels[0])}${hex(channels[1])}${hex(channels[2])}`;
+  }
   function parseItermAnsiColors(text) {
     const parsed = new DOMParser().parseFromString(text, 'application/xml');
     if (parsed.querySelector('parsererror')) throw new Error('无法解析 iTerm 配色文件');
@@ -25,6 +36,10 @@ window.DengAnsiSchemes = (() => {
       const entry = top[`Ansi ${index} Color`];
       if (!entry || typeof entry !== 'object') throw new Error(`iTerm 配色缺少「Ansi ${index} Color」`);
       colors[ansiColorKeys[index]] = itermColorToHex(entry, index);
+    }
+    for (const [key, label] of Object.entries(itermExtraLabels)) {
+      const color = itermOptionalColorToHex(top[label]);
+      if (color) colors[key] = color;
     }
     return colors;
   }
@@ -74,7 +89,7 @@ window.DengAnsiSchemes = (() => {
       lastName = name;
     }
     await chooseAppearance({ ansiSchemes: next, ansiPalette: 'custom', ansiScheme: lastName });
-    toast(files.length === 1 ? `已导入 iTerm 配色「${lastName}」，已应用其 16 色 ANSI` : `已导入 ${files.length} 套 iTerm 配色，已应用「${lastName}」`);
+    toast(files.length === 1 ? `已导入 iTerm 配色「${lastName}」，已应用其 16 色 ANSI 与前景、光标、选区色` : `已导入 ${files.length} 套 iTerm 配色，已应用「${lastName}」`);
   }
   function applyScheme(scheme) {
     return run(async () => {
@@ -122,7 +137,7 @@ window.DengAnsiSchemes = (() => {
       if (validFontColor(scheme.colors?.[key])) chip.style.background = scheme.colors[key];
       swatches.append(chip);
     }
-    const note = document.createElement('span'); note.className = 'scheme-summary'; note.textContent = active ? '当前应用 · 16 色 ANSI' : '16 色 ANSI';
+    const note = document.createElement('span'); note.className = 'scheme-summary'; note.textContent = active ? '当前应用 · 16 色 ANSI + 前景/光标/选区' : '16 色 ANSI + 前景/光标/选区';
     info.append(title, swatches, note);
     const actions = document.createElement('div'); actions.className = 'scheme-actions';
     const button = (action, label, primary = false) => {
@@ -164,7 +179,7 @@ window.DengAnsiSchemes = (() => {
   }
   function initialize() {
     dialog = document.createElement('dialog'); dialog.id = 'ansi-schemes-dialog';
-    dialog.innerHTML = `<form id="ansi-schemes-form" novalidate><div class="dialog-heading"><h2 id="ansi-schemes-title">配色方案</h2><button type="button" class="icon-button" id="close-ansi-schemes" aria-label="关闭配色方案"><svg><use href="#i-close"/></svg></button></div><p>支持导入多套 .itermcolors 配色方案，名称沿用导入文件名，同名导入即覆盖；仅应用其 16 色 ANSI，背景、前景、光标等其他键会被忽略。</p><div class="scheme-toolbar"><button type="button" id="scheme-import-button" class="primary-button"><svg><use href="#i-plus"/></svg>导入 iTerm 配色…</button><span id="scheme-count"></span></div><div class="scheme-list" id="scheme-list"></div><p id="scheme-error" role="alert"></p></form>`;
+    dialog.innerHTML = `<form id="ansi-schemes-form" novalidate><div class="dialog-heading"><h2 id="ansi-schemes-title">配色方案</h2><button type="button" class="icon-button" id="close-ansi-schemes" aria-label="关闭配色方案"><svg><use href="#i-close"/></svg></button></div><p>支持导入多套 .itermcolors 配色方案，名称沿用导入文件名，同名导入即覆盖；应用其 16 色 ANSI，文件包含相应键时并应用前景、光标与选区颜色；背景等其他键会被忽略，终端保持透明背景。</p><div class="scheme-toolbar"><button type="button" id="scheme-import-button" class="primary-button"><svg><use href="#i-plus"/></svg>导入 iTerm 配色…</button><span id="scheme-count"></span></div><div class="scheme-list" id="scheme-list"></div><p id="scheme-error" role="alert"></p></form>`;
     document.body.append(dialog);
     const form = dialog.querySelector('form');
     list = form.querySelector('#scheme-list');

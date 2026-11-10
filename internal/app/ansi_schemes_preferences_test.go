@@ -165,3 +165,33 @@ func TestAnsiSchemesLoadLegacyConfig(t *testing.T) {
 		t.Fatal("legacy config should load with scheme defaults", value.AnsiPalette, value.AnsiSchemes, value.AnsiScheme)
 	}
 }
+
+// 可选非 ANSI 键（前景/光标/选区）随方案保存并小写归一；「background」等未知键
+// 与非法取值拒绝——终端背景保持透明，不由方案决定。
+func TestAnsiSchemesExtraColorKeys(t *testing.T) {
+	store, err := OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	withExtras := strings.Replace(fullAnsiColors, `"brightWhite":"#ECF0F1"`, `"brightWhite":"#ECF0F1","foreground":"#F8F8F2","cursor":"#F1FA8C","cursorAccent":"#282A36","selectionBackground":"#44475A","selectionForeground":"#F8F8F2"`, 1)
+	saved, err := store.PatchAppearance(preferencePatch(t, `{"ansiSchemes":[{"name":"Dracula","colors":`+withExtras+`}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	colors := saved.AnsiSchemes[0].Colors
+	if colors["foreground"] != "#f8f8f2" || colors["cursor"] != "#f1fa8c" || colors["cursorAccent"] != "#282a36" || colors["selectionBackground"] != "#44475a" || colors["selectionForeground"] != "#f8f8f2" {
+		t.Fatal("extra colour keys not stored lowercased", colors)
+	}
+	if colors["red"] != "#c0392b" {
+		t.Fatal("standard keys must survive alongside extras", colors)
+	}
+	invalid := []struct{ name, raw, want string }{
+		{"background 键", `{"ansiSchemes":[{"name":"甲","colors":` + strings.Replace(fullAnsiColors, `"brightWhite":"#ECF0F1"`, `"brightWhite":"#ECF0F1","background":"#282A36"`, 1) + `}]}`, "只允许"},
+		{"可选键取值非法", `{"ansiSchemes":[{"name":"甲","colors":` + strings.Replace(fullAnsiColors, `"brightWhite":"#ECF0F1"`, `"brightWhite":"#ECF0F1","foreground":"white"`, 1) + `}]}`, "#RRGGBB"},
+	}
+	for _, item := range invalid {
+		if _, err := store.PatchAppearance(preferencePatch(t, item.raw)); err == nil || !strings.Contains(err.Error(), item.want) {
+			t.Fatalf("%s: want %q, got %v", item.name, item.want, err)
+		}
+	}
+}

@@ -36,18 +36,29 @@ const ansiPalettes = {
 // 与后端 ansiColorKeys 对应；custom 预设仅当 16 色齐全时生效，否则回落柔和。
 const ansiColorKeys = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white', 'brightBlack', 'brightRed', 'brightGreen', 'brightYellow', 'brightBlue', 'brightMagenta', 'brightCyan', 'brightWhite'];
 const completeAnsiColors = colors => !!colors && ansiColorKeys.every(key => validFontColor(colors[key]));
+// 当前应用的导入方案（16 色齐全才算生效，缺失或残缺回落预设）。
+function activeAnsiScheme() {
+  if (appearance.ansiPalette !== 'custom') return null;
+  const scheme = (appearance.ansiSchemes || []).find(item => item.name === appearance.ansiScheme);
+  return scheme && completeAnsiColors(scheme.colors) ? scheme : null;
+}
+// 方案的可选非 ANSI 键与 xterm 主题属性同名（foreground/cursor/cursorAccent/
+// selectionBackground/selectionForeground），随色板一并展开即生效；文件没有的
+// 键保持字体前景与内置选区色。背景不在其中——终端背景始终透明。
 function terminalTheme() {
   // custom 表示应用了导入的配色方案：按名称在方案库里找色板，缺失或残缺回落柔和。
-  const scheme = appearance.ansiPalette === 'custom' ? (appearance.ansiSchemes || []).find(item => item.name === appearance.ansiScheme) : null;
-  const palette = scheme && completeAnsiColors(scheme.colors) ? scheme.colors : (ansiPalettes[appearance.ansiPalette] || ansiPalettes.soft);
+  const scheme = activeAnsiScheme();
+  const palette = scheme ? scheme.colors : (ansiPalettes[appearance.ansiPalette] || ansiPalettes.soft);
   return { background: '#00000000', foreground: colorForFont(), cursor: colorForFont(), selectionBackground: '#7195aa66', ...palette };
 }
 function applyTerminalAppearanceColors() {
-  const color = colorForFont();
+  // 方案含前景色键时终端文字色随方案（本机提示符回显区同色），否则仍随字体颜色。
+  const scheme = activeAnsiScheme();
+  const color = scheme && validFontColor(scheme.colors.foreground) ? scheme.colors.foreground : colorForFont();
   document.documentElement.style.setProperty('--terminal-foreground', color);
   for (const state of sessions.values()) state.term.options.theme = terminalTheme();
   const preview = document.getElementById('font-preview-text');
-  if (preview) preview.style.color = color;
+  if (preview) preview.style.color = colorForFont();
 }
 
 async function staticJSON(path) {

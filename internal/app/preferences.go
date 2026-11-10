@@ -72,8 +72,11 @@ type Appearance struct {
 
 // AnsiScheme is one saved iTerm2-derived ANSI colour scheme: the 16 standard
 // ANSI colours keyed black…brightWhite, under a name taken from the imported
-// .itermcolors file. Applying a scheme sets AnsiPalette to custom and points
-// AnsiScheme at it; the list itself never changes the live appearance.
+// .itermcolors file, plus the optional non-ANSI slots (foreground, cursor,
+// cursorAccent, selectionBackground, selectionForeground) carried over when
+// the file declares them; background stays untouched (transparent terminal).
+// Applying a scheme sets AnsiPalette to custom and points AnsiScheme at it;
+// the list itself never changes the live appearance.
 type AnsiScheme struct {
 	Name   string            `json:"name"`
 	Colors map[string]string `json:"colors"`
@@ -185,9 +188,10 @@ func printableToken(value string, limit int) bool {
 }
 
 // normalizeAnsiSchemes validates the saved ANSI colour scheme list in place:
-// unique names and a complete 16-key palette per scheme. Colours are
-// lowercased; everything else is stored verbatim so a scheme imported from a
-// .itermcolors file round-trips unchanged.
+// unique names and a complete 16-key palette per scheme, with the optional
+// non-ANSI colour slots allowed alongside. Colours are lowercased; everything
+// else is stored verbatim so a scheme imported from a .itermcolors file
+// round-trips unchanged.
 func normalizeAnsiSchemes(schemes []AnsiScheme) error {
 	seenNames := make(map[string]struct{}, len(schemes))
 	for index := range schemes {
@@ -222,18 +226,43 @@ var ansiColorKeys = []string{
 	"brightBlack", "brightRed", "brightGreen", "brightYellow", "brightBlue", "brightMagenta", "brightCyan", "brightWhite",
 }
 
+// ansiExtraColorKeys are the optional non-ANSI slots an imported scheme may
+// carry, named after the xterm theme properties they map onto: default text,
+// cursor, text under the cursor, and selection fill/foreground. Absent keys
+// keep the app defaults (font colour, built-in selection tint); background is
+// deliberately absent — the terminal stays transparent.
+var ansiExtraColorKeys = map[string]struct{}{
+	"foreground": {}, "cursor": {}, "cursorAccent": {},
+	"selectionBackground": {}, "selectionForeground": {},
+}
+
 // normalizeAnsiColors validates a custom ANSI palette in place and lowercases
 // the hex values. Empty maps are the caller's business: they normalize to nil
 // before this runs, and a custom palette without one fails with the same
 // missing-key error.
 func normalizeAnsiColors(colors map[string]string) error {
-	if len(colors) != len(ansiColorKeys) {
+	if len(colors) < len(ansiColorKeys) {
 		return errors.New("自定义 ANSI 颜色必须包含全部 16 个标准色键")
 	}
 	for _, key := range ansiColorKeys {
 		color, ok := colors[key]
 		if !ok || !validTerminalColor(color) {
 			return errors.New("自定义 ANSI 颜色必须包含全部 16 个标准色键，且取值应为 #RRGGBB 格式")
+		}
+		colors[key] = strings.ToLower(color)
+	}
+extraKeys:
+	for key, color := range colors {
+		for _, standard := range ansiColorKeys {
+			if key == standard {
+				continue extraKeys
+			}
+		}
+		if _, optional := ansiExtraColorKeys[key]; !optional {
+			return errors.New("自定义 ANSI 颜色除 16 个标准色键外只允许 foreground、cursor、cursorAccent、selectionBackground、selectionForeground")
+		}
+		if !validTerminalColor(color) {
+			return errors.New("自定义 ANSI 颜色可选色键的取值应为 #RRGGBB 格式")
 		}
 		colors[key] = strings.ToLower(color)
 	}
