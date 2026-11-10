@@ -192,7 +192,7 @@ func TestTestUpdateMirrorAtReportsPerRoleHealth(t *testing.T) {
 			w.Write([]byte(feedXML))
 		case "/dl/" + manifestName:
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`{"schema_version":2,"build":42}`))
+			w.Write([]byte("{\n  \"schemaVersion\": 2,\n  \"build\": 42\n}"))
 		default:
 			http.NotFound(w, r)
 		}
@@ -218,7 +218,7 @@ func TestTestUpdateMirrorAtReportsPerRoleHealth(t *testing.T) {
 				w.Write([]byte("<html>blocked by origin allowlist</html>"))
 			default:
 				w.Header().Set("Content-Type", "application/json")
-				w.Write([]byte(`{"schema_version":2,"build":42}`))
+				w.Write([]byte("{\n  \"schemaVersion\": 2,\n  \"build\": 42\n}"))
 			}
 			return
 		}

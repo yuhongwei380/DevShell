@@ -97,7 +97,7 @@ func testUpdateMirrorAt(ctx context.Context, client *http.Client, mirror, platfo
 	manifestTarget, _ := updateAddress(platform)
 	targets := []struct{ role, url, signature string }{
 		{"list", applyUpdateMirror(mirror, feedTarget), "<feed"},
-		{"download", applyUpdateMirror(mirror, manifestTarget), `{"`},
+		{"download", applyUpdateMirror(mirror, manifestTarget), `schemaVersion`},
 	}
 	test := UpdateMirrorTest{Host: updateMirrorHost(mirror)}
 	for _, target := range targets {

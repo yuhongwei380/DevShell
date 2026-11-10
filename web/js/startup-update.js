@@ -62,9 +62,15 @@ function mirrorSettings(){return new Promise(resolve=>{
   // Connectivity is probed automatically (on open, on preset switch and
   // after saving) so an accelerator that cannot proxy the update URLs is
   // obvious here instead of surfacing later as a failed update check.
-  let testSeq=0;
-  const probeText=p=>{if(p.ok)return `正常（${p.latencyMS}ms）`;return `不可用（${p.reason==='network'?'无法连接':p.reason==='unexpected-body'?'返回内容异常':`HTTP ${p.status||'请求失败'}`}）`};
-  const runTest=async value=>{const seq=++testSeq,mirror=String(value||'').trim();testLine.textContent='正在自动检测连通性…';try{const result=await post('/api/updates/mirror-test',{mirror});if(seq!==testSeq)return;const parts=(result.probes||[]).map(p=>`${p.role==='list'?'更新列表源':'更新下载源'} ${probeText(p)}`);testLine.textContent=`连通性检测 · ${result.host||'直连 GitHub'}：`+(parts.join(' · ')||'无可探测地址');}catch(reason){if(seq===testSeq)testLine.textContent='连通性检测未完成：'+(reason?.message||reason)}};
+  let testSeq=0,rowsSeq=0;const probed=new Map(),inflight=new Map();
+  const shortReason=p=>p.reason==='network'?'无法连接':p.reason==='unexpected-body'?'返回内容异常':`HTTP ${p.status||'请求失败'}`;
+  const probeText=p=>p.ok?`正常（${p.latencyMS}ms）`:`不可用（${shortReason(p)}）`;
+  const showDetails=result=>{const parts=(result.probes||[]).map(p=>`${p.role==='list'?'更新列表源':'更新下载源'} ${probeText(p)}`);testLine.textContent=`连通性检测 · ${result.host||'直连 GitHub'}：`+(parts.join(' · ')||'无可探测地址')};
+  const probe=mirror=>{const key=String(mirror||'').trim();if(probed.has(key))return Promise.resolve(probed.get(key));const running=inflight.get(key)||post('/api/updates/mirror-test',{mirror:key}).then(result=>{probed.set(key,result);return result}).finally(()=>inflight.delete(key));inflight.set(key,running);return running};
+  const rowText=(base,result)=>{const probes=result.probes||[],list=probes.find(p=>p.role==='list'),download=probes.find(p=>p.role==='download');if(!probes.length)return `${base} · 无可探测地址`;if(list?.ok&&download?.ok)return `${base} · ${Math.max(list.latencyMS||0,download.latencyMS||0)}ms`;if(list?.ok)return `${base} · ${list.latencyMS||0}ms · 下载源${shortReason(download)}`;return `${base} · 列表源${list?shortReason(list):'无法连接'}`};
+  const setRow=(value,result)=>{const option=[...preset.options].find(o=>o.value===value);if(!option||value==='__custom')return;const base=MIRROR_PRESETS.find(([,v])=>v===value)?.[0]||'直连 GitHub（默认）';option.textContent=result?rowText(base,result):`${base} · 检测中…`;window.DengSelect?.refresh(preset)};
+  const probeAllRows=async()=>{const seq=++rowsSeq;for(const[,value]of MIRROR_PRESETS)setRow(value,null);for(const[,value]of MIRROR_PRESETS)probe(value).then(result=>{if(seq!==rowsSeq)return;setRow(value,result);if(selected()===value)showDetails(result)}).catch(()=>{if(seq===rowsSeq)setRow(value,{probes:[{role:'list',ok:false,reason:'network',status:0,latencyMS:0}]})})};
+  const runTest=async value=>{const seq=++testSeq,mirror=String(value||'').trim();testLine.textContent='正在自动检测连通性…';try{const result=await probe(mirror);if(seq!==testSeq)return;showDetails(result);if(preset.value!=='__custom')setRow(preset.value,result);}catch(reason){if(seq===testSeq)testLine.textContent='连通性检测未完成：'+(reason?.message||reason)}};
  const current=async()=>{try{const config=await api('/api/config');fill(config?.appearance?.updateMirror||'')}catch{fill('')}};
  const commit=async value=>{error.textContent='';try{await post('/api/appearance/patch',{updateMirror:String(value||'').trim()});toast(String(value||'').trim()?'已保存，检查与下载更新将优先使用该加速域名':'已清除加速域名，恢复直连 GitHub');runTest(value);}catch(reason){error.textContent=reason?.message||String(reason)}};
  preset.onchange=()=>{if(preset.value!=='__custom')input.value='';runTest(selected())};
@@ -73,7 +79,7 @@ function mirrorSettings(){return new Promise(resolve=>{
  dialog.querySelector('#update-mirror-clear').onclick=()=>{fill('');commit('')};
  const close=()=>dialog.close();dialog.querySelector('.icon-button').onclick=close;dialog.oncancel=event=>{event.preventDefault();close()};
  dialog.addEventListener('close',()=>{dialog.remove();resolve()},{once:true});
- document.body.append(dialog);dialog.showModal();current().finally(()=>runTest(selected()));
+ document.body.append(dialog);dialog.showModal();current().finally(()=>{probeAllRows();runTest(selected())});
 });}
 document.addEventListener('DOMContentLoaded',async()=>{let timer;try{if(window.DEVSHELL?.detachedNonce)return;const check=Promise.race([api('/api/updates/check').catch(()=>null),new Promise(resolve=>{timer=setTimeout(()=>resolve(null),3000)})]);const result=await check;clearTimeout(timer);if(result?.status==='available')await showUpdate(result);}catch(e){console.warn('启动更新检查未完成',e)}finally{clearTimeout(timer);resolveStartup();window.dispatchEvent(new Event('dengshell:startup-ready'))}},{once:true});
 })();
