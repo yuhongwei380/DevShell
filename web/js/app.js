@@ -522,6 +522,7 @@ function createTerminal(state) {
   const fit = new FitAddon.FitAddon(); terminal.loadAddon(fit); const serialize = new SerializeAddon.SerializeAddon(); terminal.loadAddon(serialize); state.serialize = serialize; terminal.open(host); state.term = terminal; state.fit = fit;
   if (state.localOnly) terminal.options.disableStdin = true;
   installTerminalFontMetrics(state);
+  installTerminalBackground(state);
   installTerminalMouseCoordinates(state);
   installTerminalScrollback(state);
   bindTerminalContext(state);
@@ -783,6 +784,7 @@ function activate(id, view = 'terminal') {
 function updateStatus() { $('#connection-button').setAttribute('aria-label', '管理服务器'); window.DengSessionWindows.reflect(); }
 function renderSessionInfo() {
   const state = current(), profile = profileFor(state);
+  syncTerminalBackground(state);
   $('#welcome-state').hidden = !!state; window.DengLocalPrompt?.reflect();
   $('#terminal-meta-host').textContent = profile ? (profile.protocol === 'serial' ? window.DengSerial.label(profile) : profile.protocol === 'tcp' ? `${profile.host}:${profile.port}` : `${profile.user}@${sessionDisplayName(state)}`) : 'SSH 终端'; $('#terminal-state').textContent = state?.handoffProvisional ? '正在接收标签…' : state?.pendingConnection ? '正在连接…' : state?.connectionFailed ? '连接未完成' : state?.connected ? '已连接' : state?.disconnectDiagnostic ? `已断开 · ${state.disconnectDiagnostic.code}` : '';
   $('#terminal-state').title = state?.disconnectDiagnostic?.message || '';

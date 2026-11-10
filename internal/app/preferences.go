@@ -36,11 +36,6 @@ type Appearance struct {
 	// while AnsiPalette is custom; presets keep the list stored but inert.
 	AnsiSchemes         []AnsiScheme `json:"ansiSchemes,omitempty"`
 	AnsiScheme          string       `json:"ansiScheme,omitempty"`
-	// AnsiSchemeBackground toggles whether the active scheme's Background
-	// Colour (with its iTerm alpha) fills the terminal, like iTerm2 does.
-	// nil keeps the default: on. Switching it off restores the fully
-	// transparent canvas for every scheme.
-	AnsiSchemeBackground *bool `json:"ansiSchemeBackground,omitempty"`
 	WindowWidth         int          `json:"windowWidth"`
 	WindowHeight        int          `json:"windowHeight"`
 	WindowMaximised     bool         `json:"windowMaximised"`
@@ -78,14 +73,16 @@ type Appearance struct {
 // AnsiScheme is one saved iTerm2-derived ANSI colour scheme: the 16 standard
 // ANSI colours keyed black…brightWhite, under a name taken from the imported
 // .itermcolors file, plus the optional non-ANSI slots (foreground, cursor,
-// cursorAccent, selectionBackground, selectionForeground, background) carried
+// cursorAccent, selectionBackground, selectionForeground, background, etc.) carried
 // over when the file declares them; colours may carry an alpha byte
 // (#RRGGBBAA) mirroring the file's Alpha Component. Applying a scheme sets
 // AnsiPalette to custom and points AnsiScheme at it; the list itself never
 // changes the live appearance.
 type AnsiScheme struct {
-	Name   string            `json:"name"`
-	Colors map[string]string `json:"colors"`
+	Name        string            `json:"name"`
+	Colors      map[string]string `json:"colors"`
+	LightColors map[string]string `json:"lightColors,omitempty"`
+	DarkColors  map[string]string `json:"darkColors,omitempty"`
 }
 
 func defaultAppearance() Appearance {
@@ -177,13 +174,19 @@ func cloneAppearance(value Appearance) Appearance {
 }
 
 func cloneAnsiScheme(scheme AnsiScheme) AnsiScheme {
-	if scheme.Colors != nil {
-		colors := make(map[string]string, len(scheme.Colors))
-		for key, color := range scheme.Colors {
+	clone := func(source map[string]string) map[string]string {
+		if source == nil {
+			return nil
+		}
+		colors := make(map[string]string, len(source))
+		for key, color := range source {
 			colors[key] = color
 		}
-		scheme.Colors = colors
+		return colors
 	}
+	scheme.Colors = clone(scheme.Colors)
+	scheme.LightColors = clone(scheme.LightColors)
+	scheme.DarkColors = clone(scheme.DarkColors)
 	return scheme
 }
 
@@ -212,6 +215,13 @@ func normalizeAnsiSchemes(schemes []AnsiScheme) error {
 		seenNames[scheme.Name] = struct{}{}
 		if err := normalizeAnsiColors(scheme.Colors); err != nil {
 			return errors.New("配色方案「" + scheme.Name + "」" + err.Error())
+		}
+		for _, colors := range []map[string]string{scheme.LightColors, scheme.DarkColors} {
+			if colors != nil {
+				if err := normalizeAnsiColors(colors); err != nil {
+					return errors.New("配色方案「" + scheme.Name + "」明暗配色" + err.Error())
+				}
+			}
 		}
 	}
 	return nil
@@ -243,16 +253,14 @@ var ansiColorKeys = []string{
 	"brightBlack", "brightRed", "brightGreen", "brightYellow", "brightBlue", "brightMagenta", "brightCyan", "brightWhite",
 }
 
-// ansiExtraColorKeys are the optional non-ANSI slots an imported scheme may
-// carry, named after the xterm theme properties they map onto: default text,
-// cursor, text under the cursor, selection fill/foreground, and the terminal
-// background (with its iTerm alpha, honoured when AnsiSchemeBackground is on
-// — the default). Absent keys keep the app defaults (font colour, built-in
-// selection tint, fully transparent canvas). iTerm keys without an xterm
-// counterpart (bold, link, cursor guide, badge) are never imported.
+// Preserve every iTerm2 preset color, including colors for decorations that
+// have no DevShell equivalent yet. Only xterm theme slots reach its theme API;
+// bold/link/underline are applied by the DOM renderer adapter.
 var ansiExtraColorKeys = map[string]struct{}{
 	"foreground": {}, "cursor": {}, "cursorAccent": {},
 	"selectionBackground": {}, "selectionForeground": {}, "background": {},
+	"bold": {}, "link": {}, "underline": {}, "tab": {},
+	"match": {}, "cursorGuide": {}, "badge": {},
 }
 
 // normalizeAnsiColors validates a custom ANSI palette in place and lowercases
@@ -278,7 +286,7 @@ extraKeys:
 			}
 		}
 		if _, optional := ansiExtraColorKeys[key]; !optional {
-			return errors.New("自定义 ANSI 颜色除 16 个标准色键外只允许 foreground、cursor、cursorAccent、selectionBackground、selectionForeground、background")
+			return errors.New("自定义 ANSI 颜色除 16 个标准色键外只允许 iTerm 主题的附加色键")
 		}
 		if !validAnsiColor(color) {
 			return errors.New("自定义 ANSI 颜色可选色键的取值应为 #RRGGBB 或 #RRGGBBAA 格式")

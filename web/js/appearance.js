@@ -36,31 +36,58 @@ const ansiPalettes = {
 // 与后端 ansiColorKeys 对应；custom 预设仅当 16 色齐全时生效，否则回落柔和。
 const ansiColorKeys = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white', 'brightBlack', 'brightRed', 'brightGreen', 'brightYellow', 'brightBlue', 'brightMagenta', 'brightCyan', 'brightWhite'];
 const completeAnsiColors = colors => !!colors && ansiColorKeys.every(key => validFontColor(colors[key]));
+function colorsForAnsiScheme(scheme) {
+  const variant = document.documentElement.dataset.theme === 'light' ? scheme?.lightColors : scheme?.darkColors;
+  return completeAnsiColors(variant) ? variant : scheme?.colors;
+}
 // 当前应用的导入方案（16 色齐全才算生效，缺失或残缺回落预设）。
 function activeAnsiScheme() {
   if (appearance.ansiPalette !== 'custom') return null;
   const scheme = (appearance.ansiSchemes || []).find(item => item.name === appearance.ansiScheme);
-  return scheme && completeAnsiColors(scheme.colors) ? scheme : null;
+  return scheme && completeAnsiColors(colorsForAnsiScheme(scheme)) ? scheme : null;
 }
-// 方案的可选非 ANSI 键与 xterm 主题属性同名（foreground/cursor/cursorAccent/
-// selectionBackground/selectionForeground/background），随色板一并展开即生效；
-// 文件没有的键保持字体前景与内置选区色。background 即 iTerm 方案的背景色
-// （含其 Alpha 透明度），默认作终端底色，配色方案页可关闭回到完全透明。
+// xterm's theme properties plus iTerm colors handled by the DOM adapter.
+// Imported background colors are retained as metadata; the terminal stays transparent.
 function terminalTheme() {
   // custom 表示应用了导入的配色方案：按名称在方案库里找色板，缺失或残缺回落柔和。
   const scheme = activeAnsiScheme();
-  const palette = { ...(scheme ? scheme.colors : (ansiPalettes[appearance.ansiPalette] || ansiPalettes.soft)) };
-  if (appearance.ansiSchemeBackground === false) delete palette.background;
+  const colors = scheme ? colorsForAnsiScheme(scheme) : (ansiPalettes[appearance.ansiPalette] || ansiPalettes.soft);
+  const palette = {};
+  // iTerm-only decoration colors are rendered separately, never passed as
+  // unknown properties to xterm's theme API.
+  for (const key of [...ansiColorKeys, 'foreground', 'cursor', 'cursorAccent', 'selectionBackground', 'selectionForeground']) {
+    if (validFontColor(colors[key])) palette[key] = colors[key];
+  }
   return { background: '#00000000', foreground: colorForFont(), cursor: colorForFont(), selectionBackground: '#7195aa66', ...palette };
 }
 function applyTerminalAppearanceColors() {
   // 方案含前景色键时终端文字色随方案（本机提示符回显区同色），否则仍随字体颜色。
   const scheme = activeAnsiScheme();
-  const color = scheme && validFontColor(scheme.colors.foreground) ? scheme.colors.foreground : colorForFont();
+  const colors = colorsForAnsiScheme(scheme), theme = terminalTheme();
+  const color = theme.foreground;
   document.documentElement.style.setProperty('--terminal-foreground', color);
-  for (const state of sessions.values()) state.term.options.theme = terminalTheme();
+  // Paint the default background once, including padding and unused rows.
+  // The scrollable xterm layer stays transparent (also for translucent themes).
+  document.documentElement.style.setProperty('--terminal-background', theme.background);
+  for (const key of ['bold', 'link', 'underline']) {
+    if (validFontColor(colors?.[key])) document.documentElement.style.setProperty(`--terminal-${key}`, colors[key]);
+    else document.documentElement.style.removeProperty(`--terminal-${key}`);
+  }
+  for (const state of sessions.values()) state.term.options.theme = theme;
   const preview = document.getElementById('font-preview-text');
   if (preview) preview.style.color = colorForFont();
+}
+window.addEventListener('cloudshell:theme', () => applyTerminalAppearanceColors());
+function syncTerminalBackground(state = current()) {
+  // OSC 11/111 may change/reset an individual session's background. Keep the
+  // full-area fill in sync with xterm, including when switching between tabs.
+  const color = state?.term?._core?._themeService?.colors?.background?.css || terminalTheme().background;
+  document.documentElement.style.setProperty('--terminal-background', color);
+}
+function installTerminalBackground(state) {
+  state.term?._core?._themeService?.onChangeColors?.(() => {
+    if (current() === state) syncTerminalBackground(state);
+  });
 }
 
 async function staticJSON(path) {
@@ -148,15 +175,25 @@ function installTerminalFontMetrics(state) {
   factory.createRow = function (...args) {
     const spans = createRow.apply(this,args), line = args[0], cellWidth = args[7], pieces = [];
     if (!line?.loadCell || !Number.isFinite(cellWidth) || cellWidth <= 0) return spans;
+    const colors = colorsForAnsiScheme(activeAnsiScheme());
     let column = 0;
     for (const span of spans) {
       const text = span.textContent, cells = []; let length = 0;
+      const selected = span.classList.contains('xterm-decoration-top'), cursor = span.classList.contains('xterm-cursor');
       while (length < text.length && column < line.length) {
         const cell = line.loadCell(column,this._workCell), width = cell.getWidth();
         if (!width) { column++; continue; }
         let chars = cell.isInvisible() ? ' ' : cell.getChars() || ' ';
         if (chars === ' ' && (cell.isUnderline() || cell.isOverline())) chars = '\u00a0';
-        cells.push({ text:chars, column, width }); length += chars.length; column += width;
+        // Keep explicit ANSI/truecolor, reverse video, selection and cursor
+        // colors intact. iTerm's Bold Color only affects default foreground.
+        // loadCell reuses its work cell and leaves extended data stale when the
+        // next cell has no extended attributes; check its flag before urlId.
+        const link = colors?.link && !cell.isInvisible() && ((cell.hasExtendedAttrs() && cell.extended?.urlId) || (args[9] >= 0 && column >= args[9] && column <= args[10]));
+        const role = colors && !selected && !cursor && !cell.isInverse() && !cell.isInvisible()
+          ? (link && colors?.link ? 'link' : cell.isBold() && cell.isFgDefault() && colors?.bold ? 'bold' : '') : '';
+        const underline = !!colors?.underline && !!cell.isUnderline();
+        cells.push({ text:chars, column, width, role, underline }); length += chars.length; column += width;
       }
       // Leave unexpected future renderer forms intact rather than guessing at
       // Unicode width or splitting combining/supplementary characters.
@@ -165,19 +202,18 @@ function installTerminalFontMetrics(state) {
     }
     const output = [], height = renderer.dimensions.css.cell.height;
     for (const {span,cells} of pieces) {
-      const hasLines = cells.some(cell => terminalBoxGlyph(cell.text));
       const runs = [];
-      if (hasLines) {
-        for (const cell of cells) {
-          const previous = runs.at(-1), box = terminalBoxGlyph(cell.text);
-          if (previous && !!previous.box === !!box) { previous.text += cell.text; previous.width += cell.width; if (box) previous.box.push({glyph:box,width:cell.width}); }
-          else runs.push({...cell,box:box?[{glyph:box,width:cell.width}]:null});
-        }
-      } else if (cells.length) runs.push({text:span.textContent,column:cells[0].column,width:cells.reduce((n,cell)=>n+cell.width,0)});
+      for (const cell of cells) {
+        const previous = runs.at(-1), box = terminalBoxGlyph(cell.text);
+        if (previous && !!previous.box === !!box && previous.role === cell.role && previous.underline === cell.underline) { previous.text += cell.text; previous.width += cell.width; if (box) previous.box.push({glyph:box,width:cell.width}); }
+        else runs.push({...cell,box:box?[{glyph:box,width:cell.width}]:null});
+      }
       for (const run of runs) {
         const element = runs.length === 1 ? span : span.cloneNode(false);
         element.textContent = run.text; element.style.position = 'absolute'; element.style.left = `${run.column*cellWidth}px`; element.style.width = `${run.width*cellWidth}px`;
         element.dataset.terminalColumn = run.column;
+        if (run.role) element.style.color = `var(--terminal-${run.role})`;
+        if (run.underline) element.style.textDecorationColor = 'var(--terminal-underline)';
         if (run.box) {
           element.classList.add('terminal-box-glyph');
           element.append(drawTerminalBoxGlyph(run.box,run.width*cellWidth,height));

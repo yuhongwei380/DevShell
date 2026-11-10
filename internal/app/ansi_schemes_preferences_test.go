@@ -197,17 +197,74 @@ func TestAnsiSchemesExtraColorKeys(t *testing.T) {
 			t.Fatalf("%s: want %q, got %v", item.name, item.want, err)
 		}
 	}
-	// ansiSchemeBackground 开关：nil（缺省）= 跟随方案背景色，布尔可来回切换。
-	if saved.AnsiSchemeBackground != nil {
-		t.Fatal("default should stay unset (on)", *saved.AnsiSchemeBackground)
+
+}
+
+func TestAnsiSchemesItermModesAndDecorations(t *testing.T) {
+	root := t.TempDir()
+	store, err := OpenStore(root)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if saved, err = store.PatchAppearance(preferencePatch(t, `{"ansiSchemeBackground":false}`)); err != nil || saved.AnsiSchemeBackground == nil || *saved.AnsiSchemeBackground {
-		t.Fatal("off should persist", err, saved.AnsiSchemeBackground)
+	colors := strings.Replace(fullAnsiColors, `"brightWhite":"#ECF0F1"`, `"brightWhite":"#ECF0F1","bold":"#ABCDEF","link":"#112233","underline":"#445566","tab":"#123456","match":"#FEDCBA","cursorGuide":"#11111140","badge":"#FF000080"`, 1)
+	patch := `{"ansiPalette":"custom","ansiScheme":"明暗主题","ansiSchemes":[{"name":"明暗主题","colors":` + colors + `,"lightColors":` + fullAnsiColors + `,"darkColors":` + alternateAnsiColors + `}]}`
+	saved, err := store.PatchAppearance(preferencePatch(t, patch))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if saved, err = store.PatchAppearance(preferencePatch(t, `{"ansiSchemeBackground":true}`)); err != nil || saved.AnsiSchemeBackground == nil || !*saved.AnsiSchemeBackground {
-		t.Fatal("on should persist", err, saved.AnsiSchemeBackground)
+	for key, expected := range map[string]string{"bold": "#abcdef", "link": "#112233", "underline": "#445566", "tab": "#123456", "match": "#fedcba", "cursorGuide": "#11111140", "badge": "#ff000080"} {
+		if saved.AnsiSchemes[0].Colors[key] != expected {
+			t.Fatalf("%s lost in preset: %v", key, saved.AnsiSchemes[0])
+		}
 	}
-	if _, err = store.PatchAppearance(preferencePatch(t, `{"ansiSchemeBackground":"yes"}`)); err == nil || !strings.Contains(err.Error(), "格式无效") {
-		t.Fatal("non-boolean switch should be rejected", err)
+	// Returned and cloned snapshots cannot mutate either mode in the Store.
+	saved.AnsiSchemes[0].LightColors["red"] = "#000000"
+	saved.AnsiSchemes[0].DarkColors["red"] = "#000000"
+	reopened, err := OpenStore(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, snapshot := range []Appearance{store.List().Appearance, reopened.List().Appearance} {
+		scheme := snapshot.AnsiSchemes[0]
+		if scheme.LightColors["red"] != "#c0392b" || scheme.DarkColors["red"] != "#111111" || scheme.Colors["bold"] != "#abcdef" || snapshot.AnsiScheme != "明暗主题" {
+			t.Fatal("mode colors changed or were lost on reload", snapshot)
+		}
+	}
+	for _, bad := range []string{
+		strings.Replace(patch, `"lightColors":`+fullAnsiColors, `"lightColors":{}`, 1),
+		strings.Replace(patch, `"darkColors":`+alternateAnsiColors, `"darkColors":{"red":"#ff0000"}`, 1),
+		strings.Replace(patch, `"bold":"#ABCDEF"`, `"bold":"red"`, 1),
+	} {
+		if _, err := store.PatchAppearance(preferencePatch(t, bad)); err == nil {
+			t.Fatal("invalid mode or decoration accepted", bad)
+		}
+	}
+	if got := store.List().Appearance.AnsiSchemes[0]; got.LightColors["red"] != "#c0392b" || got.Colors["bold"] != "#abcdef" {
+		t.Fatal("failed patch changed the saved scheme", got)
+	}
+}
+
+func TestAnsiSchemesRetiredBackgroundPreference(t *testing.T) {
+	store, err := OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var legacy Appearance
+	if err := json.Unmarshal([]byte(`{"ansiSchemeBackground":true,"ansiPalette":"custom","ansiScheme":"旧主题","ansiSchemes":[{"name":"旧主题","colors":`+fullAnsiColors+`}]}`), &legacy); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := store.SaveAppearance(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(saved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "ansiSchemeBackground") || saved.AnsiScheme != "旧主题" {
+		t.Fatal("retired preference survived or changed the theme", string(data))
+	}
+	if _, err := store.PatchAppearance(preferencePatch(t, `{"ansiSchemeBackground":true}`)); err == nil {
+		t.Fatal("retired background feature can still be enabled")
 	}
 }

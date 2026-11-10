@@ -31,6 +31,10 @@ body { transform-origin:0 0; }
 .terminal-panel { isolation:isolate; }
 .terminal-panel > * { position:relative; z-index:1; }
 .terminal-output,.terminal-session,dialog textarea { font-family:var(--terminal-family,monospace); }
+/* Program-requested backgrounds (OSC 11) fill the output area once, including
+   unused cell space. Imported themes keep the transparent default. */
+.terminal-output { background:var(--terminal-background,transparent); }
+.terminal-session .xterm .xterm-scrollable-element { background-color:transparent !important; }
 /* Match measurement and rendering; contextual ligatures must not change cells. */
 .terminal-grid-metrics :is(.xterm-rows,.xterm-char-measure-element,.xterm-width-cache-measure-container) { font-variant-ligatures:none; font-feature-settings:"liga" 0,"calt" 0; font-kerning:none; }
 .terminal-grid-metrics .xterm-rows > div { position:relative; }
