@@ -5,9 +5,9 @@
 // from the top; opening a connection closes the list, like any menu.
 // Pinning lives in the session tab's right-click menu (“加入收藏夹” /
 // “取消收藏”); a quick-connect session is persisted first. Each list click
-// opens a fresh session tab (its own connection), like double-clicking the
-// server list; tabs of one connection are labelled 名称 SSH[0], SSH[1]… and
-// each tab can be renamed on its own via “重命名会话”.
+// dials its own connection (independent sessions, numbered 名称 · 会话 N —
+// never the 名称 SSH[n] label that marks channel tabs sharing one SSH
+// connection via double-click); each tab can be renamed on its own.
 // The id list lives in appearance.layout under one key, whitelisted by the
 // backend layout validator (validSavedLayoutKey in preferences.go).
 window.DengPinnedNav = (() => {

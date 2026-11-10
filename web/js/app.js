@@ -169,9 +169,15 @@ function sessionDisplayName(state) {
   // 会话未重命名时，默认读取收藏夹、服务器管理里这份连接的名称。
   const name = (state?.sessionName || '').trim() || profileFor(state)?.name || '服务器';
   if (!state || !state.profileId) return name;
+  // SSH[n] 只属于共用同一条 SSH 连接的渠道会话（双击已连接标签打开）：
+  // 组内按标签顺序 SSH[0]、SSH[1]… 区分。
+  if (state.channelRoot) {
+    const group = [...sessions.values()].filter(s => s.channelRoot === state.channelRoot).sort((a, b) => (a.tabOrder ?? 0) - (b.tabOrder ?? 0));
+    if (group.length > 1) return `${name} SSH[${group.indexOf(state)}]`;
+  }
+  // 收藏夹、服务器列表点开的是各自重新拨号的独立连接，同连接开多个仍按会话编号区分。
   const peers = [...sessions.values()].filter(s => s.profileId === state.profileId).sort((a, b) => (a.tabOrder ?? 0) - (b.tabOrder ?? 0));
-  // 同一份连接的多个标签（含双击已连接标签打开的渠道会话）按 SSH[0]、SSH[1]… 区分。
-  return peers.length > 1 ? `${name} SSH[${peers.indexOf(state)}]` : name;
+  return peers.length > 1 ? `${name} · 会话 ${peers.indexOf(state) + 1}` : name;
 }
 // 重命名会话：只给这个标签设自定义显示名，不回写连接配置——服务器管理与
 // 收藏夹里这份连接的名称不变；留空即清除自定义名，恢复默认读取连接名称。
@@ -398,7 +404,9 @@ async function cloneSessionChannel(state) {
     if (!info?.id) throw new Error('后端没有返回新会话');
     const clone = makeSessionState(info);
     clone.tabOrder = nextSessionOrder++;
-    clone.sessionName = state.sessionName || ''; // 渠道继承源会话的自定义显示名，标签再按 SSH[n] 区分
+    clone.sessionName = state.sessionName || ''; // 渠道继承源会话的自定义显示名
+    state.channelRoot ||= state.id;              // 首次复制时把源会话也登记进这条连接的渠道组
+    clone.channelRoot = state.channelRoot;       // 渠道组内的标签按 SSH[0]、SSH[1]… 命名
     clone.announceConnectionReady = true;
     sessions.set(clone.id, clone);
     // 克隆不是占位标签:非占位标签在 createTerminal 内自动接入终端渠道,这里绝不

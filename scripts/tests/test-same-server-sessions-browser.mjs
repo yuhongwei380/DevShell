@@ -56,7 +56,7 @@ try {
   await finish('second');
   assert.equal(await page.evaluate(()=>sessions.size),2);
   assert.equal(await page.evaluate(()=>qa.deleted.length),0,'new session closed the first');
-  assert.deepEqual(await page.$$eval('.session-tab-label', nodes=>nodes.map(n=>n.textContent)),['同一服务器 SSH[0]','同一服务器 SSH[1]']);
+  assert.deepEqual(await page.$$eval('.session-tab-label', nodes=>nodes.map(n=>n.textContent)),['同一服务器 · 会话 1','同一服务器 · 会话 2'],'favourites-style repeat dials stay independent sessions');
   await page.evaluate(()=>{
     activate('first');DengCommandComposer.open({id:'p',name:'p',body:'echo [p#1 value]',appendCR:true});
     window.qaInitialTarget = document.querySelector('#composer-target').value;
@@ -107,6 +107,7 @@ try {
   await page.waitForFunction(()=>qa.channel==='/api/sessions/third/channel'&&sessions.get('cloned')?.connected);
   assert.equal(await page.evaluate(()=>sessions.size),4);
   assert(await page.evaluate(()=>!!qa.sockets.cloned),'the clone tab opens its own terminal channel');
+  assert.deepEqual(await page.$$eval('.session-tab-label',nodes=>nodes.map(n=>n.textContent).filter(t=>t.includes(' SSH['))),['同一服务器 SSH[0]','同一服务器 SSH[1]'],'only the two channel tabs sharing the connection carry SSH[n] labels');
   checks.push('double-click on a connected tab opens a same-server channel session');
   await page.screenshot({path:stage+'/same-server-sessions.png'});
   assert.deepEqual(errors,[]);
