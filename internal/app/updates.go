@@ -72,8 +72,10 @@ func currentReleaseNotesVersions() []string {
 // Release assets must be named exactly: up.exe / up.exe.json,
 // up.deb / up.deb.json, up.pkg.tar.zst / up.pkg.tar.zst.json,
 // DevShell-macos-universal.zip with up-macos-arm64.json / up-macos-amd64.json.
-const updateReleaseDownload = "https://github.com/yuhongwei380/DevShell/releases/latest/download/"
-const UpdateManifestURL = updateReleaseDownload + "up.deb.json"
+// var, not const: the mirror connectivity probe tests point the stable
+// manifest URL at a local server, like the other update source vars.
+var updateReleaseDownload = "https://github.com/yuhongwei380/DevShell/releases/latest/download/"
+var UpdateManifestURL = updateReleaseDownload + "up.deb.json"
 
 // macOSBundleAsset is the universal application bundle archive built by
 // scripts/build/build-macos.py; both architecture descriptors point at it.
@@ -83,6 +85,11 @@ const updateTimeout = 3 * time.Second
 // Manual checks wait on the network in front of the user, unlike the
 // non-blocking startup probe, so they get a longer budget.
 const manualUpdateTimeout = 10 * time.Second
+
+// mirrorProbeTimeout bounds one accelerator connectivity probe request; the
+// endpoint runs two probes (discovery feed and stable manifest) so the
+// request context allows twice the budget.
+const mirrorProbeTimeout = 10 * time.Second
 const maximumUpdateSize int64 = 1 << 30
 
 var updateHashPattern = regexp.MustCompile(`^[a-fA-F0-9]{64}$`)
@@ -604,6 +611,22 @@ func (a *App) registerUpdateHTTP(mux *http.ServeMux) {
 		result.Channel = channel
 		a.setUpdateResult(result)
 		writeJSON(w, result)
+	})
+	mux.HandleFunc("POST /api/updates/mirror-test", func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			Mirror string `json:"mirror"`
+		}
+		if !decode(w, r, &request) {
+			return
+		}
+		mirror, err := normalizeUpdateMirror(request.Mirror)
+		if err != nil {
+			respond(w, nil, err)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 2*mirrorProbeTimeout)
+		defer cancel()
+		writeJSON(w, testUpdateMirrorAt(ctx, updateClient(mirrorProbeTimeout, mirror), mirror, currentUpdatePlatform()))
 	})
 	mux.HandleFunc("POST /api/updates/download", func(w http.ResponseWriter, r *http.Request) {
 		var request struct {

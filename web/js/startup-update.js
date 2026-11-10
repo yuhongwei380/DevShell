@@ -55,17 +55,25 @@ window.DengUpdates={checkNow,showUpdate,mirrorSettings};
 const MIRROR_PRESETS=[['直连 GitHub（默认）',''],['gh-proxy.org','https://gh-proxy.org'],['gh-proxy.com','https://gh-proxy.com'],['ghfast.top','https://ghfast.top'],['mirror.mikus.ink','https://mirror.mikus.ink']];
 function mirrorSettings(){return new Promise(resolve=>{
  const dialog=document.createElement('dialog');dialog.className='manager-dialog startup-update-dialog';dialog.id='update-mirror-dialog';
- dialog.innerHTML='<div class="dialog-heading"><div><h2>GitHub 更新加速域名</h2><p id="update-mirror-note">网络受限时可改用镜像下载更新，清单与安装包仍强制校验</p></div><button type="button" class="icon-button" aria-label="关闭加速设置"><svg><use href="#i-close"/></svg></button></div><div class="update-mirror-body"><label for="update-mirror-preset">常用加速域名</label><select id="update-mirror-preset">'+MIRROR_PRESETS.map(([label,value])=>`<option value="${value}">${label}</option>`).join('')+'<option value="__custom">自定义…</option></select><label for="update-mirror-input">自定义地址（https，仅主机名）</label><input id="update-mirror-input" placeholder="例如 https://gh-proxy.org" spellcheck="false" autocomplete="off"><p class="update-mirror-help">下载仍会校验产品、平台、构建号与 SHA-256；加速域名失败时自动回落直连。留空即直连。</p><p id="update-mirror-error" role="alert"></p></div><div class="dialog-buttons"><button type="button" class="secondary-button" id="update-mirror-clear">清除（直连）</button><button type="button" class="primary-button" id="update-mirror-save">保存</button></div>';
- const preset=dialog.querySelector('#update-mirror-preset'),input=dialog.querySelector('#update-mirror-input'),error=dialog.querySelector('#update-mirror-error');
+ dialog.innerHTML='<div class="dialog-heading"><div><h2>GitHub 更新加速域名</h2><p id="update-mirror-note">网络受限时可改用镜像下载更新，清单与安装包仍强制校验</p></div><button type="button" class="icon-button" aria-label="关闭加速设置"><svg><use href="#i-close"/></svg></button></div><div class="update-mirror-body"><label for="update-mirror-preset">常用加速域名</label><select id="update-mirror-preset">'+MIRROR_PRESETS.map(([label,value])=>`<option value="${value}">${label}</option>`).join('')+'<option value="__custom">自定义…</option></select><label for="update-mirror-input">自定义地址（https，仅主机名）</label><input id="update-mirror-input" placeholder="例如 https://gh-proxy.org" spellcheck="false" autocomplete="off"><p class="update-mirror-help">下载仍会校验产品、平台、构建号与 SHA-256；加速域名失败时自动回落直连。留空即直连。</p><p id="update-mirror-test" class="update-mirror-help"></p><p id="update-mirror-error" role="alert"></p></div><div class="dialog-buttons"><button type="button" class="secondary-button" id="update-mirror-clear">清除（直连）</button><button type="button" class="primary-button" id="update-mirror-save">保存</button></div>';
+ const preset=dialog.querySelector('#update-mirror-preset'),input=dialog.querySelector('#update-mirror-input'),error=dialog.querySelector('#update-mirror-error'),testLine=dialog.querySelector('#update-mirror-test');
  const fill=value=>{const known=MIRROR_PRESETS.find(([,v])=>v===value);preset.value=known?value:'__custom';if(known)input.value='';else input.value=value||'';};
+  const selected=()=>preset.value==='__custom'?input.value:preset.value;
+  // Connectivity is probed automatically (on open, on preset switch and
+  // after saving) so an accelerator that cannot proxy the update URLs is
+  // obvious here instead of surfacing later as a failed update check.
+  let testSeq=0;
+  const probeText=p=>{if(p.ok)return `正常（${p.latencyMS}ms）`;return `不可用（${p.reason==='network'?'无法连接':p.reason==='unexpected-body'?'返回内容异常':`HTTP ${p.status||'请求失败'}`}）`};
+  const runTest=async value=>{const seq=++testSeq,mirror=String(value||'').trim();testLine.textContent='正在自动检测连通性…';try{const result=await post('/api/updates/mirror-test',{mirror});if(seq!==testSeq)return;const parts=(result.probes||[]).map(p=>`${p.role==='list'?'更新列表源':'更新下载源'} ${probeText(p)}`);testLine.textContent=`连通性检测 · ${result.host||'直连 GitHub'}：`+(parts.join(' · ')||'无可探测地址');}catch(reason){if(seq===testSeq)testLine.textContent='连通性检测未完成：'+(reason?.message||reason)}};
  const current=async()=>{try{const config=await api('/api/config');fill(config?.appearance?.updateMirror||'')}catch{fill('')}};
- const commit=async value=>{error.textContent='';try{await post('/api/appearance/patch',{updateMirror:String(value||'').trim()});toast(String(value||'').trim()?'已保存，检查与下载更新将优先使用该加速域名':'已清除加速域名，恢复直连 GitHub');dialog.close();}catch(reason){error.textContent=reason?.message||String(reason)}};
- preset.onchange=()=>{if(preset.value!=='__custom')input.value=''};
+ const commit=async value=>{error.textContent='';try{await post('/api/appearance/patch',{updateMirror:String(value||'').trim()});toast(String(value||'').trim()?'已保存，检查与下载更新将优先使用该加速域名':'已清除加速域名，恢复直连 GitHub');runTest(value);}catch(reason){error.textContent=reason?.message||String(reason)}};
+ preset.onchange=()=>{if(preset.value!=='__custom')input.value='';runTest(selected())};
+  input.onchange=()=>{if(preset.value==='__custom')runTest(input.value)};
  dialog.querySelector('#update-mirror-save').onclick=()=>commit(preset.value==='__custom'?input.value:preset.value);
  dialog.querySelector('#update-mirror-clear').onclick=()=>{fill('');commit('')};
  const close=()=>dialog.close();dialog.querySelector('.icon-button').onclick=close;dialog.oncancel=event=>{event.preventDefault();close()};
  dialog.addEventListener('close',()=>{dialog.remove();resolve()},{once:true});
- document.body.append(dialog);dialog.showModal();current();
+ document.body.append(dialog);dialog.showModal();current().finally(()=>runTest(selected()));
 });}
 document.addEventListener('DOMContentLoaded',async()=>{let timer;try{if(window.DEVSHELL?.detachedNonce)return;const check=Promise.race([api('/api/updates/check').catch(()=>null),new Promise(resolve=>{timer=setTimeout(()=>resolve(null),3000)})]);const result=await check;clearTimeout(timer);if(result?.status==='available')await showUpdate(result);}catch(e){console.warn('启动更新检查未完成',e)}finally{clearTimeout(timer);resolveStartup();window.dispatchEvent(new Event('dengshell:startup-ready'))}},{once:true});
 })();

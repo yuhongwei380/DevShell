@@ -1,9 +1,13 @@
 package app
 
 import (
+	"context"
 	"errors"
+	"io"
+	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
 
 // normalizeUpdateMirror validates and normalizes the optional GitHub
@@ -62,4 +66,71 @@ func updateFetchAttempts(mirror, target string) []string {
 		return []string{target}
 	}
 	return []string{applyUpdateMirror(mirror, target), target}
+}
+
+// UpdateMirrorProbe reports one connectivity probe of the accelerator (or a
+// direct connection) against a URL the update flow would actually fetch:
+// the discovery feed ("list") and the stable-channel manifest ("download").
+// A 200 whose body does not carry the expected signature (mirror error
+// pages) is reported as a failure rather than success.
+type UpdateMirrorProbe struct {
+	Role      string `json:"role"`
+	OK        bool   `json:"ok"`
+	Status    int    `json:"status"`
+	LatencyMS int64  `json:"latencyMS"`
+	Reason    string `json:"reason,omitempty"`
+}
+
+type UpdateMirrorTest struct {
+	Host   string              `json:"host"`
+	Probes []UpdateMirrorProbe `json:"probes"`
+}
+
+// testUpdateMirrorAt probes the mirror with the same client the update flow
+// uses (same proxy handling and redirect allowlist), so the result reflects
+// what a real check would experience. The two targets match the real
+// channels: the discovery feed only the rc channel fetches, and the stable
+// /releases/latest manifest that the release channel has always used (that
+// channel itself is unchanged by the feed switch).
+func testUpdateMirrorAt(ctx context.Context, client *http.Client, mirror, platform string) UpdateMirrorTest {
+	feedTarget := updateReleaseFeedURL
+	manifestTarget, _ := updateAddress(platform)
+	targets := []struct{ role, url, signature string }{
+		{"list", applyUpdateMirror(mirror, feedTarget), "<feed"},
+		{"download", applyUpdateMirror(mirror, manifestTarget), `{"`},
+	}
+	test := UpdateMirrorTest{Host: updateMirrorHost(mirror)}
+	for _, target := range targets {
+		probe := UpdateMirrorProbe{Role: target.role}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, target.url, nil)
+		if err != nil {
+			probe.Reason = "invalid-url"
+			test.Probes = append(test.Probes, probe)
+			continue
+		}
+		req.Header.Set("User-Agent", "DevShell/"+strings.TrimPrefix(ApplicationVersion, "v"))
+		req.Header.Set("Cache-Control", "no-cache")
+		started := time.Now()
+		response, err := client.Do(req)
+		if err != nil {
+			probe.LatencyMS = time.Since(started).Milliseconds()
+			probe.Reason = "network"
+			test.Probes = append(test.Probes, probe)
+			continue
+		}
+		data, _ := io.ReadAll(io.LimitReader(response.Body, 8193))
+		response.Body.Close()
+		probe.LatencyMS = time.Since(started).Milliseconds()
+		probe.Status = response.StatusCode
+		switch {
+		case response.StatusCode != http.StatusOK:
+			probe.Reason = "status"
+		case !strings.Contains(string(data), target.signature):
+			probe.Reason = "unexpected-body"
+		default:
+			probe.OK = true
+		}
+		test.Probes = append(test.Probes, probe)
+	}
+	return test
 }

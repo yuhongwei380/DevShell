@@ -175,3 +175,96 @@ func TestUpdateMirrorPersistsNormalizedThroughPatch(t *testing.T) {
 		t.Fatal("store leaked a mirror after clearing")
 	}
 }
+
+func TestTestUpdateMirrorAtReportsPerRoleHealth(t *testing.T) {
+	platform := currentUpdatePlatform()
+	manifestName, _ := updateAssetNames(platform)
+	if manifestName == "" {
+		t.Skip("platform without built-in update assets")
+	}
+	oldFeed, oldDownload := updateReleaseFeedURL, updateReleaseDownload
+	defer func() { updateReleaseFeedURL, updateReleaseDownload = oldFeed, oldDownload }()
+	feedXML := releaseFeedXML("v9.9.9")
+	hub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/feed":
+			w.Header().Set("Content-Type", "application/atom+xml")
+			w.Write([]byte(feedXML))
+		case "/dl/" + manifestName:
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"schema_version":2,"build":42}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer hub.Close()
+	mode := "healthy"
+	mirror := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/"+updateReleaseFeedURL {
+			switch mode {
+			case "healthy":
+				w.Header().Set("Content-Type", "application/atom+xml")
+				w.Write([]byte(feedXML))
+			case "no-list":
+				http.Error(w, "forbidden", http.StatusForbidden)
+			default:
+				w.Write([]byte("<html>blocked by origin allowlist</html>"))
+			}
+			return
+		}
+		if r.URL.Path == "/"+updateReleaseDownload+manifestName {
+			switch mode {
+			case "garbage":
+				w.Write([]byte("<html>blocked by origin allowlist</html>"))
+			default:
+				w.Header().Set("Content-Type", "application/json")
+				w.Write([]byte(`{"schema_version":2,"build":42}`))
+			}
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer mirror.Close()
+	updateReleaseFeedURL = "https://example.invalid/feed"
+	updateReleaseDownload = "https://example.invalid/dl/"
+	client := updateClient(5*time.Second, mirror.URL)
+
+	byRole := func(test UpdateMirrorTest) map[string]UpdateMirrorProbe {
+		probes := map[string]UpdateMirrorProbe{}
+		for _, probe := range test.Probes {
+			probes[probe.Role] = probe
+		}
+		return probes
+	}
+	test := testUpdateMirrorAt(context.Background(), client, mirror.URL, platform)
+	probes := byRole(test)
+	if test.Host != "127.0.0.1" || len(probes) != 2 {
+		t.Fatalf("healthy mirror probes wrong: %+v", test)
+	}
+	if !probes["list"].OK || !probes["download"].OK {
+		t.Fatalf("healthy mirror reported failures: %+v", test.Probes)
+	}
+
+	mode = "no-list"
+	probes = byRole(testUpdateMirrorAt(context.Background(), client, mirror.URL, platform))
+	if probes["list"].OK || probes["list"].Reason != "status" || probes["list"].Status != http.StatusForbidden {
+		t.Fatalf("mirror without API-style proxying misreported: %+v", probes["list"])
+	}
+	if !probes["download"].OK {
+		t.Fatalf("working download role misreported: %+v", probes["download"])
+	}
+
+	mode = "garbage"
+	probes = byRole(testUpdateMirrorAt(context.Background(), client, mirror.URL, platform))
+	if probes["list"].OK || probes["list"].Reason != "unexpected-body" || probes["download"].OK || probes["download"].Reason != "unexpected-body" {
+		t.Fatalf("200-with-HTML bodies must not count as connectivity: %+v", test.Probes)
+	}
+
+	updateReleaseFeedURL = hub.URL + "/feed"
+	updateReleaseDownload = hub.URL + "/dl/"
+	test = testUpdateMirrorAt(context.Background(), updateClient(5*time.Second, ""), "", platform)
+	probes = byRole(test)
+	if test.Host != "" || !probes["list"].OK || !probes["download"].OK {
+		t.Fatalf("direct probes wrong: %+v", test)
+	}
+}
