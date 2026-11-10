@@ -61,7 +61,7 @@ window.DengAnsiSchemes = (() => {
     if (busy) return;
     busy = true; errorText.textContent = '';
     try { await action(); }
-    catch (error) { fail(error?.message || String(error)); }
+    catch (error) { const message = error?.message || String(error); fail(message); toast(`配色未能保存：${message}`); }
     finally { busy = false; render(); }
   }
   // 设置页的 ANSI 预设下拉：静态项为三套预设，导入的方案挂 optgroup，值前缀 scheme:。
