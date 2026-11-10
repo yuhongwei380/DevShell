@@ -12,8 +12,8 @@ import (
 )
 
 // The manual update check offers two channels: "release" stays on the
-// stable /releases/latest assets, "rc" walks the full release list where
-// prereleases live (which also lets a stable install opt into a newer rc
+// stable /releases/latest assets, "rc" reads the public releases feed where
+// prereleases publish (which also lets a stable install opt into a newer rc
 // publish). The empty channel keeps the shipped build's default discovery.
 func TestUpdateChannelDiscoverySelection(t *testing.T) {
 	if got := updateWantsReleaseList(""); got != isReleaseCandidateBuild() {
@@ -47,27 +47,24 @@ func TestUpdateChannelRcFindsPrereleasePublish(t *testing.T) {
 	if strings.HasPrefix(platform, "linux-") {
 		t.Skip("Linux payloads are no longer published")
 	}
-	manifestName, artifactName := updateAssetNames(platform)
+	manifestName, _ := updateAssetNames(platform)
 	if manifestName == "" {
 		t.Skip("platform without built-in update assets")
 	}
-	oldList, oldBase := updateReleaseListURL, updateReleaseDownloadBase
-	defer func() { updateReleaseListURL, updateReleaseDownloadBase = oldList, oldBase }()
+	oldFeed, oldBase := updateReleaseFeedURL, updateReleaseDownloadBase
+	defer func() { updateReleaseFeedURL, updateReleaseDownloadBase = oldFeed, oldBase }()
 	build := ApplicationBuild + 1
 	tag := ApplicationVersion + "-rc.9-build" + strconv.FormatUint(build, 10)
-	list, err := json.Marshal([]githubRelease{{TagName: tag, Prerelease: true, Assets: []githubReleaseAsset{{Name: manifestName, State: "uploaded"}, {Name: artifactName, State: "uploaded"}}}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	feed := releaseFeedXML(tag)
 	manifest, err := json.Marshal(UpdateDescriptor{SchemaVersion: 2, Build: build, Product: "DevShell", Platform: platform, Version: ApplicationVersion, DisplayVersion: ApplicationVersion + "-rc.9", Notes: "rc 通道发现验证", SHA256: strings.Repeat("a", 64), ExecutableSHA256: strings.Repeat("a", 64), Size: 4096})
 	if err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/releases":
-			w.Header().Set("Content-Type", "application/json")
-			w.Write(list)
+		case "/releases.atom":
+			w.Header().Set("Content-Type", "application/atom+xml")
+			w.Write([]byte(feed))
 		case "/" + tag + "/" + manifestName:
 			w.Header().Set("Content-Type", "application/json")
 			w.Write(manifest)
@@ -76,7 +73,7 @@ func TestUpdateChannelRcFindsPrereleasePublish(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	updateReleaseListURL = server.URL + "/releases"
+	updateReleaseFeedURL = server.URL + "/releases.atom"
 	updateReleaseDownloadBase = server.URL + "/"
 	a, e := New(t.TempDir())
 	if e != nil {

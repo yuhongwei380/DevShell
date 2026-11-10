@@ -229,7 +229,7 @@ func noUpdate(reason string) UpdateStatus {
 	platform := currentUpdatePlatform()
 	source, _ := updateAddress(platform)
 	if isReleaseCandidateBuild() {
-		source = updateReleaseListURL
+		source = updateReleaseFeedURL
 	}
 	return UpdateStatus{Status: "none", CurrentVersion: ApplicationDisplayVersion, CurrentBuild: ApplicationBuild, Source: source, Platform: platform, Reason: reason}
 }
@@ -273,11 +273,11 @@ func (a *App) getUpdateResult() UpdateStatus {
 }
 
 // updateWantsReleaseList decides which discovery endpoint one check uses.
-// The full release list carries rc prereleases, so it is required for rc
-// builds and for the explicit "rc" manual channel (which lets a stable
-// build opt into a newer rc publish); "release" stays on the stable
-// latest-release assets even for rc builds, and "" keeps the build's
-// default behaviour.
+// The releases feed carries rc publishes, so it is required for rc builds
+// and for the explicit "rc" manual channel (which lets a stable build opt
+// into a newer rc publish); "release" stays on the stable latest-release
+// assets even for rc builds, and "" keeps the build's default behaviour.
+// Neither path consumes the anonymous GitHub REST API quota.
 func updateWantsReleaseList(channel string) bool {
 	switch channel {
 	case "rc":
@@ -314,7 +314,7 @@ func (a *App) updateProbe(ctx context.Context, timeout time.Duration, channel st
 		source, reason, viaMirror := latestReleaseUpdateSource(ctx, client, platform, mirror)
 		if reason != "" {
 			result := noUpdate(reason)
-			result.Source = updateReleaseListURL
+			result.Source = updateReleaseFeedURL
 			if viaMirror {
 				result.Mirror = updateMirrorHost(mirror)
 			}

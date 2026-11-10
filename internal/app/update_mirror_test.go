@@ -113,45 +113,42 @@ func TestUpdateManifestPrefersMirrorThenFallsBackToDirect(t *testing.T) {
 	}
 }
 
-func TestLatestReleaseListGoesThroughMirrorWithDirectFallback(t *testing.T) {
-	old := updateReleaseListURL
-	defer func() { updateReleaseListURL = old }()
+func TestLatestReleaseFeedGoesThroughMirrorWithDirectFallback(t *testing.T) {
+	old := updateReleaseFeedURL
+	defer func() { updateReleaseFeedURL = old }()
 	buildText := strconv.FormatUint(ApplicationBuild+1, 10)
-	list, err := json.Marshal([]githubRelease{{TagName: ApplicationVersion + "-rc.9-build" + buildText, Prerelease: true, Assets: []githubReleaseAsset{{Name: "up.exe.json", State: "uploaded"}, {Name: "up.exe", State: "uploaded"}}}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	feed := releaseFeedXML(ApplicationVersion + "-rc.9-build" + buildText)
 	mirrorSucceeds := true
 	mirror := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if mirrorSucceeds && strings.HasPrefix(r.URL.Path, "/https://api.github.com/") {
-			w.Header().Set("Content-Type", "application/json")
-			w.Write(list)
+		if mirrorSucceeds && strings.HasPrefix(r.URL.Path, "/https://github.com/") {
+			w.Header().Set("Content-Type", "application/atom+xml")
+			w.Write([]byte(feed))
 			return
 		}
 		http.NotFound(w, r)
 	}))
 	defer mirror.Close()
 	direct := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(list)
+		w.Header().Set("Content-Type", "application/atom+xml")
+		w.Write([]byte(feed))
 	}))
 	defer direct.Close()
 	client := &http.Client{Timeout: 5 * time.Second}
 
-	updateReleaseListURL = "https://api.github.com/tests/releases?per_page=100"
+	updateReleaseFeedURL = "https://github.com/tests/releases.atom"
 	source, reason, viaMirror := latestReleaseUpdateSource(context.Background(), client, "windows-amd64", mirror.URL)
 	if reason != "" || !viaMirror {
-		t.Fatalf("release list not served via accelerator mirror: %+v %q", source, reason)
+		t.Fatalf("release feed not served via accelerator mirror: %+v %q", source, reason)
 	}
 	if !strings.Contains(source.manifestURL, "/"+ApplicationVersion+"-rc.9-build"+buildText+"/up.exe.json") || !strings.HasPrefix(source.manifestURL, updateReleaseDownloadBase) {
 		t.Fatalf("download source wrong: %+v", source)
 	}
 
-	updateReleaseListURL = direct.URL + "/releases?per_page=100"
+	updateReleaseFeedURL = direct.URL + "/releases.atom"
 	mirrorSucceeds = false
 	source, reason, viaMirror = latestReleaseUpdateSource(context.Background(), client, "windows-amd64", mirror.URL)
 	if reason != "" || viaMirror {
-		t.Fatalf("mirror failure did not fall back to direct release list: %+v %q", source, reason)
+		t.Fatalf("mirror failure did not fall back to the direct release feed: %+v %q", source, reason)
 	}
 }
 
