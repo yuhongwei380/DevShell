@@ -166,10 +166,26 @@ async function loadProfiles() {
 }
 
 function sessionDisplayName(state) {
-  const name = profileFor(state)?.name || '服务器';
-  if (!state) return name;
+  // 会话未重命名时，默认读取收藏夹、服务器管理里这份连接的名称。
+  const name = (state?.sessionName || '').trim() || profileFor(state)?.name || '服务器';
+  if (!state || !state.profileId) return name;
   const peers = [...sessions.values()].filter(s => s.profileId === state.profileId).sort((a, b) => (a.tabOrder ?? 0) - (b.tabOrder ?? 0));
-  return peers.length > 1 ? `${name} · 会话 ${peers.indexOf(state) + 1}` : name;
+  // 同一份连接的多个标签（含双击已连接标签打开的渠道会话）按 SSH[0]、SSH[1]… 区分。
+  return peers.length > 1 ? `${name} SSH[${peers.indexOf(state)}]` : name;
+}
+// 重命名会话：只给这个标签设自定义显示名，不回写连接配置——服务器管理与
+// 收藏夹里这份连接的名称不变；留空即清除自定义名，恢复默认读取连接名称。
+async function renameSession(state) {
+  if (!state || state.closed) return;
+  const current = (state.sessionName || '').trim();
+  const answer = await ask({ title: '重命名会话', description: '只修改这个会话标签的显示名称，不会改变服务器管理和收藏夹里这份连接的名称；留空恢复使用连接名称。', input: true, value: current || profileFor(state)?.name || '', confirm: '保存' });
+  if (answer === null) return;
+  const name = String(answer).trim();
+  if ([...name].length > 48) { toast('会话名称最长 48 个字符'); return; }
+  if (name === current) return;
+  state.sessionName = name;
+  renderTabs(); renderSessionInfo();
+  toast(name ? `会话已重命名为「${name}」` : '已恢复使用连接名称');
 }
 function releaseConnectionAttempt(state) {
   const key = state.connectionRequestKey;
@@ -382,6 +398,7 @@ async function cloneSessionChannel(state) {
     if (!info?.id) throw new Error('后端没有返回新会话');
     const clone = makeSessionState(info);
     clone.tabOrder = nextSessionOrder++;
+    clone.sessionName = state.sessionName || ''; // 渠道继承源会话的自定义显示名，标签再按 SSH[n] 区分
     clone.announceConnectionReady = true;
     sessions.set(clone.id, clone);
     // 克隆不是占位标签:非占位标签在 createTerminal 内自动接入终端渠道,这里绝不
@@ -415,6 +432,8 @@ function writeTerminalAndWait(state, text = '') {
   });
 }
 async function preserveReconnectTerminal(previous, next) {
+  // 原地重连/换地址替换的是同一个标签：自定义会话名跟着标签走，不随旧会话销毁。
+  next.sessionName = next.sessionName || previous.sessionName || '';
   // Drain xterm's asynchronous write queue, including the final output frame
   // and shell-confirmed history events, before disposing the old renderer.
   await writeTerminalAndWait(previous);
@@ -725,7 +744,8 @@ function renderTabs() {
     tab.dataset.failed = String(!!state.connectionFailed);
     const label = node('span', 'session-tab-text');
     label.append(node('span', 'session-tab-label', profile ? sessionDisplayName(state) : '已删除配置'));
-    const button = node('button'); button.type = 'button'; button.append(node('span', `status-dot ${state.connected ? 'green' : state.pendingConnection ? 'blue' : 'red'}`), label); button.onclick = () => activate(state.id); button.setAttribute('role', 'tab'); button.setAttribute('aria-selected', String(selected)); button.setAttribute('aria-current', selected ? 'page' : 'false'); button.title = profile ? (profile.protocol === 'serial' ? `${profile.name} · ${window.DengSerial.label(profile)}` : profile.protocol === 'local' ? `${profile.name} · 本机` : profile.protocol === 'tcp' ? `${profile.name} · 本机拨出` : `${profile.name} · ${profile.user}@${profile.host}:${profile.port}`) : '已删除配置';
+    const baseName = (state.sessionName || '').trim() || profile?.name;
+    const button = node('button'); button.type = 'button'; button.append(node('span', `status-dot ${state.connected ? 'green' : state.pendingConnection ? 'blue' : 'red'}`), label); button.onclick = () => activate(state.id); button.setAttribute('role', 'tab'); button.setAttribute('aria-selected', String(selected)); button.setAttribute('aria-current', selected ? 'page' : 'false'); button.title = profile ? (profile.protocol === 'serial' ? `${baseName} · ${window.DengSerial.label(profile)}` : profile.protocol === 'local' ? `${baseName} · 本机` : profile.protocol === 'tcp' ? `${baseName} · 本机拨出` : `${baseName} · ${profile.user}@${profile.host}:${profile.port}`) : '已删除配置';
     if (selected && state.connected) tab.classList.add('current-session');
     button.setAttribute('aria-busy', String(!!state.pendingConnection));
     if (state.localOnly) button.title += ` · ${state.connectionMessage}`;

@@ -318,7 +318,7 @@ try {
     tab.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 40 }));
     const buttons = [...document.querySelectorAll('#session-tab-menu button')];
     const items = buttons.map(el => el.textContent.trim());
-    const item = buttons.find(el => el.textContent.includes('重命名连接'));
+    const item = buttons.find(el => el.textContent.includes('重命名会话'));
     if (!item) return { ok: false, items };
     item.click();
     await new Promise(resolve => setTimeout(resolve, 40));
@@ -337,15 +337,15 @@ try {
     return { ok: true, items, dialogOpen, prefilled, label, profileName };
   });
   assert(renameFlow.ok, `tab menu rename flow: ${JSON.stringify(renameFlow)}`);
-  assert(renameFlow.items.includes('重命名连接') && !renameFlow.items.some(text => text.includes('保存连接')));
+  assert(renameFlow.items.includes('重命名会话') && !renameFlow.items.some(text => text.includes('保存连接')));
   // The pin affordance now lives in the tab menu: an unpinned saved session
   // offers 加入收藏夹 (and would flip to 取消收藏 once pinned).
   assert(renameFlow.items.includes('加入收藏夹'), `tab menu must offer pinning: ${renameFlow.items}`);
   assert.equal(renameFlow.dialogOpen, true);
   assert.equal(renameFlow.prefilled, '起始页建立的连接');
   assert(renameFlow.label?.startsWith('改名后的连接'), `tab label after rename: ${renameFlow.label}`);
-  assert.equal(renameFlow.profileName, '改名后的连接');
-  checks.push('Right-clicking a tab renames the saved connection; profile, tab label and lists update together');
+  assert.equal(renameFlow.profileName, '起始页建立的连接');
+  checks.push('Right-clicking a tab renames only that session tab; the saved connection name stays untouched');
   // The pin affordance lives here too: 加入收藏夹 adds the saved session to
   // the favourites layout, and the menu entry flips to 取消收藏 which removes it.
   const pinFlow = await page.evaluate(async () => {

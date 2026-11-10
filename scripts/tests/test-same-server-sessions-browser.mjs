@@ -56,7 +56,7 @@ try {
   await finish('second');
   assert.equal(await page.evaluate(()=>sessions.size),2);
   assert.equal(await page.evaluate(()=>qa.deleted.length),0,'new session closed the first');
-  assert.deepEqual(await page.$$eval('.session-tab-label', nodes=>nodes.map(n=>n.textContent)),['同一服务器 · 会话 1','同一服务器 · 会话 2']);
+  assert.deepEqual(await page.$$eval('.session-tab-label', nodes=>nodes.map(n=>n.textContent)),['同一服务器 SSH[0]','同一服务器 SSH[1]']);
   await page.evaluate(()=>{
     activate('first');DengCommandComposer.open({id:'p',name:'p',body:'echo [p#1 value]',appendCR:true});
     window.qaInitialTarget = document.querySelector('#composer-target').value;
