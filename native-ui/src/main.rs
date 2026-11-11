@@ -55,6 +55,7 @@ struct DevShellWindow {
     terminal: Option<TerminalState>,
     command_input: Entity<InputState>,
     file_name_input: Entity<InputState>,
+    local_path_input: Entity<InputState>,
     files: Option<FileListState>,
     monitor: Option<MonitorState>,
     pending_delete: Option<String>,
@@ -218,6 +219,7 @@ impl Render for DevShellWindow {
                                             files,
                                             view.clone(),
                                             self.file_name_input.clone(),
+                                            self.local_path_input.clone(),
                                             self.pending_delete.clone(),
                                             self.pending_rename.clone(),
                                         ))
@@ -368,6 +370,7 @@ fn file_panel(
     files: FileListState,
     view: Entity<DevShellWindow>,
     file_name_input: Entity<InputState>,
+    local_path_input: Entity<InputState>,
     pending_delete: Option<String>,
     pending_rename: Option<String>,
 ) -> impl IntoElement {
@@ -434,6 +437,21 @@ fn file_panel(
                             let name = file_name_input.read(cx).value(cx).to_string();
                             if !name.trim().is_empty() {
                                 create_empty_file(view.clone(), path.clone(), name, cx);
+                            }
+                        })
+                })
+                .child(Input::new(&local_path_input))
+                .child({
+                    let view = view.clone();
+                    let local_path_input = local_path_input.clone();
+                    let path = current_path.clone();
+                    KitButton::new("file-upload")
+                        .secondary()
+                        .label("上传")
+                        .on_click(move |_, _, cx| {
+                            let local_path = local_path_input.read(cx).value(cx).to_string();
+                            if !local_path.trim().is_empty() {
+                                upload_local(view.clone(), path.clone(), local_path, cx);
                             }
                         })
                 }),
@@ -726,6 +744,38 @@ fn create_empty_file(view: Entity<DevShellWindow>, path: String, name: String, c
                     }
                     Err(error) => state.feedback = Some(error),
                 }
+                cx.notify();
+            });
+        })
+        .detach();
+    });
+}
+
+fn upload_local(view: Entity<DevShellWindow>, directory: String, local_path: String, cx: &mut App) {
+    let _ = view.update(cx, |state, cx| {
+        let Some(session_id) = state
+            .terminal
+            .as_ref()
+            .map(|terminal| terminal.session_id.clone())
+        else {
+            return;
+        };
+        let base = state.snapshot.base.clone();
+        let token = state.token.clone();
+        state.feedback = Some(format!("正在上传 {}…", local_path));
+        let view = cx.entity();
+        cx.spawn(async move |_, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    post_upload_local(&base, &token, &session_id, &directory, &local_path)
+                })
+                .await;
+            let _ = view.update(cx, |state, cx| {
+                state.feedback = Some(match result {
+                    Ok(message) => message,
+                    Err(error) => error,
+                });
                 cx.notify();
             });
         })
@@ -1138,6 +1188,8 @@ fn main() {
                         terminal: None,
                         command_input,
                         file_name_input,
+                        local_path_input: cx
+                            .new(|cx| InputState::new(window, cx).placeholder("本地文件路径")),
                         files: None,
                         monitor: None,
                         pending_delete: None,
@@ -1448,6 +1500,56 @@ fn post_file_action(
             .to_string());
     }
     Ok(())
+}
+
+fn post_upload_local(
+    base: &str,
+    token: &str,
+    session_id: &str,
+    directory: &str,
+    local_path: &str,
+) -> Result<String, String> {
+    let authority = base
+        .strip_prefix("http://")
+        .ok_or_else(|| "后端地址必须使用 http://".to_string())?;
+    let mut stream =
+        TcpStream::connect(authority).map_err(|error| format!("连接上传服务失败：{error}"))?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(20)))
+        .map_err(|error| format!("设置上传超时失败：{error}"))?;
+    let body = serde_json::json!({
+        "paths": [local_path],
+        "directory": directory,
+        "overwrite": false,
+        "overwriteTargets": [],
+        "skipTargets": [],
+    })
+    .to_string();
+    let request = format!(
+        "POST /api/sessions/{session_id}/upload-local HTTP/1.1\r\nHost: {authority}\r\nX-CloudShell-Token: {token}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        body.len(),
+        body
+    );
+    stream
+        .write_all(request.as_bytes())
+        .map_err(|error| format!("发送上传请求失败：{error}"))?;
+    let mut response = Vec::new();
+    stream
+        .read_to_end(&mut response)
+        .map_err(|error| format!("读取上传响应失败：{error}"))?;
+    let text = String::from_utf8_lossy(&response);
+    let (headers, body) = text
+        .split_once("\r\n\r\n")
+        .ok_or_else(|| "上传响应格式无效".to_string())?;
+    let value: Value = serde_json::from_str(body.trim()).unwrap_or(Value::Null);
+    if !headers.lines().next().unwrap_or_default().contains(" 200 ") {
+        return Err(value
+            .get("error")
+            .and_then(Value::as_str)
+            .unwrap_or("上传失败")
+            .to_string());
+    }
+    Ok("上传已加入传输队列".into())
 }
 
 fn delete_session(base: &str, token: &str, session_id: &str) -> Result<(), String> {
