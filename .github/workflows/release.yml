@@ -32,6 +32,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - uses: dtolnay/rust-toolchain@stable
       - name: Ensure NSIS
         shell: pwsh
         run: |
@@ -43,11 +44,15 @@ jobs:
           }
           (Get-Command makensis).Source
       - name: Build desktop binary
-        run: go build -buildvcs=false -trimpath -tags desktop,production -ldflags "-s -w -H windowsgui" -o build/out/DevShell.exe .
+        run: |
+          New-Item -ItemType Directory -Force build/out | Out-Null
+          cargo build --manifest-path native-ui/Cargo.toml --release
+          go build -buildvcs=false -trimpath -tags desktop,production -ldflags "-s -w -H windowsgui" -o build/out/DevShell.exe .
+          Copy-Item native-ui/target/release/devshell-native-ui.exe build/out/DevShellUI.exe
       - name: Prepare Windows image
         run: go run ./cmd/prepare-windows-image -in build/out/DevShell.exe -out build/out/DevShell-prepared.exe
       - name: Stage distribution
-        run: python scripts/build/stage-windows.py --binary build/out/DevShell-prepared.exe --stage build/out/stage
+        run: python scripts/build/stage-windows.py --binary build/out/DevShell-prepared.exe --native-ui build/out/DevShellUI.exe --stage build/out/stage
       - name: Build installer
         run: python scripts/build/package-windows.py --stage build/out/stage --output build/out/DevShell-Setup-x64.exe
       - name: Build update artifacts
@@ -89,6 +94,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - uses: dtolnay/rust-toolchain@stable
       - name: Build universal app, ZIP and DMG
         shell: bash
         run: |

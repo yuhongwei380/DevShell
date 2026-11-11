@@ -69,6 +69,7 @@ Thumbs.db
 
 # Local build and test artifacts (Windows dev loop)
 /build/windows/_*.txt
+/native-ui/target/
 **/_edge_profile/
 **/_*_test.html
 

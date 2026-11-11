@@ -55,7 +55,7 @@ def write_update_manifests(output: Path, zip_path: Path, bundle: Path, archs, bu
 def build(args):
     if platform.system() != "Darwin":
         raise SystemExit("macOS + Xcode Command Line Tools are required. Run this script on a Mac or the macOS CI workflow.")
-    for tool in ["go", "xcrun", "sips", "iconutil", "codesign", "ditto", "hdiutil"]:
+    for tool in ["go", "cargo", "rustup", "xcrun", "sips", "iconutil", "codesign", "ditto", "hdiutil"]:
         if not shutil.which(tool):
             raise SystemExit(f"Missing build tool: {tool}. Install Go and run xcode-select --install.")
     sdk = run("xcrun", "--sdk", "macosx", "--show-sdk-path", capture_output=True, text=True).stdout.strip()
@@ -89,8 +89,10 @@ def build(args):
         macos.mkdir(parents=True)
         resources.mkdir()
         binaries = []
+        native_binaries = []
         for arch in archs:
             binary = stage / f"DevShell-{arch}"
+            target = "x86_64-apple-darwin" if arch == "amd64" else "aarch64-apple-darwin"
             env = dict(os.environ, GOOS="darwin", GOARCH=arch, CGO_ENABLED="1", SDKROOT=sdk,
                        MACOSX_DEPLOYMENT_TARGET=MINIMUM_MACOS, GOMAXPROCS=str(jobs))
             # A fixed minimum keeps the Intel and Apple Silicon slices consistent.
@@ -99,6 +101,10 @@ def build(args):
             run("go", "build", "-p", str(jobs), "-buildvcs=false", "-trimpath", "-tags", "desktop,production",
                 "-ldflags", "-s -w", "-o", binary, ".", cwd=ROOT, env=env)
             binaries.append(binary)
+            run("rustup", "target", "add", target, cwd=ROOT)
+            run("cargo", "build", "--manifest-path", ROOT / "native-ui/Cargo.toml", "--release", "--target", target,
+                cwd=ROOT, env=dict(env, CARGO_BUILD_JOBS=str(jobs)))
+            native_binaries.append(ROOT / "native-ui" / "target" / target / "release" / ("devshell-native-ui"))
         executable = macos / "DevShell"
         if len(binaries) > 1:
             run("xcrun", "lipo", "-create", *binaries, "-output", executable)
@@ -106,6 +112,13 @@ def build(args):
             shutil.copy2(binaries[0], executable)
         executable.chmod(0o755)
         run("xcrun", "lipo", executable, "-verify_arch", *["x86_64" if a == "amd64" else a for a in archs])
+        native_executable = macos / "DevShellUI"
+        if len(native_binaries) > 1:
+            run("xcrun", "lipo", "-create", *native_binaries, "-output", native_executable)
+        else:
+            shutil.copy2(native_binaries[0], native_executable)
+        native_executable.chmod(0o755)
+        run("xcrun", "lipo", native_executable, "-verify_arch", *["x86_64" if a == "amd64" else a for a in archs])
 
         iconset = stage / "DevShell.iconset"
         iconset.mkdir()
@@ -141,6 +154,7 @@ def build(args):
                     target.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(path, target)
         sign_args = ["--timestamp=none"] if args.sign_identity == "-" else ["--options", "runtime", "--timestamp"]
+        run("codesign", "--force", "--sign", args.sign_identity, *sign_args, native_executable)
         run("codesign", "--force", "--sign", args.sign_identity, *sign_args, app)
         run("codesign", "--verify", "--deep", "--strict", "--verbose=2", app)
         shutil.copytree(app, bundle)

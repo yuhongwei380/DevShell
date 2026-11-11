@@ -13,7 +13,7 @@
 - 默认配置保存于 `~/Library/Application Support/DevShell/`，包含加密配置、密钥、导入字体和背景。更新或移动应用时保留整个目录。
 - 从旧版 DengShell 升级时，首次启动会把原 `~/Library/Application Support/DengShell/` 整体改名为 `DevShell`，配置无需手动迁移。
 - `--config /绝对路径` 可指定隔离配置。裸可执行程序仍使用旁边的 `data/`。
-- macOS 使用系统 WebKit、菜单栏和 Dock；支持系统明暗主题和原生文件选择。
+- macOS 使用 GPUI 原生窗口、菜单栏和 Dock；支持系统明暗主题和原生文件选择。
 - 最小化进入 Dock；当前未提供 macOS 状态栏托盘。
 - 独立窗口支持通过“合并到窗口”菜单合并；跨窗口鼠标定位暂不支持。
 - 本机 IPv4/IPv6 延迟检测使用系统 ping/ping6。Linux 远端监控仍通过 SSH 执行。
@@ -23,7 +23,7 @@
 
 ## 从源码构建
 
-在 Mac 上安装 Xcode Command Line Tools、Go 1.27.1（本项目验证版本）、Node.js 22 和 Python 3。应用运行时不需要这些开发工具。
+在 Mac 上安装 Xcode Command Line Tools、Rust/Cargo 1.98+、Go 1.27.1（本项目验证版本）、Node.js 22 和 Python 3。应用运行时不需要这些开发工具。
 
 ```bash
 xcode-select --install
@@ -38,7 +38,7 @@ python3 scripts/tests/test-macos-app.py build/macos/DevShell.app
 
 构建默认最多使用 4 个并发任务，并按机器实际 CPU 数量收缩。macOS 不使用 Linux 的 `taskset`，因此该设置限制构建并发数，不保证绑定编号 0～3 的 CPU。
 
-脚本使用系统 SDK、Cocoa/WebKit、CGO 和 `lipo` 合并双架构程序，不需要额外安装 Wails CLI。Ubuntu 能测试共享后端和前端，但不能在缺少 Apple SDK 的情况下构建这个原生桌面应用。
+脚本使用系统 SDK、Cocoa、CGO、Cargo 和 `lipo` 合并双架构 Go 后端与 GPUI 前端，不需要额外安装 Wails CLI。Ubuntu 能测试共享后端，但不能在缺少 Apple SDK 的情况下构建这个原生桌面应用。
 
 最低系统固定在 macOS 15.0：`MACOSX_DEPLOYMENT_TARGET`、`-mmacosx-version-min` 与 `Info.plist` 的 `LSMinimumSystemVersion` 同源，构建信息里记录为 `minimumMacOS`。脚本先检查所用 SDK 不低于该值，否则直接报错停止（GitHub Actions 因此使用 macOS 15 构建机；更旧的构建机会先失败，而不是产出加载命令与 SDK 不一致的包）。
 
@@ -52,6 +52,7 @@ GitHub Actions 的 `.github/workflows/release.yml` 在推送 tag 时由 macOS �
 
 ## 技术依据
 
-- [Wails 平台依赖](https://wails.io/docs/gettingstarted/installation/)
+- [GPUI Kit](https://gpui-kit.com/docs/getting-started/)
+- [ELY GPUI Components](https://elygpui.com/)
 - [Go 最低系统要求](https://go.dev/wiki/MinimumRequirements)
 - [GitHub macOS 构建环境](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)

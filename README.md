@@ -63,7 +63,7 @@ DevShell 是一款中文界面的开源 SSH 桌面工具，适合日常管理 VP
 | Windows 10 / 11 x64 安装版 | `DevShell-Setup-x64.exe` | 运行安装器，从开始菜单或桌面启动，可通过控制面板卸载；旧版安装程序升级时自动沿用原安装目录与数据 |
 | macOS 15+（兼容 15 / 26 / 27），Apple 芯片与 Intel | `DevShell-macos-universal.dmg` / `.zip` | 通用应用，临时签名、未公证预览版 |
 
-Windows 版本需要 Microsoft Edge WebView2，缺少时程序会提供安装指引。安装版默认安装到当前用户目录，卸载保留个人配置。
+Windows 版本使用随安装包提供的 GPUI 原生前端，不需要 Microsoft Edge WebView2。安装版默认安装到当前用户目录，卸载保留个人配置。
 
 安装器提供运行实例检测：确认后请求同一安装目录下的 DevShell 正常退出，处理未保存编辑与传输，释放占用后自动继续；写入失败回滚旧程序。安装提示框使用 DevShell 图标与精简文案，安装及卸载日志默认折叠。旧版可能需要在应用中确认退出，详见 [安装升级流程](docs/INSTALLER-UPGRADE.md)。
 
@@ -71,7 +71,7 @@ Windows 版本需要 Microsoft Edge WebView2，缺少时程序会提供安装指
 
 **测试情况：**
 
-- **Windows：** 发布验证覆盖原生 WebView2 启动、安装／卸载保留配置、压缩程序及从最小化状态升级后显示窗口。自动验证使用 GitHub Windows 运行器，结果见 [Windows 验证记录](https://github.com/yuhongwei380/DevShell/actions/workflows/windows-release-validation.yml)；不等同于全部 Windows 10／11 实体设备、显卡和托盘组合已验证。
+- **Windows：** 发布验证覆盖 GPUI 原生前端启动、安装／卸载保留配置、压缩程序及从最小化状态升级后显示窗口。自动验证使用 GitHub Windows 运行器；不等同于全部 Windows 10／11 实体设备、显卡和托盘组合已验证。
 - **Linux（历史版本）：** 此前 Linux 发行包已在 Ubuntu 22.04、Ubuntu 24.04、Debian 12、Fedora 43、openSUSE Tumbleweed 和 Arch Linux 容器中通过安装、原生界面启动及卸载保留配置测试，具体范围见 [功能审查与验证](docs/release/FUNCTIONAL-AUDIT-v0.03.md)。Linux 发版已停止，源码仍可自行构建。
 
 ## 服务器与多级目录

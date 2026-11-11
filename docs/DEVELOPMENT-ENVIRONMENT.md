@@ -9,14 +9,15 @@
 | 部分 | 职责 |
 | --- | --- |
 | `main.go`、`startup_error*.go` | 启动入口、命令行参数、启动错误对话框 |
-| `internal/desktop/`（`desktop*.go`、`theme*.go`、`window*.go`、`detached_cache*.go`） | Wails 桌面窗口、前后端桥接、主题、托盘、独立窗口 |
+| `internal/desktop/`（`desktop*.go`、`theme*.go`、`window*.go`、`detached_cache*.go`） | 旧版 Wails 桌面窗口兼容层；新发行包优先由原生前端接管 |
 | `internal/app/app.go`、`store.go`、`persistence*.go` | 本机回环 HTTP API、加密配置、原子保存与数据迁移 |
 | `internal/app/ssh*.go`、`terminal*.go`、`sftp*.go` | SSH 认证、主机指纹、会话、终端数据转发、SFTP 文件通道 |
 | `internal/app/files.go`、`file_tools.go`、`upload_pipeline.go` | 文件浏览、编辑、上传下载队列 |
 | `internal/app/monitor*.go`、`network*.go`、`icmp*.go` | 通过 SSH 监控远端 Linux，以及本机网络检测 |
 | `internal/app/preferences*.go`、`font_library*.go`、`media.go` | 个性化、在线字体、导入背景 |
 | `internal/app/updates*.go`、`internal/updatetrust/`、`internal/updater/` | 签名更新描述、包验证和各平台更新助手 |
-| `web/` | 原生 HTML/CSS/JavaScript，xterm.js 终端；资源通过 Go embed 内置 |
+| `web/` | 迁移期保留的 HTML/CSS/JavaScript 与浏览器回归夹具；资源通过 Go embed 内置 |
+| `native-ui/` | GPUI Kit + ELY GPUI Components 原生窗口；通过回环 API 读取配置并承载迁移中的 UI |
 | `scripts/`、`cmd/`、`.github/workflows/` | 测试、依赖资源复制、平台打包、发行签名工具与 CI |
 
 ## 开发依赖
@@ -26,6 +27,7 @@
 | Go | `go.mod` 要求 1.26.0+；本次采用 1.27.1 | 1.27.1，模块校验通过 |
 | Node.js / npm | xterm 依赖复制、JavaScript 检查和测试；完整测试使用 Node 22+ | Node 22.23.2 / npm 10.9.8 |
 | Wails | Go 模块锁定 v2.15.0；直接 `go build`，不依赖 Wails CLI | 已有模块 |
+| Rust / Cargo | GPUI Kit 0.9.0、ELY GPUI Components；构建 `native-ui/` | Rust 1.98+ |
 | xterm.js | 6.0.0；addon-fit 0.11.0；addon-serialize 0.14.0 | 安装及内置资源齐全 |
 | C/C++、pkg-config | Linux CGO 原生桌面编译 | GCC 15.2.0，可用 |
 | GTK3 / WebKitGTK 4.1 | Linux 原生窗口及 WebView | 3.24.52 / 2.52.6 |
@@ -54,7 +56,7 @@ go test -buildvcs=false -tags desktop,production,webkit2_41 -timeout 5m ./intern
 
 Linux 桌面开发构建使用 `bash build.sh`；Windows 交叉编译使用 `bash build.sh --windows`。这两个命令会写入各自的构建输出，执行前应确认当前需要的目标。隔离测试可通过 `go build -o 缓存目录/程序` 和运行参数 `--config 临时目录` 完成。
 
-Windows 开发编译可在当前 Linux 主机完成；原生运行验证需要 Windows + WebView2。macOS 通用应用构建需要 Mac + Xcode Command Line Tools/Apple SDK，详见 [macOS 构建说明](MACOS.md)。现有 Ubuntu 工具链无法代替 Apple SDK。
+Windows 开发编译可在当前 Linux 主机完成；带 `DevShellUI.exe` 的构建使用 GPUI 原生窗口，不需要 WebView2。未携带原生前端的旧安装仍保留 Wails 兼容启动路径。macOS 通用应用构建需要 Mac + Xcode Command Line Tools/Apple SDK，详见 [macOS 构建说明](MACOS.md)。现有 Ubuntu 工具链无法代替 Apple SDK。
 
 ## 本次验证范围
 

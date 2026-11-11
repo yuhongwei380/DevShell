@@ -14,8 +14,8 @@ def build(stage, output):
     version = re.search(r'const ApplicationVersion = "([^"]+)"', source).group(1)
     package_version = re.search(r'const ApplicationPackageVersion = "([^"]+)"', source).group(1)
     stage, output = stage.resolve(), output.resolve()
-    if sorted(p.name for p in stage.iterdir()) != ['DevShell.exe', 'data']:
-        raise SystemExit('Windows staging must contain only DevShell.exe and data.')
+    if sorted(p.name for p in stage.iterdir()) != ['DevShell.exe', 'DevShellUI.exe', 'data']:
+        raise SystemExit('Windows staging must contain DevShell.exe, DevShellUI.exe and data.')
     if any(p.name not in ['docs', 'licenses'] for p in (stage / 'data').iterdir()):
         raise SystemExit('User data must never enter the installer.')
     tool = shutil.which('makensis')
@@ -43,14 +43,14 @@ def build(stage, output):
             rel = relative.replace('\\', '/')
             return (rel in ('data', 'data/docs', 'data/licenses', 'data/support')
                     or rel.startswith('data/docs/') or rel.startswith('data/licenses/')
-                    or rel == 'DevShell.exe')
+                    or rel in ('DevShell.exe', 'DevShellUI.exe'))
         for p in stage.rglob('*'):
             relative = str(p.relative_to(stage))
             if not program_owned(relative):
                 raise SystemExit(f'staging contains non-program file, refusing to build uninstaller: {relative}')
         uninstall = []
         for p in files:
-            if p.relative_to(stage).as_posix() == 'DevShell.exe':
+            if p.relative_to(stage).as_posix() in ('DevShell.exe', 'DevShellUI.exe'):
                 continue  # Explicit checked deletion precedes registry/shortcut removal.
             relative = nsis_string(str(p.relative_to(stage)).replace('/', '\\'))
             uninstall.append(f'Delete "$INSTDIR\\{relative}"')

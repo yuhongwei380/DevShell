@@ -4,6 +4,7 @@ import (
 	"devshell/internal/app"
 	"devshell/internal/desktop"
 	"devshell/internal/installguard"
+	"devshell/internal/nativeui"
 	"devshell/internal/updater"
 	"embed"
 	"errors"
@@ -36,10 +37,17 @@ func main() {
 	}
 	detached := flag.Bool("detached-window", false, "internal independent window")
 	browser := flag.Bool("browser", false, "run local browser mode instead of a desktop window")
+	native := flag.Bool("native", false, "run the native GPUI frontend")
 	address := flag.String("addr", "127.0.0.1:0", "local API listen address")
 	dev := flag.Bool("dev", false, "read frontend assets from the web directory")
 	config := flag.String("config", "", "configuration directory (default: data beside executable; macOS app: Application Support/DevShell)")
 	flag.Parse()
+	nativeExplicit := false
+	flag.Visit(func(value *flag.Flag) {
+		if value.Name == "native" {
+			nativeExplicit = true
+		}
+	})
 	var content fs.FS
 	var contentErr error
 	if *dev {
@@ -77,6 +85,20 @@ func main() {
 	defer application.Close()
 	if err = application.Start(*address, content); err != nil {
 		log.Fatal(err)
+	}
+	// Release builds place DevShellUI beside the Go process. Prefer it
+	// automatically so a packaged desktop launch never starts WebView2; the
+	// legacy desktop frontend remains available only when no native binary is
+	// present or when the caller explicitly passes --native=false.
+	if !*browser && !nativeExplicit && nativeui.Available() {
+		*native = true
+	}
+	if *native {
+		if err := nativeui.Run(application.URL(), application.Token()); err != nil {
+			showStartupError(err.Error())
+			log.Print(err)
+		}
+		return
 	}
 	if !*browser && desktop.Available() {
 		log.Printf("DevShell: %s", application.URL())

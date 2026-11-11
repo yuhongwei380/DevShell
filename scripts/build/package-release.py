@@ -2,7 +2,7 @@
 """Stage a Windows + source release from frozen binaries; never include user data.
 
 Release policy (2026-10-20): only the Windows installer, the frozen DevShell.exe
-and the source archive are published; the portable ZIP and all Linux packages
+plus its DevShellUI.exe GPUI frontend, and the source archive are published; the portable ZIP and all Linux packages
 were retired with their packaging scripts. Outputs are written to --output and
 the prepared --website directory. Deploy only after validating this complete
 set. This script never overwrites share, private configuration, or the desktop
@@ -37,9 +37,11 @@ def zip_tree(folder, target, prefix=Path()):
         for p in sorted(folder.rglob('*')):
             if p.is_file(): z.write(p, prefix/p.relative_to(folder))
 
-def distribution(folder, binary, windows, source_ref=VERSION):
+def distribution(folder, binary, windows, source_ref=VERSION, native_ui=None):
     folder.mkdir(parents=True, exist_ok=False)
     copy(binary, folder/('DevShell.exe' if windows else 'devshell'))
+    if windows and native_ui is not None:
+        copy(native_ui, folder/'DevShellUI.exe')
     for sub, pattern, dest in [('web/assets/fonts/licenses','*.txt','fonts'), ('web/vendor','*LICENSE',''), ('build/go-licenses','*','go'), ('build/installer-licenses','*','installer')]:
         for p in (ROOT/sub).glob(pattern):
             if p.is_file(): copy(p, folder/'data/licenses'/dest/p.name)
@@ -88,7 +90,10 @@ def package(args):
                 raise SystemExit(f'Runtime credential file must not be embedded: {p.relative_to(ROOT)}')
             assert all(p.read_bytes() in b for b in binaries), f'Embedded asset differs: {p}'
             assets[str(p.relative_to(ROOT))]=digest(p)
-    win = distribution(work/'DevShell-windows-x64',winbinary,True,args.source_ref)
+    native_ui = args.native_ui.resolve()
+    if not native_ui.is_file():
+        raise SystemExit(f'Native GPUI frontend not found: {native_ui}')
+    win = distribution(work/'DevShell-windows-x64',winbinary,True,args.source_ref,native_ui)
     subprocess.run(['python3',str(ROOT/'scripts/build/package-windows.py'),'--stage',str(win),'--output',str(out/'DevShell-Setup-x64.exe')],check=True)
     copy(winbinary,out/'DevShell.exe')
     copy(ROOT/'build/windows/README.txt',out/'DevShell-Windows-说明.txt')
@@ -96,7 +101,7 @@ def package(args):
     sourcefiles=[]
     for pattern in ['.gitattributes','*.go','go.mod','go.sum','package.json','package-lock.json','*.sh','*.ps1','*.syso','README.md','CHANGELOG.md','LICENSE','.gitignore']:
         sourcefiles += list(ROOT.glob(pattern))
-    for folder in ['web','internal','scripts','cmd','native-rdp','LICENSES']:
+    for folder in ['web','internal','scripts','cmd','native-rdp','native-ui','LICENSES']:
         if not (ROOT/folder).is_dir(): continue
         sourcefiles += [p for p in (ROOT/folder).rglob('*') if p.is_file() and not any(part in ('__pycache__', '.cache', 'node_modules') for part in p.relative_to(ROOT/folder).parts)]
     sourcefiles += [p for p in (ROOT/'docs').rglob('*') if p.is_file()]
@@ -135,6 +140,7 @@ if __name__=='__main__':
     parser.add_argument('--preserve-update-notes',action='store_true',help='Keep existing signed descriptor notes while updating the build and hashes')
     parser.add_argument('--update-notes',type=Path,help='UTF-8 notes shown by existing clients for this signed update')
     parser.add_argument('--windows-binary',type=Path,required=True)
+    parser.add_argument('--native-ui',type=Path,required=True)
     parser.add_argument('--windows-reference',type=Path)
     parser.add_argument('--source-ref',default=VERSION,help='Published source tag used by packaged documentation links')
     parser.add_argument('--work-dir',type=Path,required=True)

@@ -10,6 +10,8 @@ if [[ "${1:-}" == '--macos' ]] || { [[ $# == 0 ]] && [[ "$(uname -s)" == Darwin 
   exec python3 scripts/build/build-macos.py "$@"
 elif [[ "${1:-}" == '--windows' ]]; then
   mkdir -p build/windows
+  cargo build --manifest-path native-ui/Cargo.toml --release
+  cp native-ui/target/release/devshell-native-ui.exe build/windows/DevShellUI.exe
   GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -buildvcs=false -trimpath -tags desktop,production -ldflags '-s -w -H windowsgui' -o build/windows/DevShell.exe .
 elif [[ "${1:-}" == '--browser' ]]; then
   go build -buildvcs=false -trimpath -ldflags '-s -w' -o dengshell-server .
