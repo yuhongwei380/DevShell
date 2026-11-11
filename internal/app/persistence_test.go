@@ -368,8 +368,7 @@ func TestPortableFolderMoveRetainsImportedResourcesAndAllPreferences(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	backgroundBytes := sampleBackground(t)
-	background, err := s.ImportAsset("background", "own.png", "Portable image", backgroundBytes)
+	uiFont, err := s.ImportAsset("ui-font", "own-ui.woff2", "Portable ui font", fontBytes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -390,7 +389,7 @@ func TestPortableFolderMoveRetainsImportedResourcesAndAllPreferences(t *testing.
 		t.Fatal(err)
 	}
 	value := s.List().Appearance
-	value.FontID, value.BackgroundID, value.Theme = font.ID, background.ID, "dark"
+	value.FontID, value.UIFontID, value.Theme = font.ID, uiFont.ID, "dark"
 	value.OnboardingCompleted = true
 	value.Layout["dengshell.history."+p.ID] = json.RawMessage(`["echo remembered"]`)
 	if _, err := s.SaveAppearance(value); err != nil {
@@ -417,7 +416,7 @@ func TestPortableFolderMoveRetainsImportedResourcesAndAllPreferences(t *testing.
 	if !bytes.Equal(wantJSON, gotJSON) {
 		t.Fatal("configuration changed after portable folder move")
 	}
-	for id, wantBytes := range map[string][]byte{font.ID: fontBytes, background.ID: backgroundBytes} {
+	for id, wantBytes := range map[string][]byte{font.ID: fontBytes, uiFont.ID: fontBytes} {
 		data, err := os.ReadFile(filepath.Join(destination, "assets", id))
 		if err != nil || !bytes.Equal(data, wantBytes) {
 			t.Fatal("imported bytes not preserved", id, err)

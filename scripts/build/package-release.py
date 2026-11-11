@@ -100,7 +100,7 @@ def package(args):
         if not (ROOT/folder).is_dir(): continue
         sourcefiles += [p for p in (ROOT/folder).rglob('*') if p.is_file() and not any(part in ('__pycache__', '.cache', 'node_modules') for part in p.relative_to(ROOT/folder).parts)]
     sourcefiles += [p for p in (ROOT/'docs').rglob('*') if p.is_file()]
-    for name in ['devshell.png','devshell.svg','devshell.ico','config.example.json','BACKGROUND-PROMPTS-v0.01.json','windows/app.manifest','windows/README.txt']:
+    for name in ['devshell.png','devshell.svg','devshell.ico','config.example.json','windows/app.manifest','windows/README.txt']:
         sourcefiles.append(ROOT/'build'/name)
     for folder in ['go-licenses','font-licenses','font-library-site','installer-licenses']:
         sourcefiles += [p for p in (ROOT/'build'/folder).glob('*') if p.is_file()]

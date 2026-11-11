@@ -1,10 +1,12 @@
 package app
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"net"
@@ -152,6 +154,63 @@ func TestSSHPasswordModeDetectsUnsupportedServerMethod(t *testing.T) {
 	}
 }
 
+// A peer that closes the TCP connection during the version exchange must be
+// explained as a handshake close (not an opaque EOF), and its -vvv trace must
+// be retrievable under the exact key the frontend polls: handshake-<profileID>.
+func TestSSHServerClosesDuringHandshakeExplainsAndTraces(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var workers sync.WaitGroup
+	workers.Add(1)
+	go func() {
+		defer workers.Done()
+		for {
+			connection, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			workers.Add(1)
+			go func() {
+				defer workers.Done()
+				defer connection.Close()
+				// Consume the client version line and hang up without answering:
+				// the client sees a clean FIN during the version exchange, which
+				// is the handshake failed: EOF shape from the field report.
+				_, _ = bufio.NewReader(connection).ReadString('\n')
+			}()
+		}
+	}()
+	a, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { a.Close(); listener.Close(); workers.Wait() })
+	host, portText, _ := net.SplitHostPort(listener.Addr().String())
+	response := issueRequest(t, a, "POST", "/api/quick-connect", map[string]any{"command": "ssh -vvv demo@" + host + ":" + portText})
+	if response.Code != 200 {
+		t.Fatal(response.Body.String())
+	}
+	var p Profile
+	json.Unmarshal(response.Body.Bytes(), &p)
+	if p.Verbose != 3 || len(p.ID) <= 12 {
+		t.Fatalf("verbose quick-connect profile unexpected: %+v", p)
+	}
+	_, err = a.Connect(context.Background(), p.ID, "unused-secret")
+	t.Log("DEBUG kind:", sshDiagnosticErrorKind(err), "err:", err)
+	var classified *AuthenticationError
+	if !errors.As(err, &classified) || classified.Code() != "ssh_handshake_closed" || !strings.Contains(err.Error(), "握手") || strings.Contains(err.Error(), "unused-secret") {
+		t.Fatal("handshake close was not explained", err)
+	}
+	a.sshDiagnostics.mu.Lock()
+	events := a.sshDiagnostics.verboseEvents["handshake-"+p.ID]
+	a.sshDiagnostics.mu.Unlock()
+	if len(events) != 1 || events[0].Kind != "verbose-handshake-failed" || !strings.Contains(events[0].Detail, "error=eof") {
+		t.Fatalf("handshake trace not retrievable under the full profile key: %+v", events)
+	}
+}
+
 func TestSSHKeyboardInteractiveOnlySuppliesRecognizedPassword(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
@@ -236,9 +295,76 @@ func TestSSHUnencryptedKeyIgnoresAnUnneededCachedPassphrase(t *testing.T) {
 
 func TestTransportFailuresAreNotClassifiedAsWrongCredentials(t *testing.T) {
 	original := errors.New("connection reset by peer")
-	err := explainSSHAuthentication(original, "password", authenticationTrace{})
+	err := explainSSHAuthentication(original, "password", authenticationTrace{}, "example.invalid:22")
 	var classified *AuthenticationError
 	if errors.As(err, &classified) || !errors.Is(err, original) || strings.Contains(err.Error(), "密码错误") {
 		t.Fatal("transport failure misclassified", err)
 	}
+}
+
+// A server that moved back to port 22 while the saved connection kept the old
+// port: the stale port dials a non-SSH listener that answers and closes, which
+// the transport reports as a handshake-stage EOF. The failure must name the
+// dialled address so the stale port is visible, and editing the saved profile
+// must take effect immediately on the next connect.
+func TestStaleSavedPortNamesTheDialledAddressAndEditsTakeEffect(t *testing.T) {
+	a, host, port := authenticationFixture(t, &ssh.ServerConfig{PasswordCallback: func(meta ssh.ConnMetadata, password []byte) (*ssh.Permissions, error) {
+		if meta.User() == "fixture" && string(password) == "fixture-secret" {
+			return nil, nil
+		}
+		return nil, errors.New("rejected by fixture")
+	}})
+	stale, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stale.Close()
+	go func() {
+		for {
+			connection, err := stale.Accept()
+			if err != nil {
+				return
+			}
+			// A non-SSH service: answer the SSH banner as a bad HTTP request
+			// and hang up, exactly like a web port hit by an ssh client.
+			go func() {
+				defer connection.Close()
+				line, _ := bufio.NewReader(connection).ReadString('\n')
+				_, _ = connection.Write([]byte("HTTP/1.1 400 Bad Request\r\n"))
+				_ = line
+			}()
+		}
+	}()
+	staleHost, stalePortText, _ := net.SplitHostPort(stale.Addr().String())
+	stalePort, _ := strconv.Atoi(stalePortText)
+	if staleHost != host {
+		t.Fatalf("fixture host mismatch: %s vs %s", host, staleHost)
+	}
+	p, err := a.store.Save(Profile{Name: "moved server", Host: host, Port: stalePort, User: "fixture", Auth: "password", Secret: "fixture-secret"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = a.Connect(context.Background(), p.ID, "")
+	var closed *AuthenticationError
+	if !errors.As(err, &closed) || closed.Code() != "ssh_handshake_closed" {
+		t.Fatal("stale-port handshake closure not classified", err)
+	}
+	if !strings.Contains(err.Error(), net.JoinHostPort(host, stalePortText)) {
+		t.Fatalf("failure hides the dialled stale port: %v", err)
+	}
+	for _, secret := range []string{"fixture-secret"} {
+		if strings.Contains(err.Error(), secret) {
+			t.Fatal("credential exposed in error")
+		}
+	}
+	// The user path: fix the port in server management, reconnect, done.
+	response := issueRequest(t, a, "POST", "/api/profiles", map[string]any{"id": p.ID, "name": p.Name, "host": host, "port": port, "user": "fixture", "auth": "password", "secret": "fixture-secret"})
+	if response.Code != 200 {
+		t.Fatalf("port edit rejected: %s", response.Body.String())
+	}
+	session, err := a.Connect(context.Background(), p.ID, "")
+	if err != nil {
+		t.Fatalf("connect after port edit failed: %v", err)
+	}
+	a.disconnect(session.ID)
 }

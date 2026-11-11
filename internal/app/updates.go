@@ -30,16 +30,16 @@ import (
 // and the notes heading (vX.Y.Z-rc.N-build<abbreviated build>). rc build
 // numbers keep ascending, and the eventual release build must exceed every
 // rc build of the same version so rc users can update into it.
-const ApplicationVersion = "v26.11.1"
+const ApplicationVersion = "v26.11.3"
 
 // ApplicationDisplayVersion identifies this self-maintained branch in the user
 // interface. ApplicationVersion above stays the functional version that drives
 // update comparison and package metadata; never put branch text into it.
-const ApplicationDisplayVersion = "ver.Phoenix · v26.11.1-rc.1"
+const ApplicationDisplayVersion = "ver.Phoenix · v26.11.3-rc.3"
 
 // Package managers use ApplicationVersion without the leading v. It must stay
 // greater than the last upstream package version (0.3.0).
-const ApplicationPackageVersion = "26.11.1"
+const ApplicationPackageVersion = "26.11.3"
 
 // ApplicationBuild is the monotonic anti-rollback build: YYYYMMDD plus a
 // two-digit daily sequence (since 2026-10-24; the earlier format was a
@@ -48,7 +48,7 @@ const ApplicationPackageVersion = "26.11.1"
 // sequence is numerically below the retired 11-digit high-water mark
 // (20261024156), so installs at any older build must manually install the
 // 2026102401 release once before built-in updates continue normally.
-const ApplicationBuild uint64 = 2026110206
+const ApplicationBuild uint64 = 2026111003
 
 // currentReleaseNotesVersions lists the exact notes artifacts shipped with
 // this build, newest naming first: the suffixless vX.Y.Z-rc.N file (since
@@ -72,8 +72,10 @@ func currentReleaseNotesVersions() []string {
 // Release assets must be named exactly: up.exe / up.exe.json,
 // up.deb / up.deb.json, up.pkg.tar.zst / up.pkg.tar.zst.json,
 // DevShell-macos-universal.zip with up-macos-arm64.json / up-macos-amd64.json.
-const updateReleaseDownload = "https://github.com/yuhongwei380/DevShell/releases/latest/download/"
-const UpdateManifestURL = updateReleaseDownload + "up.deb.json"
+// var, not const: the mirror connectivity probe tests point the stable
+// manifest URL at a local server, like the other update source vars.
+var updateReleaseDownload = "https://github.com/yuhongwei380/DevShell/releases/latest/download/"
+var UpdateManifestURL = updateReleaseDownload + "up.deb.json"
 
 // macOSBundleAsset is the universal application bundle archive built by
 // scripts/build/build-macos.py; both architecture descriptors point at it.
@@ -83,6 +85,11 @@ const updateTimeout = 3 * time.Second
 // Manual checks wait on the network in front of the user, unlike the
 // non-blocking startup probe, so they get a longer budget.
 const manualUpdateTimeout = 10 * time.Second
+
+// mirrorProbeTimeout bounds one accelerator connectivity probe request; the
+// endpoint runs two probes (discovery feed and stable manifest) so the
+// request context allows twice the budget.
+const mirrorProbeTimeout = 10 * time.Second
 const maximumUpdateSize int64 = 1 << 30
 
 var updateHashPattern = regexp.MustCompile(`^[a-fA-F0-9]{64}$`)
@@ -111,7 +118,12 @@ type UpdateStatus struct {
 	Reason         string `json:"reason,omitempty"`
 	// Mirror is the accelerator host that actually served the manifest or
 	// release list for this result; empty means the direct GitHub channel.
-	Mirror  string         `json:"mirror,omitempty"`
+	Mirror string `json:"mirror,omitempty"`
+	// Channel records which manual-check channel produced this offer:
+	// "" keeps the build's default discovery, "release" stays on stable
+	// releases, "rc" includes prerelease publishes. A staged download
+	// repeats the channel when it refreshes a stale offer.
+	Channel string         `json:"channel,omitempty"`
 	Package *UpdatePackage `json:"package,omitempty"`
 }
 type UpdateReceipt struct {
@@ -148,6 +160,7 @@ type UpdateDownload struct {
 	Error        string        `json:"error,omitempty"`
 	File         string        `json:"-"`
 	Package      UpdatePackage `json:"-"`
+	channel      string
 	cancel       context.CancelFunc
 	releaseLease func()
 }
@@ -158,7 +171,7 @@ type startupUpdate struct {
 	mu       sync.Mutex
 	job      *UpdateDownload
 	manualMu sync.Mutex
-	probe    func(context.Context, time.Duration) UpdateStatus // test seam; nil uses updateProbe
+	probe    func(context.Context, time.Duration, string) UpdateStatus // test seam; nil uses updateProbe
 }
 
 // Integrity failures mean the cached offer trails the shipped assets, for
@@ -223,7 +236,7 @@ func noUpdate(reason string) UpdateStatus {
 	platform := currentUpdatePlatform()
 	source, _ := updateAddress(platform)
 	if isReleaseCandidateBuild() {
-		source = updateReleaseListURL
+		source = updateReleaseFeedURL
 	}
 	return UpdateStatus{Status: "none", CurrentVersion: ApplicationDisplayVersion, CurrentBuild: ApplicationBuild, Source: source, Platform: platform, Reason: reason}
 }
@@ -247,7 +260,7 @@ func (a *App) beginUpdateCheck() {
 			defer close(a.updateCheck.done)
 			ctx, cancel := context.WithTimeout(a.ctx, updateTimeout)
 			defer cancel()
-			a.setUpdateResult(boundedUpdateProbe(ctx, func() UpdateStatus { return a.updateProbe(ctx, updateTimeout) }))
+			a.setUpdateResult(boundedUpdateProbe(ctx, func() UpdateStatus { return a.updateProbe(ctx, updateTimeout, "") }))
 		}()
 	})
 }
@@ -266,9 +279,28 @@ func (a *App) getUpdateResult() UpdateStatus {
 	return a.updateCheck.result
 }
 
+// updateWantsReleaseList decides which discovery endpoint one check uses.
+// The releases feed carries rc publishes, so it is required for rc builds
+// and for the explicit "rc" manual channel (which lets a stable build opt
+// into a newer rc publish); "release" stays on the stable latest-release
+// assets even for rc builds, and "" keeps the build's default behaviour.
+// Neither path consumes the anonymous GitHub REST API quota.
+func updateWantsReleaseList(channel string) bool {
+	switch channel {
+	case "rc":
+		return true
+	case "release":
+		return false
+	default:
+		return isReleaseCandidateBuild()
+	}
+}
+
 // updateProbe runs one end-to-end update check; the manual settings action
-// reuses it with a longer budget than the non-blocking startup probe.
-func (a *App) updateProbe(ctx context.Context, timeout time.Duration) UpdateStatus {
+// reuses it with a longer budget than the non-blocking startup probe. The
+// channel selects the manual discovery mode described by
+// updateWantsReleaseList; startup and legacy callers pass "".
+func (a *App) updateProbe(ctx context.Context, timeout time.Duration, channel string) UpdateStatus {
 	exe, err := os.Executable()
 	if err != nil {
 		return noUpdate("unavailable")
@@ -285,11 +317,11 @@ func (a *App) updateProbe(ctx context.Context, timeout time.Duration) UpdateStat
 	mirror := a.store.UpdateMirror()
 	address, artifact := updateAddress(platform)
 	client := updateClient(timeout, mirror)
-	if isReleaseCandidateBuild() {
+	if updateWantsReleaseList(channel) {
 		source, reason, viaMirror := latestReleaseUpdateSource(ctx, client, platform, mirror)
 		if reason != "" {
 			result := noUpdate(reason)
-			result.Source = updateReleaseListURL
+			result.Source = updateReleaseFeedURL
 			if viaMirror {
 				result.Mirror = updateMirrorHost(mirror)
 			}
@@ -558,13 +590,43 @@ func (a *App) registerUpdateHTTP(mux *http.ServeMux) {
 		}
 	})
 	mux.HandleFunc("POST /api/updates/check", func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			Channel string `json:"channel"`
+		}
+		if !decode(w, r, &request) {
+			return
+		}
+		channel := strings.ToLower(strings.TrimSpace(request.Channel))
+		switch channel {
+		case "", "release", "rc":
+		default:
+			respond(w, nil, errors.New("更新通道应为 release 或 rc"))
+			return
+		}
 		a.updateCheck.manualMu.Lock()
 		defer a.updateCheck.manualMu.Unlock()
 		ctx, cancel := context.WithTimeout(r.Context(), manualUpdateTimeout)
 		defer cancel()
-		result := a.updateProbe(ctx, manualUpdateTimeout)
+		result := a.updateProbe(ctx, manualUpdateTimeout, channel)
+		result.Channel = channel
 		a.setUpdateResult(result)
 		writeJSON(w, result)
+	})
+	mux.HandleFunc("POST /api/updates/mirror-test", func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			Mirror string `json:"mirror"`
+		}
+		if !decode(w, r, &request) {
+			return
+		}
+		mirror, err := normalizeUpdateMirror(request.Mirror)
+		if err != nil {
+			respond(w, nil, err)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 2*mirrorProbeTimeout)
+		defer cancel()
+		writeJSON(w, testUpdateMirrorAt(ctx, updateClient(mirrorProbeTimeout, mirror), mirror, currentUpdatePlatform()))
 	})
 	mux.HandleFunc("POST /api/updates/download", func(w http.ResponseWriter, r *http.Request) {
 		var request struct {
@@ -632,7 +694,7 @@ func (a *App) StartUpdateDownload(hash string) (UpdateDownload, error) {
 		return UpdateDownload{}, e
 	}
 	ctx, cancel := context.WithTimeout(a.ctx, 15*time.Minute)
-	job := &UpdateDownload{ID: randomID(), Status: "downloading", Total: offer.Package.Size, File: filepath.Join(dir, filepath.Base(offer.Package.URL)), Package: *offer.Package, cancel: cancel}
+	job := &UpdateDownload{ID: randomID(), Status: "downloading", Total: offer.Package.Size, File: filepath.Join(dir, filepath.Base(offer.Package.URL)), Package: *offer.Package, channel: offer.Channel, cancel: cancel}
 	job.releaseLease = release
 	a.updateCheck.job = job
 	go a.downloadUpdate(ctx, job)
@@ -684,12 +746,14 @@ func (a *App) downloadUpdate(ctx context.Context, job *UpdateDownload) {
 			}
 			// The offer predates re-published assets: refresh the check once
 			// and retarget the job at the current package before retrying.
+			// The refresh keeps the channel that produced the original offer
+			// so an rc-channel job never falls back to the stable list.
 			refreshed = true
 			probe := a.updateProbe
 			if a.updateCheck.probe != nil {
 				probe = a.updateCheck.probe
 			}
-			offer := boundedUpdateProbe(ctx, func() UpdateStatus { return probe(ctx, updateTimeout) })
+			offer := boundedUpdateProbe(ctx, func() UpdateStatus { return probe(ctx, updateTimeout, job.channel) })
 			a.setUpdateResult(offer)
 			if offer.Status != "available" || offer.Package == nil || (offer.Package.URL == job.Package.URL && offer.Package.SHA256 == job.Package.SHA256 && offer.Package.Size == job.Total) {
 				return last

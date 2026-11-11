@@ -8,7 +8,7 @@ const [stage, chrome, modulePath] = process.argv.slice(2);
 const { default: puppeteer } = await import(path.isAbsolute(modulePath) ? pathToFileURL(modulePath).href : modulePath);
 const fixture = JSON.parse(fs.readFileSync(path.join(stage, 'browser-fixture.json')));
 await fetch(new URL('/api/appearance/patch', fixture.url), { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CloudShell-Token': fixture.token }, body: JSON.stringify({ onboardingCompleted: true, uiScale: 1 }) });
-const profileDir = fs.mkdtempSync(path.join(stage, 'edge-tabs-'));
+const profileDir = fs.mkdtempSync(path.join(path.resolve(stage), 'edge-tabs-'));
 const child = spawn(chrome, ['--headless=new', '--no-sandbox', '--disable-dev-shm-usage', '--disable-background-networking', '--remote-debugging-port=0', '--user-data-dir=' + profileDir, 'about:blank'], { stdio: 'ignore', windowsHide: true });
 let browser, page;
 const errors = [], checks = [];
@@ -27,7 +27,7 @@ try {
   let endpoint;
   for (let i = 0; i < 100; i++) {
     try { const [port, suffix] = fs.readFileSync(path.join(profileDir, 'DevToolsActivePort'), 'utf8').trim().split(/\r?\n/); endpoint = `ws://127.0.0.1:${port}${suffix}`; break; } catch {}
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => setTimeout(resolve, 200));
   }
   assert(endpoint, 'browser started');
   browser = await puppeteer.connect({ browserWSEndpoint: endpoint });
@@ -183,7 +183,7 @@ try {
   await page.evaluate(value => DevShellTheme.set(value), originalTheme);
   await page.waitForFunction(() => !document.documentElement.dataset.lightSwitch);
   checks.push('Added/fixed/changed use distinct bold colors with 4.5:1 contrast; mixed list markers and colon widths keep labels and body starts aligned in both themes');
-  assert.equal(await page.$eval('#add-session', el => el.title), '新选项卡');
+  assert.equal(await page.$eval('#add-session', el => el.title), '新会话');
   await assertPlusFollowsLastTab();
   await page.click('#add-session');
   await page.waitForSelector('.start-tab.active');
@@ -318,7 +318,7 @@ try {
     tab.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 40 }));
     const buttons = [...document.querySelectorAll('#session-tab-menu button')];
     const items = buttons.map(el => el.textContent.trim());
-    const item = buttons.find(el => el.textContent.includes('重命名连接'));
+    const item = buttons.find(el => el.textContent.includes('重命名会话'));
     if (!item) return { ok: false, items };
     item.click();
     await new Promise(resolve => setTimeout(resolve, 40));
@@ -337,12 +337,39 @@ try {
     return { ok: true, items, dialogOpen, prefilled, label, profileName };
   });
   assert(renameFlow.ok, `tab menu rename flow: ${JSON.stringify(renameFlow)}`);
-  assert(renameFlow.items.includes('重命名连接') && !renameFlow.items.some(text => text.includes('保存连接')));
+  assert(renameFlow.items.includes('重命名会话') && !renameFlow.items.some(text => text.includes('保存连接')));
+  // The pin affordance now lives in the tab menu: an unpinned saved session
+  // offers 加入收藏夹 (and would flip to 取消收藏 once pinned).
+  assert(renameFlow.items.includes('加入收藏夹'), `tab menu must offer pinning: ${renameFlow.items}`);
   assert.equal(renameFlow.dialogOpen, true);
   assert.equal(renameFlow.prefilled, '起始页建立的连接');
   assert(renameFlow.label?.startsWith('改名后的连接'), `tab label after rename: ${renameFlow.label}`);
-  assert.equal(renameFlow.profileName, '改名后的连接');
-  checks.push('Right-clicking a tab renames the saved connection; profile, tab label and lists update together');
+  assert.equal(renameFlow.profileName, '起始页建立的连接');
+  checks.push('Right-clicking a tab renames only that session tab; the saved connection name stays untouched');
+  // The pin affordance lives here too: 加入收藏夹 adds the saved session to
+  // the favourites layout, and the menu entry flips to 取消收藏 which removes it.
+  const pinFlow = await page.evaluate(async () => {
+    const state = sessions.get('tabs-replaced'); if (!state) return { ok: false, reason: 'live session missing' };
+    state.ready = true;
+    const tab = [...$('#session-tabs').children].find(el => el.dataset.sessionId === 'tabs-replaced');
+    const openMenu = () => {
+      tab.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 40 }));
+      return [...document.querySelectorAll('#session-tab-menu button')].map(b => b.textContent.trim());
+    };
+    const items1 = openMenu();
+    [...document.querySelectorAll('#session-tab-menu button')].find(b => b.textContent.trim() === '加入收藏夹')?.click();
+    await new Promise(resolve => setTimeout(resolve, 400));
+    const pinnedAfter = (appearance.layout['dengshell.pinned.v1'] || []).includes(state.profileId);
+    const items2 = openMenu();
+    [...document.querySelectorAll('#session-tab-menu button')].find(b => b.textContent.trim() === '取消收藏')?.click();
+    await new Promise(resolve => setTimeout(resolve, 400));
+    const pinnedFinal = (appearance.layout['dengshell.pinned.v1'] || []).includes(state.profileId);
+    document.querySelector('#session-tab-menu')?.remove();
+    state.ready = false;
+    return { ok: pinnedAfter && !pinnedFinal && items2.includes('取消收藏'), items1, pinnedAfter, items2, pinnedFinal };
+  });
+  assert(pinFlow.ok, `tab menu pin round trip: ${JSON.stringify(pinFlow)}`);
+  checks.push('Tab menu pins a saved session to the favourites bar; 取消收藏 removes it');
   if (process.env.DENGSHELL_TABS_SCREENSHOT) {
     await page.evaluate(() => { DevShellTheme.set('dark'); DengStartTabs.create(); });
     await page.waitForFunction(() => !document.documentElement.dataset.lightSwitch); await settle();

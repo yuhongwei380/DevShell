@@ -10,45 +10,79 @@ import (
 	"testing"
 )
 
-func releaseTestAssets() []githubReleaseAsset {
-	return []githubReleaseAsset{{Name: "up.exe.json", State: "uploaded"}, {Name: "up.exe", State: "uploaded"}}
+// releaseFeedXML builds a minimal GitHub releases.atom payload: entries in
+// publish order (newest first), each carrying the alternate link whose path
+// holds the release tag — exactly what releaseFeedTags parses.
+func releaseFeedXML(tags ...string) string {
+	var b strings.Builder
+	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
+	b.WriteString(`<feed xmlns="http://www.w3.org/2005/Atom">` + "\n")
+	for _, tag := range tags {
+		b.WriteString("<entry>\n")
+		b.WriteString("<id>tag:github.com,2008:Repository/1424220324/" + tag + "</id>\n")
+		b.WriteString(`<link rel="alternate" type="text/html" href="https://github.com/yuhongwei380/DevShell/releases/tag/` + tag + `"/>` + "\n")
+		b.WriteString("<title>DevShell " + tag + "</title>\n")
+		b.WriteString("</entry>\n")
+	}
+	b.WriteString("</feed>")
+	return b.String()
 }
 
-func releaseListServer(list []githubRelease) *httptest.Server {
-	data, _ := json.Marshal(list)
+func releaseFeedServer(tags []string) *httptest.Server {
+	data := releaseFeedXML(tags...)
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(data)
+		w.Header().Set("Content-Type", "application/atom+xml")
+		w.Write([]byte(data))
 	}))
 }
 
 func TestParseUpdateReleaseTagAcceptsVersionOnlyTags(t *testing.T) {
-	full := strconv.FormatUint(ApplicationBuild+1, 10)
-	abbreviated := full[2:]
 	for _, tc := range []struct {
-		tag, version string
-		build        uint64
-		isRC, ok     bool
+		tag           string
+		version       string
+		build         uint64
+		prereleaseTag bool
 	}{
-		{"v26.11.1-rc.7-build" + abbreviated, "v26.11.1", ApplicationBuild + 1, true, true},
-		{"v26.11.1-rc.7-build" + full, "v26.11.1", ApplicationBuild + 1, true, true},
-		{"v26.11.1-rc.7", "v26.11.1", 0, true, true},
-		{"v26.11.1", "v26.11.1", 0, false, true},
-		{"v26.11.1-rc.build" + abbreviated, "", 0, false, false},
-		{"v26.11-build" + abbreviated, "", 0, false, false},
-		{"v26.11.1-rc.7-build" + full[:9], "", 0, false, false},
-		{"v26.11.1-rc.7-build261101", "", 0, false, false},
+		{"v26.10.24-rc.3", "v26.10.24", 0, true},
+		{"v26.10.24-rc.11", "v26.10.24", 0, true},
+		{"v26.10.26", "v26.10.26", 0, false},
 	} {
-		version, build, isRC, ok := parseUpdateReleaseTag(tc.tag)
-		if version != tc.version || build != tc.build || isRC != tc.isRC || ok != tc.ok {
-			t.Fatalf("parseUpdateReleaseTag(%q) = %q %d rc=%v ok=%v; want %q %d rc=%v ok=%v", tc.tag, version, build, isRC, ok, tc.version, tc.build, tc.isRC, tc.ok)
+		version, build, prereleaseTag, ok := parseUpdateReleaseTag(tc.tag)
+		if !ok || version != tc.version || build != tc.build || prereleaseTag != tc.prereleaseTag {
+			t.Fatalf("parseUpdateReleaseTag(%q) = (%q, %d, %v, %v); want (%q, %d, %v, true)", tc.tag, version, build, prereleaseTag, ok, tc.version, tc.build, tc.prereleaseTag)
 		}
+	}
+
+	// Historical tag formats must keep decoding for installed clients.
+	buildText := strconv.FormatUint(ApplicationBuild+1, 10)
+	if version, build, prereleaseTag, ok := parseUpdateReleaseTag("v26.10.24-rc.3-build" + buildText); !ok || version != "v26.10.24" || build != ApplicationBuild+1 || !prereleaseTag {
+		t.Fatalf("legacy tag with rc suffix no longer decodes: %q %d %v %v", version, build, prereleaseTag, ok)
+	}
+	if version, build, _, ok := parseUpdateReleaseTag("v26.10.24-build" + buildText); !ok || version != "v26.10.24" || build != ApplicationBuild+1 {
+		t.Fatalf("legacy stable tag no longer decodes: %q %d %v", version, build, ok)
+	}
+	if _, _, _, ok := parseUpdateReleaseTag("v26.10.24-rc.3-build123"); ok {
+		t.Fatal("malformed build suffix must be rejected")
 	}
 }
 
-func withLocalReleaseSources(t *testing.T, list []githubRelease, manifests map[string]uint64, manifestServed *int) (client *http.Client) {
+func TestReleaseFeedTagsParsesAlternateLinks(t *testing.T) {
+	tags, err := releaseFeedTags([]byte(releaseFeedXML("v1.2.3-rc.4", "v1.2.3")))
+	if err != nil || len(tags) != 2 || tags[0] != "v1.2.3-rc.4" || tags[1] != "v1.2.3" {
+		t.Fatalf("feed tags parsed wrong: %q, %v", tags, err)
+	}
+	tags, err = releaseFeedTags([]byte(`<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><entry><id>tag:github.com,2008:Repository/1/x</id><link rel="enclosure" href="https://github.com/x/y/releases/tag/a/b"/></entry></feed>`))
+	if err != nil || len(tags) != 0 {
+		t.Fatalf("entry without a usable alternate link must be skipped, not guessed: %q, %v", tags, err)
+	}
+	if _, err := releaseFeedTags([]byte("<html>not a feed</html>")); err == nil {
+		t.Fatal("non-feed payload must fail parsing")
+	}
+}
+
+func withLocalReleaseSources(t *testing.T, tags []string, manifests map[string]uint64, manifestServed *int) *http.Client {
 	t.Helper()
-	listServer := releaseListServer(list)
+	listServer := releaseFeedServer(tags)
 	t.Cleanup(listServer.Close)
 	downloads := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		for tag, build := range manifests {
@@ -63,25 +97,23 @@ func withLocalReleaseSources(t *testing.T, list []githubRelease, manifests map[s
 		http.NotFound(w, r)
 	}))
 	t.Cleanup(downloads.Close)
-	oldList, oldBase := updateReleaseListURL, updateReleaseDownloadBase
-	t.Cleanup(func() { updateReleaseListURL, updateReleaseDownloadBase = oldList, oldBase })
-	updateReleaseListURL = listServer.URL + "/releases"
+	oldFeed, oldBase := updateReleaseFeedURL, updateReleaseDownloadBase
+	t.Cleanup(func() { updateReleaseFeedURL, updateReleaseDownloadBase = oldFeed, oldBase })
+	updateReleaseFeedURL = listServer.URL + "/releases.atom"
 	updateReleaseDownloadBase = downloads.URL + "/download/"
 	return &http.Client{}
 }
 
 func TestLatestReleaseUpdateSourceResolvesVersionOnlyTags(t *testing.T) {
-	manifests := map[string]uint64{"v26.11.1-rc.8": ApplicationBuild + 2, "v26.11.1-rc.7": ApplicationBuild + 1}
+	rc8, rc7 := ApplicationVersion+"-rc.8", ApplicationVersion+"-rc.7"
+	manifests := map[string]uint64{rc8: ApplicationBuild + 2, rc7: ApplicationBuild + 1}
 	served := 0
-	client := withLocalReleaseSources(t, []githubRelease{
-		{TagName: "v26.11.1-rc.8", Prerelease: true, Assets: releaseTestAssets()},
-		{TagName: "v26.11.1-rc.7", Prerelease: true, Assets: releaseTestAssets()},
-	}, manifests, &served)
+	client := withLocalReleaseSources(t, []string{rc8, rc7}, manifests, &served)
 	source, reason, viaMirror := latestReleaseUpdateSource(context.Background(), client, "windows-amd64", "")
 	if reason != "" || viaMirror {
 		t.Fatalf("version-only tags rejected: %+v %q", source, reason)
 	}
-	if !strings.HasSuffix(source.manifestURL, "/v26.11.1-rc.8/up.exe.json") || source.build != ApplicationBuild+2 {
+	if !strings.HasSuffix(source.manifestURL, "/"+rc8+"/up.exe.json") || source.build != ApplicationBuild+2 {
 		t.Fatalf("wrong newest version-only release chosen: %+v", source)
 	}
 	if served != 1 {
@@ -90,20 +122,15 @@ func TestLatestReleaseUpdateSourceResolvesVersionOnlyTags(t *testing.T) {
 }
 
 func TestLatestReleaseUpdateSourceOrdersMixedTagStyles(t *testing.T) {
-	legacy := "v26.11.1-rc.6-build" + strconv.FormatUint(ApplicationBuild, 10)
-	client := withLocalReleaseSources(t, []githubRelease{
-		{TagName: "v26.11.1-rc.7", Prerelease: true, Assets: releaseTestAssets()},
-		{TagName: legacy, Prerelease: true, Assets: releaseTestAssets()},
-	}, map[string]uint64{"v26.11.1-rc.7": ApplicationBuild + 1}, nil)
+	rc7 := ApplicationVersion + "-rc.7"
+	legacy := ApplicationVersion + "-rc.6-build" + strconv.FormatUint(ApplicationBuild, 10)
+	client := withLocalReleaseSources(t, []string{rc7, legacy}, map[string]uint64{rc7: ApplicationBuild + 1}, nil)
 	source, reason, _ := latestReleaseUpdateSource(context.Background(), client, "windows-amd64", "")
-	if reason != "" || !strings.HasSuffix(source.manifestURL, "/v26.11.1-rc.7/up.exe.json") {
+	if reason != "" || !strings.HasSuffix(source.manifestURL, "/"+rc7+"/up.exe.json") {
 		t.Fatalf("newer version-only release not chosen over legacy: %+v %q", source, reason)
 	}
 
-	client = withLocalReleaseSources(t, []githubRelease{
-		{TagName: "v26.11.1-rc.7", Prerelease: true, Assets: releaseTestAssets()},
-		{TagName: legacy, Prerelease: true, Assets: releaseTestAssets()},
-	}, map[string]uint64{"v26.11.1-rc.7": ApplicationBuild - 1}, nil)
+	client = withLocalReleaseSources(t, []string{rc7, legacy}, map[string]uint64{rc7: ApplicationBuild - 1}, nil)
 	source, reason, _ = latestReleaseUpdateSource(context.Background(), client, "windows-amd64", "")
 	if reason != "" || !strings.HasSuffix(source.manifestURL, "/"+legacy+"/up.exe.json") {
 		t.Fatalf("stale version-only republish must not outrank newer legacy build: %+v %q", source, reason)
@@ -111,11 +138,9 @@ func TestLatestReleaseUpdateSourceOrdersMixedTagStyles(t *testing.T) {
 }
 
 func TestLatestReleaseUpdateSourceSkipsUnresolvableVersionOnlyTag(t *testing.T) {
-	legacy := "v26.11.1-rc.6-build" + strconv.FormatUint(ApplicationBuild, 10)
-	client := withLocalReleaseSources(t, []githubRelease{
-		{TagName: "v26.11.1-rc.7", Prerelease: true, Assets: releaseTestAssets()},
-		{TagName: legacy, Prerelease: true, Assets: releaseTestAssets()},
-	}, map[string]uint64{}, nil)
+	rc7 := ApplicationVersion + "-rc.7"
+	legacy := ApplicationVersion + "-rc.6-build" + strconv.FormatUint(ApplicationBuild, 10)
+	client := withLocalReleaseSources(t, []string{rc7, legacy}, map[string]uint64{}, nil)
 	source, reason, _ := latestReleaseUpdateSource(context.Background(), client, "windows-amd64", "")
 	if reason != "" || !strings.HasSuffix(source.manifestURL, "/"+legacy+"/up.exe.json") {
 		t.Fatalf("missing manifest did not skip the version-only candidate: %+v %q", source, reason)
@@ -123,8 +148,8 @@ func TestLatestReleaseUpdateSourceSkipsUnresolvableVersionOnlyTag(t *testing.T) 
 }
 
 func TestLatestReleaseUpdateSourceResolvesBuildThroughMirror(t *testing.T) {
-	list := []githubRelease{{TagName: "v26.11.1-rc.8", Prerelease: true, Assets: releaseTestAssets()}}
-	listServer := releaseListServer(list)
+	rc8 := ApplicationVersion + "-rc.8"
+	listServer := releaseFeedServer([]string{rc8})
 	defer listServer.Close()
 	directManifests := 0
 	downloads := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -133,26 +158,25 @@ func TestLatestReleaseUpdateSourceResolvesBuildThroughMirror(t *testing.T) {
 	}))
 	defer downloads.Close()
 	mirror := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/"+listServer.URL+"/releases" {
-			data, _ := json.Marshal(list)
-			w.Header().Set("Content-Type", "application/json")
-			w.Write(data)
+		if r.URL.Path == "/"+listServer.URL+"/releases.atom" {
+			w.Header().Set("Content-Type", "application/atom+xml")
+			w.Write([]byte(releaseFeedXML(rc8)))
 			return
 		}
-		if r.URL.Path == "/"+downloads.URL+"/download/v26.11.1-rc.8/up.exe.json" {
+		if r.URL.Path == "/"+downloads.URL+"/download/"+rc8+"/up.exe.json" {
 			json.NewEncoder(w).Encode(UpdateDescriptor{SchemaVersion: 2, Build: ApplicationBuild + 2, Product: "DevShell", Platform: "windows-amd64"})
 			return
 		}
 		http.NotFound(w, r)
 	}))
 	defer mirror.Close()
-	oldList, oldBase := updateReleaseListURL, updateReleaseDownloadBase
-	defer func() { updateReleaseListURL, updateReleaseDownloadBase = oldList, oldBase }()
-	updateReleaseListURL = listServer.URL + "/releases"
+	oldFeed, oldBase := updateReleaseFeedURL, updateReleaseDownloadBase
+	defer func() { updateReleaseFeedURL, updateReleaseDownloadBase = oldFeed, oldBase }()
+	updateReleaseFeedURL = listServer.URL + "/releases.atom"
 	updateReleaseDownloadBase = downloads.URL + "/download/"
 	source, reason, viaMirror := latestReleaseUpdateSource(context.Background(), &http.Client{}, "windows-amd64", mirror.URL)
 	if reason != "" || !viaMirror {
-		t.Fatalf("mirror release list rejected: %+v %q", source, reason)
+		t.Fatalf("mirror release feed rejected: %+v %q", source, reason)
 	}
 	if source.build != ApplicationBuild+2 || !strings.HasPrefix(source.manifestURL, updateReleaseDownloadBase) || directManifests != 0 {
 		t.Fatalf("manifest not resolved through the mirror: %+v (direct calls %d)", source, directManifests)

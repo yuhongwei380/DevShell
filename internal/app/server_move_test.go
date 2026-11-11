@@ -25,7 +25,7 @@ func TestMoveProfileGroupPreservesConfigAndRollsBack(t *testing.T) {
 	}
 	original, _ := s.Get(p.ID)
 	before := cloneConnectionConfig(s.config)
-	for _, input := range [][2]string{{p.ID, "missing"}, {p.ID, ""}, {"missing", target.ID}} {
+	for _, input := range [][2]string{{p.ID, "missing"}, {"missing", target.ID}} {
 		if _, err := s.MoveProfileGroup(input[0], input[1]); err == nil {
 			t.Fatal("invalid move succeeded")
 		}
@@ -43,6 +43,12 @@ func TestMoveProfileGroupPreservesConfigAndRollsBack(t *testing.T) {
 	s.dir = oldDir
 	if err == nil || !reflect.DeepEqual(before, cloneConnectionConfig(s.config)) {
 		t.Fatal("failed write did not roll back")
+	}
+	if free, err := s.MoveProfileGroup(p.ID, ""); err != nil || free.GroupID != "" || free.Group != "" {
+		t.Fatalf("move to ungrouped failed: %+v %v", free, err)
+	}
+	if free, _ := s.Get(p.ID); free.Secret != "ssh-secret" || free.Proxy.Password != "proxy-secret" || free.Notes != "备注" {
+		t.Fatal("move to ungrouped changed connection fields")
 	}
 	public, err := s.MoveProfileGroup(p.ID, target.ID)
 	if err != nil {
@@ -85,7 +91,7 @@ func TestMoveProfileGroupHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler := a.Handler(fstest.MapFS{"index.html": {Data: []byte("fixture")}})
-	for _, groupID := range []string{"missing", target.ID} {
+	for _, groupID := range []string{"missing", target.ID, ""} {
 		body, _ := json.Marshal(map[string]string{"groupId": groupID})
 		req := httptest.NewRequest("POST", "http://wails.localhost/api/profiles/"+p.ID+"/group", bytes.NewReader(body))
 		req.Header.Set("X-CloudShell-Token", a.Token())
@@ -98,8 +104,11 @@ func TestMoveProfileGroupHTTP(t *testing.T) {
 			continue
 		}
 		var moved Profile
-		if err := json.Unmarshal(response.Body.Bytes(), &moved); err != nil || response.Code != 200 || moved.GroupID != target.ID || !moved.HasSecret || bytes.Contains(response.Body.Bytes(), []byte("private-value")) {
+		if err := json.Unmarshal(response.Body.Bytes(), &moved); err != nil || response.Code != 200 || !moved.HasSecret || bytes.Contains(response.Body.Bytes(), []byte("private-value")) {
 			t.Fatal("incorrect move HTTP response", response.Code)
+		}
+		if moved.GroupID != groupID {
+			t.Fatal("incorrect move target", moved.GroupID)
 		}
 	}
 }

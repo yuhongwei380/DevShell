@@ -327,13 +327,11 @@ func (s *Session) noteVerbose(level int, kind, detail string) {
 // noteVerboseHandshakeFailure keeps the authentication-method trace from a
 // failed -vvv attempt. The library tears the transport down on failure, so the
 // server version string is unreachable; the offered/tried/partial methods are
-// exactly what -vvv debugging on embedded servers is after.
+// exactly what -vvv debugging on embedded servers is after. The trace key must
+// carry the full profile ID: the frontend polls handshake-<profileID>, and a
+// truncated key strands every event for real (48-hex) profile IDs.
 func (a *App) noteVerboseHandshakeFailure(profileID, detail string) {
-	trace := profileID
-	if len(trace) > 12 {
-		trace = trace[:12]
-	}
-	a.sshDiagnostics.recordImmediate("handshake-"+trace, sshDiagnosticEvent{SSHDisconnectDiagnostic: SSHDisconnectDiagnostic{TraceID: trace, Detail: detail, At: time.Now()}, Kind: "verbose-handshake-failed"})
+	a.sshDiagnostics.recordImmediate("handshake-"+profileID, sshDiagnosticEvent{SSHDisconnectDiagnostic: SSHDisconnectDiagnostic{TraceID: profileID, Detail: detail, At: time.Now()}, Kind: "verbose-handshake-failed"})
 }
 
 func (s *Session) startConnectionDiagnostics() {
@@ -418,14 +416,21 @@ func sshDiagnosticErrorKind(err error) string {
 	if errors.Is(err, context.Canceled) {
 		return "context-cancelled"
 	}
-	if errors.Is(err, syscall.ECONNRESET) {
-		return "connection-reset"
-	}
-	if errors.Is(err, syscall.ECONNABORTED) {
-		return "connection-aborted"
-	}
-	if errors.Is(err, syscall.EPIPE) {
-		return "broken-pipe"
+	// Windows reports socket resets as raw WSA error numbers (10054/10053),
+	// while syscall.ECONNRESET and friends are the errno spellings that never
+	// match a TCP socket error there; unwrap to the errno and match both.
+	var errno syscall.Errno
+	if errors.As(err, &errno) {
+		switch errno {
+		case syscall.ECONNRESET, syscall.Errno(10054): // 10054 = WSAECONNRESET
+			return "connection-reset"
+		case syscall.ECONNABORTED, syscall.Errno(10053): // 10053 = WSAECONNABORTED (also the Windows spelling of EPIPE on sockets)
+			return "connection-aborted"
+		case syscall.EPIPE:
+			return "broken-pipe"
+		case syscall.ECONNREFUSED, syscall.Errno(10061): // 10061 = WSAECONNREFUSED
+			return "connection-refused"
+		}
 	}
 	if errors.Is(err, net.ErrClosed) {
 		return "local-socket-closed"

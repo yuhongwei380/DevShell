@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -206,5 +208,14 @@ func TestSSHProtocolErrorsAreClassifiedWithoutLeakingText(t *testing.T) {
 		if got := sshDiagnosticErrorKind(fmt.Errorf("wrapped: %w", errors.New(input))); got != want {
 			t.Errorf("%q: got %q want %q", input, got, want)
 		}
+	}
+	// Windows sockets report resets as raw WSA numbers inside a net.OpError,
+	// not as the syscall.ECONNRESET errno spelling; both must classify.
+	reset := fmt.Errorf("ssh: handshake failed: %w", &net.OpError{Op: "read", Net: "tcp", Err: os.NewSyscallError("wsarecv", syscall.Errno(10054))})
+	if got := sshDiagnosticErrorKind(reset); got != "connection-reset" {
+		t.Errorf("WSAECONNRESET: got %q want connection-reset", got)
+	}
+	if got := sshDiagnosticErrorKind(fmt.Errorf("wrapped: %w", syscall.ECONNRESET)); got != "connection-reset" {
+		t.Errorf("errno spelling: got %q want connection-reset", got)
 	}
 }

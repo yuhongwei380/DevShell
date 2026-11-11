@@ -48,7 +48,7 @@ try {
   };
   await page.setDragInterception(true);
   assert.deepEqual(await customOrder(), [a.id, c.id, d.id, z.id]);
-  assert.equal(await page.$eval(select(''), el => el.draggable), false, 'all connections is fixed');
+  assert.equal(await page.$eval(select('__ungrouped__'), el => el.draggable), false, 'the ungrouped filter row is fixed');
   await drag(z.id, a.id, true);
   assert.deepEqual(await customOrder(), [z.id, a.id, c.id, d.id]);
   assert.equal(await page.evaluate(() => serverManager.selectedGroup), a.id, 'sorting preserves selection');

@@ -45,7 +45,7 @@
 .server-profile-actions { display:flex; justify-content:flex-end; gap:4px; padding-right:5px; }
 .server-profile-actions button { font-size:11px; color:var(--muted,#8499aa); padding:4px 8px; border-radius:7px; }
 .server-profile-actions button:hover { background:var(--surface-inset,#edf4f8); color:var(--text,#39556b); }
-.server-profile-actions .server-danger,.server-group-menu .server-danger { color:var(--danger,#c67b7b); }
+.server-profile-actions .server-danger,.server-group-menu .server-danger,.server-manager-create .server-danger { color:var(--danger,#c67b7b); }
 .server-profile-meta { display:flex; flex-direction:column; gap:4px; padding:1px 8px 6px 46px; font-size:10px; color:var(--muted,#879baa); min-width:0; }
 .server-profile-path { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
 .server-profile-date { line-height:1.55; }
@@ -172,6 +172,8 @@
 .server-folder-row.server-folder-drop-after::after { content:""; position:absolute; left:0; right:0; height:3px; border-radius:2px; background:var(--accent,#326982); pointer-events:none; z-index:1; }
 .server-folder-row.server-folder-drop-before::before { top:-2px; }
 .server-folder-row.server-folder-drop-after::after { bottom:-2px; }
+.connection-card-dragging { opacity:.45; }
+.server-folder-wrap.server-folder-drop-into .server-folder-row { background:color-mix(in srgb,var(--accent,#326982) 18%,transparent); box-shadow:inset 0 0 0 2px var(--accent,#326982); border-radius:8px; }
 .backup-secrets { display:flex; align-items:center; gap:8px; font-size:12px; margin:12px 0 4px; color:var(--text,#354d61); }
 .backup-secrets input { accent-color:#3d7ea6; }
 #backup-status { font-size:12px; color:var(--muted,#526c80); min-height:1.2em; margin:6px 0; }

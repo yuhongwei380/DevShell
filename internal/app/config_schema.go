@@ -107,8 +107,12 @@ func (s *Store) upgradeConfig() error {
 		if err := validateProfileNotes(profile.Notes); err != nil {
 			return err
 		}
-		if _, ok := groups[profile.GroupID]; !ok {
-			return fmt.Errorf("服务器「%s」引用不存在的分组，已保留原文件", profile.Name)
+		// An empty GroupID is the explicit "ungrouped" state; every other
+		// reference must resolve to a real group node.
+		if profile.GroupID != "" {
+			if _, ok := groups[profile.GroupID]; !ok {
+				return fmt.Errorf("服务器「%s」引用不存在的分组，已保留原文件", profile.Name)
+			}
 		}
 	}
 	if len(s.config.Trash) > 0 {

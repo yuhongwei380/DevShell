@@ -24,3 +24,11 @@
 #update-mirror-dialog select, #update-mirror-dialog input { width:100%; box-sizing:border-box; }
 #update-mirror-dialog .update-mirror-help { margin:4px 0 0; color:var(--muted); font-size:12px; line-height:1.65; }
 #update-mirror-error { font-size:12px; color:#c56f78; white-space:pre-wrap; overflow-wrap:anywhere; }
+#update-channel-dialog .update-channel-options { display:flex; flex-direction:column; gap:8px; padding:8px 0; }
+.update-channel-option { display:flex; gap:10px; align-items:flex-start; padding:11px 13px; border:1px solid var(--border); border-radius:13px; background:var(--surface-inset,#f3f6f8); cursor:pointer; }
+.update-channel-option:has(input:checked) { border-color:var(--accent); background:var(--surface-selected,#e8f0f5); }
+.update-channel-option input { width:15px; height:15px; margin:2px 0 0; flex:none; accent-color:var(--accent,#658daf); }
+.update-channel-option span { display:flex; flex-direction:column; gap:3px; }
+.update-channel-option strong { font-size:13px; }
+.update-channel-option em { font-style:normal; color:var(--muted); font-size:12px; line-height:1.6; }
+#update-channel-dialog .update-channel-help { margin:2px 0 0; color:var(--muted); font-size:12px; line-height:1.65; }

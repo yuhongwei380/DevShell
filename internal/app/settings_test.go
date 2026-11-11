@@ -5,9 +5,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"image"
-	"image/color"
-	"image/png"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -20,15 +17,13 @@ import (
 	"testing/fstest"
 )
 
-func sampleBackground(t *testing.T) []byte {
+func bundledFont(t *testing.T) []byte {
 	t.Helper()
-	img := image.NewNRGBA(image.Rect(0, 0, 3, 2))
-	img.Set(1, 1, color.NRGBA{R: 50, G: 120, B: 190, A: 255})
-	var out bytes.Buffer
-	if err := png.Encode(&out, img); err != nil {
+	data, err := os.ReadFile(filepath.Join("..", "..", "web", "assets", "fonts", "jetbrains-mono.woff2"))
+	if err != nil {
 		t.Fatal(err)
 	}
-	return out.Bytes()
+	return data
 }
 
 func TestManagedAssetsAndAppearancePersist(t *testing.T) {
@@ -37,27 +32,26 @@ func TestManagedAssetsAndAppearancePersist(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer a.Close()
-	source := filepath.Join(t.TempDir(), "自定义背景.png")
-	original := sampleBackground(t)
+	source := filepath.Join(t.TempDir(), "自定义字体.woff2")
+	original := bundledFont(t)
 	if err := os.WriteFile(source, original, 0600); err != nil {
 		t.Fatal(err)
 	}
-	asset, err := a.ImportLocalAsset("background", source, "")
+	asset, err := a.ImportLocalAsset("font", source, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if asset.Name != "自定义背景" || asset.MIMEType != "image/png" || asset.Size != int64(len(original)) {
+	if asset.Name != "自定义字体" || asset.MIMEType != "font/woff2" || asset.Size != int64(len(original)) {
 		t.Fatalf("incorrect imported metadata: %+v", asset)
 	}
 	appearance := defaultAppearance()
-	appearance.BackgroundID = asset.ID
+	appearance.FontID = asset.ID
 	appearance.UIScale = 1.25
 	appearance.TerminalFontSize = 17
-	appearance.BackgroundOpacity = .24
 	if _, err := a.store.SaveAppearance(appearance); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.store.RenameAsset(asset.ID, "海边"); err != nil {
+	if _, err := a.store.RenameAsset(asset.ID, "等宽"); err != nil {
 		t.Fatal(err)
 	}
 	reopened, err := OpenStore(a.store.dir)
@@ -65,14 +59,14 @@ func TestManagedAssetsAndAppearancePersist(t *testing.T) {
 		t.Fatal(err)
 	}
 	list := reopened.List()
-	if !reflect.DeepEqual(list.Appearance, appearance) || len(list.Assets) != 1 || list.Assets[0].Name != "海边" {
+	if !reflect.DeepEqual(list.Appearance, appearance) || len(list.Assets) != 1 || list.Assets[0].Name != "等宽" {
 		t.Fatalf("asset/settings not persisted: %+v", list)
 	}
 	content, err := reopened.AssetData(asset.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if content.DataURL != "data:image/png;base64,"+base64.StdEncoding.EncodeToString(original) {
+	if content.DataURL != "data:font/woff2;base64,"+base64.StdEncoding.EncodeToString(original) {
 		t.Fatal("managed asset data differs from source")
 	}
 	if err := reopened.DeleteAsset(asset.ID); err != nil {
@@ -82,8 +76,8 @@ func TestManagedAssetsAndAppearancePersist(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if reopened.List().Appearance.BackgroundID != "builtin:none" || reopened.List().Appearance.UIScale != 1.25 || len(reopened.List().Assets) != 0 {
-		t.Fatal("deleting selected background did not persist a usable fallback")
+	if reopened.List().Appearance.FontID != defaultAppearance().FontID || reopened.List().Appearance.UIScale != 1.25 || len(reopened.List().Assets) != 0 {
+		t.Fatal("deleting selected font did not persist a usable fallback")
 	}
 	if _, err := os.Stat(filepath.Join(a.store.dir, "assets", asset.ID)); !os.IsNotExist(err) {
 		t.Fatal("managed copy was not removed")
@@ -104,10 +98,9 @@ func TestAssetValidationAndRollback(t *testing.T) {
 		data           []byte
 	}{
 		{"background", "payload.svg", []byte("<svg></svg>")},
-		{"background", "renamed.png", []byte("not an image")},
-		{"font", "renamed.ttf", sampleBackground(t)},
+		{"font", "renamed.ttf", []byte("not a font")},
 		{"font", "empty.woff2", []byte("wOF2")},
-		{"unknown", "hello.png", sampleBackground(t)},
+		{"unknown", "hello.png", []byte("not a font")},
 	} {
 		if _, err := s.ImportAsset(tc.kind, tc.filename, "test", tc.data); err == nil {
 			t.Fatalf("accepted invalid import %s", tc.filename)
@@ -122,7 +115,7 @@ func TestAssetValidationAndRollback(t *testing.T) {
 		}
 	}
 	appearance := defaultAppearance()
-	appearance.BackgroundID = "../config.json"
+	appearance.FontID = "../config.json"
 	if _, err := s.SaveAppearance(appearance); err == nil {
 		t.Fatal("invalid resource selected")
 	}
@@ -131,7 +124,7 @@ func TestAssetValidationAndRollback(t *testing.T) {
 	if _, err := s.SaveAppearance(appearance); err == nil {
 		t.Fatal("zero UI scale accepted")
 	}
-	asset, err := s.ImportAsset("background", "test.png", "test", sampleBackground(t))
+	asset, err := s.ImportAsset("font", "test.woff2", "test", bundledFont(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,17 +223,16 @@ func TestAssetHTTPUsesAuthenticatedJSONBridge(t *testing.T) {
 	defer a.Close()
 	a.baseURL = "http://wails.localhost"
 	handler := a.Handler(fstest.MapFS{"index.html": {Data: []byte("test")}})
-	// A real PNG larger than the generic API's 2 MB limit exercises the separate
-	// import cap instead of accepting a tiny fixture through the wrong decoder.
-	var pngData bytes.Buffer
-	encoder := png.Encoder{CompressionLevel: png.NoCompression}
-	if err := encoder.Encode(&pngData, image.NewNRGBA(image.Rect(0, 0, 1024, 768))); err != nil {
+	// A real font larger than the generic API's 2 MB limit exercises the
+	// separate import cap instead of accepting a tiny fixture through the wrong decoder.
+	fontData, err := os.ReadFile(filepath.Join("..", "..", "web", "assets", "fonts", "maple-mono-cn.woff2"))
+	if err != nil {
 		t.Fatal(err)
 	}
-	if pngData.Len() <= 2<<20 {
+	if len(fontData) <= 2<<20 {
 		t.Fatal("fixture should exercise a large import")
 	}
-	body, _ := json.Marshal(map[string]string{"kind": "background", "filename": "test.png", "name": "From browser", "data": base64.StdEncoding.EncodeToString(pngData.Bytes())})
+	body, _ := json.Marshal(map[string]string{"kind": "font", "filename": "test.woff2", "name": "From browser", "data": base64.StdEncoding.EncodeToString(fontData)})
 	request := httptest.NewRequest(http.MethodPost, "http://wails.localhost/api/assets", bytes.NewReader(body))
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
@@ -263,7 +255,7 @@ func TestAssetHTTPUsesAuthenticatedJSONBridge(t *testing.T) {
 	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	var content AssetContent
-	if err := json.Unmarshal(response.Body.Bytes(), &content); err != nil || response.Code != http.StatusOK || !strings.HasPrefix(content.DataURL, "data:image/png;base64,") {
+	if err := json.Unmarshal(response.Body.Bytes(), &content); err != nil || response.Code != http.StatusOK || !strings.HasPrefix(content.DataURL, "data:font/woff2;base64,") {
 		t.Fatal("asset is unavailable through JSON bridge", response.Body.String())
 	}
 }
@@ -289,10 +281,6 @@ func TestCustomFontImportAndFallback(t *testing.T) {
 	appearance.FontID = asset.ID
 	if _, err := s.SaveAppearance(appearance); err != nil {
 		t.Fatal(err)
-	}
-	appearance.BackgroundID = asset.ID
-	if _, err := s.SaveAppearance(appearance); err == nil {
-		t.Fatal("a font can be selected as an image")
 	}
 	if err := s.DeleteAsset(asset.ID); err != nil {
 		t.Fatal(err)

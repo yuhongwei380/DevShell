@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"encoding/xml"
 	"io"
 	"net/http"
 	"net/url"
@@ -12,14 +13,22 @@ import (
 	"strings"
 )
 
-// var, not const: tests point the release list and the download base at a
+// var, not const: tests point the release feed and the download base at a
 // local server, mirroring how the runtime wraps them with the configured
 // accelerator origin.
-var updateReleaseListURL = "https://api.github.com/repos/yuhongwei380/DevShell/releases?per_page=100"
+// RC discovery reads the public releases.atom feed on github.com instead of
+// the REST release list: the anonymous API quota (60 requests per hour per
+// IP) gets exhausted easily and surfaced as failed "unavailable" checks,
+// while the feed costs no quota and accelerator mirrors already wrap
+// github.com URLs exactly like release downloads. The feed lists published
+// releases newest-first and drops deleted rc publishes, offering the same
+// candidates the API list did; asset presence is then learned from the
+// manifest fetch itself instead of a list payload.
+var updateReleaseFeedURL = "https://github.com/yuhongwei380/DevShell/releases.atom"
 
 var updateReleaseDownloadBase = "https://github.com/yuhongwei380/DevShell/releases/download/"
 
-const maximumReleaseListSize = 2 << 20
+const maximumReleaseFeedSize = 2 << 20
 
 var releaseCandidateDisplayPattern = regexp.MustCompile(`(?i)-rc\.?[0-9]+(?:\b|$)`)
 
@@ -36,16 +45,21 @@ type releaseUpdateSource struct {
 	build       uint64
 }
 
-type githubRelease struct {
-	TagName    string               `json:"tag_name"`
-	Draft      bool                 `json:"draft"`
-	Prerelease bool                 `json:"prerelease"`
-	Assets     []githubReleaseAsset `json:"assets"`
+// Minimal projection of the GitHub releases.atom feed: entry order is the
+// publish order (newest first) and each entry's alternate link path carries
+// the exact release tag.
+type releaseFeed struct {
+	XMLName xml.Name         `xml:"feed"`
+	Entries []releaseFeedEntry `xml:"entry"`
 }
 
-type githubReleaseAsset struct {
-	Name  string `json:"name"`
-	State string `json:"state"`
+type releaseFeedEntry struct {
+	Links []releaseFeedLink `xml:"link"`
+}
+
+type releaseFeedLink struct {
+	Rel  string `xml:"rel,attr"`
+	Href string `xml:"href,attr"`
 }
 
 func isReleaseCandidateBuild() bool {
@@ -75,10 +89,38 @@ func parseUpdateReleaseTag(tag string) (string, uint64, bool, bool) {
 	return parts[1], build, parts[2] != "", true
 }
 
+// releaseFeedTags extracts the tags one releases.atom feed publishes, in
+// feed order. Tags are validated later by parseUpdateReleaseTag; entries
+// whose links do not expose a /releases/tag/ path are skipped.
+func releaseFeedTags(data []byte) ([]string, error) {
+	var feed releaseFeed
+	if err := xml.Unmarshal(data, &feed); err != nil {
+		return nil, err
+	}
+	tags := make([]string, 0, len(feed.Entries))
+	for _, entry := range feed.Entries {
+		href := ""
+		for _, link := range entry.Links {
+			if link.Rel == "alternate" {
+				href = link.Href
+				break
+			}
+		}
+		if href == "" && len(entry.Links) > 0 {
+			href = entry.Links[0].Href
+		}
+		if _, tag, found := strings.Cut(href, "/releases/tag/"); found && tag != "" && !strings.Contains(tag, "/") {
+			tags = append(tags, tag)
+		}
+	}
+	return tags, nil
+}
+
 // RC clients inspect published release tags instead of /releases/latest, which
-// intentionally excludes prereleases. Stable clients keep using that endpoint.
-// The third result reports whether the list was served through the configured
-// accelerator origin; a failing accelerator falls back to the direct API.
+// intentionally excludes prereleases. Stable clients keep using that endpoint
+// (it also costs no API quota). The third result reports whether the feed was
+// served through the configured accelerator origin; a failing accelerator
+// falls back to the direct URL.
 func latestReleaseUpdateSource(ctx context.Context, client *http.Client, platform, mirror string) (releaseUpdateSource, string, bool) {
 	manifestName, artifactName := updateAssetNames(platform)
 	if manifestName == "" {
@@ -89,13 +131,12 @@ func latestReleaseUpdateSource(ctx context.Context, client *http.Client, platfor
 	}
 	var response *http.Response
 	viaMirror, notFound := false, false
-	for _, candidate := range updateFetchAttempts(mirror, updateReleaseListURL) {
+	for _, candidate := range updateFetchAttempts(mirror, updateReleaseFeedURL) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, candidate, nil)
 		if err != nil {
 			continue
 		}
-		req.Header.Set("Accept", "application/vnd.github+json")
-		req.Header.Set("X-GitHub-Api-Version", "2026-03-10")
+		req.Header.Set("Accept", "application/atom+xml, text/xml;q=0.9")
 		req.Header.Set("User-Agent", "DevShell/"+strings.TrimPrefix(ApplicationVersion, "v"))
 		req.Header.Set("Cache-Control", "no-cache")
 		candidateResponse, err := client.Do(req)
@@ -112,7 +153,7 @@ func latestReleaseUpdateSource(ctx context.Context, client *http.Client, platfor
 			continue
 		}
 		response = candidateResponse
-		viaMirror = candidate != updateReleaseListURL
+		viaMirror = candidate != updateReleaseFeedURL
 		break
 	}
 	if response == nil {
@@ -125,39 +166,39 @@ func latestReleaseUpdateSource(ctx context.Context, client *http.Client, platfor
 		return releaseUpdateSource{}, "unavailable", false
 	}
 	defer response.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(response.Body, maximumReleaseListSize+1))
-	if err != nil || len(data) > maximumReleaseListSize {
+	data, err := io.ReadAll(io.LimitReader(response.Body, maximumReleaseFeedSize+1))
+	if err != nil || len(data) > maximumReleaseFeedSize {
 		return releaseUpdateSource{}, "invalid", viaMirror
 	}
-	var releases []githubRelease
-	if json.Unmarshal(data, &releases) != nil {
+	tags, err := releaseFeedTags(data)
+	if err != nil {
 		return releaseUpdateSource{}, "invalid", viaMirror
 	}
 
 	// Collect every publishable candidate, then prefer the newest functional
 	// version. Inside one version, tag-encoded builds order first (descending)
-	// and version-only tags follow in API list order — GitHub returns releases
+	// and version-only tags follow in feed order — GitHub lists releases
 	// newest-created first, so the first unknown candidate per version is its
 	// newest publish and needs just one manifest fetch to learn its build.
+	// The feed exposes no asset inventory, so a publish whose manifest was
+	// never uploaded fails the manifest resolution below (and the full
+	// manifest validation in checkUpdateTrustedAt) instead of a list pre-check.
 	type releaseCandidate struct {
 		version string
 		build   uint64 // 0: version-only tag, build lives only in the manifest
 		source  releaseUpdateSource
 	}
 	var candidates []releaseCandidate
-	for _, release := range releases {
-		if release.Draft {
-			continue
-		}
-		version, build, prereleaseTag, ok := parseUpdateReleaseTag(release.TagName)
-		if !ok || prereleaseTag != release.Prerelease {
+	for _, tag := range tags {
+		version, build, _, ok := parseUpdateReleaseTag(tag)
+		if !ok {
 			continue
 		}
 		versionOrder, validVersion := compareUpdateVersions(version, ApplicationVersion)
-		if !validVersion || versionOrder < 0 || !releaseHasUpdateAssets(release.Assets, manifestName, artifactName) {
+		if !validVersion || versionOrder < 0 {
 			continue
 		}
-		base := updateReleaseDownloadBase + url.PathEscape(release.TagName) + "/"
+		base := updateReleaseDownloadBase + url.PathEscape(tag) + "/"
 		candidates = append(candidates, releaseCandidate{
 			version: version,
 			build:   build,
@@ -236,20 +277,4 @@ func resolveReleaseBuild(ctx context.Context, client *http.Client, mirror, manif
 		return descriptor.Build, true
 	}
 	return 0, false
-}
-
-func releaseHasUpdateAssets(assets []githubReleaseAsset, manifest, artifact string) bool {
-	hasManifest, hasArtifact := false, false
-	for _, asset := range assets {
-		if asset.State != "uploaded" {
-			continue
-		}
-		if asset.Name == manifest {
-			hasManifest = true
-		}
-		if asset.Name == artifact {
-			hasArtifact = true
-		}
-	}
-	return hasManifest && hasArtifact
 }

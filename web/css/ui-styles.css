@@ -1,0 +1,150 @@
+/* 全局工作台样式（设置 → 外观配置 → 全局主题）。
+   每种样式重绘整套界面材质——面板、菜单、对话框、强调色与文字层级；与
+   明暗模式、字体、ANSI、布局彼此正交。经典沿用
+   基础配色，这里只定义非经典样式；所有回退（不支持模糊、减少透明度、高
+   对比度）都收敛到同色实底。 */
+
+/* —— 对话框：卡片列表即时应用 —— */
+#ui-styles-dialog { width:620px; padding:24px; color:var(--text,#43576b); border-radius:16px; }
+#ui-styles-dialog .dialog-heading { margin-bottom:22px; }
+#ui-styles-dialog .dialog-heading p { margin:7px 0 0; font-size:12px; color:var(--muted); }
+#ui-styles-dialog fieldset { min-width:0; padding:0; margin:0 0 24px; border:0; }
+#ui-styles-dialog legend { margin-bottom:10px; padding:0; font-size:12px; font-weight:600; }
+.ui-style-segmented { display:flex; padding:3px; gap:3px; border-radius:9px; background:var(--surface-inset,#edf1f5); }
+.ui-style-segmented button { flex:1; min-height:32px; padding:5px 12px; border-radius:7px; color:var(--text-secondary,#52687b); }
+.ui-style-segmented button[aria-pressed="true"] { background:var(--surface,#fff); color:var(--text,#253747); box-shadow:0 1px 4px #0002; }
+.ui-style-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.ui-style-card { min-width:0; text-align:left; padding:10px; border:2px solid transparent; border-radius:12px; background:var(--surface-inset,#f1f4f7); color:var(--text,#43576b); }
+.ui-style-card:hover { background:var(--surface-hover,#eaf0f5); }
+.ui-style-card[aria-pressed="true"] { border-color:var(--accent); }
+.ui-style-card:focus-visible,.ui-style-segmented button:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+.ui-style-card-heading { display:flex; justify-content:space-between; margin:12px 2px 6px; font-size:14px; font-weight:600; }
+.ui-style-selected { visibility:hidden; color:var(--accent); }
+.ui-style-card[aria-pressed="true"] .ui-style-selected { visibility:visible; }
+.ui-style-card small,.ui-style-card-meta { display:block; margin:0 2px; color:var(--muted); font-size:11px; line-height:1.7; }
+.ui-style-card-meta { margin-top:8px; }
+.ui-style-swatch { position:relative; display:block; height:104px; overflow:hidden; border-radius:7px; background:#e7edf2; box-shadow:inset 0 0 0 1px #00000012; }
+.ui-style-swatch i { position:absolute; inset:8px auto 8px 7px; width:24%; border-radius:4px; background:#fff; }
+.ui-style-swatch b { position:absolute; inset:8px 7px 71% 34%; border-radius:4px; background:#fff; }
+.ui-style-swatch em { position:absolute; inset:35% 7px 8px 34%; border-radius:4px; background:#263d4b; }
+[data-theme="dark"] .ui-style-swatch-classic { background:#0f1419; }
+[data-theme="dark"] .ui-style-swatch-classic :is(i,b) { background:#24303a; }
+[data-theme="dark"] .ui-style-swatch-classic em { background:#0f161d; }
+.ui-style-swatch-frosted { background:#0f1419; }
+.ui-style-swatch-frosted i { inset:0 auto 0 0; width:29%; border-radius:0; background:#181f26b3; border-right:1px solid #ffffff26; box-shadow:inset -14px 0 26px -14px #658daf59; }
+.ui-style-swatch-frosted b { background:#181f26d9; box-shadow:inset 0 1px #ffffff3d; }
+.ui-style-swatch-frosted em { background:#0f161db3; box-shadow:inset 0 1px #ffffff2e,0 0 22px #658daf3d; }
+[data-theme="light"] .ui-style-swatch-frosted { background:#e7edf3; }
+[data-theme="light"] .ui-style-swatch-frosted i { background:#ffffffa6; border-color:#658daf33; }
+[data-theme="light"] .ui-style-swatch-frosted b { background:#ffffffd9; box-shadow:inset 0 1px #fff; }
+[data-theme="light"] .ui-style-swatch-frosted em { background:#223746cc; box-shadow:inset 0 1px #ffffff2e; }
+#ui-styles-dialog .ui-style-status { margin:0; min-height:18px; font-size:12px; color:var(--muted); }
+@media(max-width:520px) { #ui-styles-dialog { padding:18px; } .ui-style-grid { gap:10px; } .ui-style-swatch { height:88px; } }
+
+/* —— 液态玻璃：在经典主题原版配色之上加折射玻璃材质。
+   文字、强调色、边框、终端色板全部原样继承经典，不改色板；只是面板填充
+   变为半透明：背景模糊折射、边缘聚光高光、镜面光泽与长投影让它像悬浮
+   的玻璃板。样式键保持 frosted，展示名为液态玻璃。 —— */
+:root[data-ui-style="frosted"][data-theme] {
+  --glass-base:#0f1419;
+  --glass-sheen:linear-gradient(150deg,#ffffff26,#ffffff00 40%,#ffffff00 56%,#ffffff17);
+  --glass-terminal-sheen:linear-gradient(150deg,#ffffff16,#ffffff00 48%,#ffffff0d);
+  --glass-surface:rgb(24 31 38 / .6); --glass-toolbar:rgb(24 31 38 / .6);
+  --glass-sidebar:rgb(21 28 35 / .55); --glass-popup:rgb(24 31 38 / .84); --glass-input:rgb(13 18 24 / .72);
+  --glass-terminal:rgb(15 22 29 / .58); --glass-solid:#181f26; --glass-terminal-solid:#0f161d;
+  --glass-edge:inset 0 1px 0 #d9ecff4d,inset 0 -1px 0 #ffc98f1a,inset 0 0 0 1px #ffffff12,inset 0 0 30px -14px #ffffff30;
+  --glass-ring:inset 0 0 0 1px #ffffff22;
+  --surface:var(--glass-surface); --surface-inset:var(--glass-input);
+  --surface-hover:rgb(36 48 58 / .6); --surface-selected:rgb(33 57 72 / .72);
+  --shadow:0 20px 56px -18px #0000008c,0 2px 12px #0000004d;
+  color-scheme:dark; background:var(--glass-base);
+}
+:root[data-ui-style="frosted"][data-theme="light"] {
+  --glass-base:#f0f3f7;
+  --glass-sheen:linear-gradient(150deg,#ffffffea,#ffffff00 42%,#ffffff00 58%,#ffffff7a);
+  --glass-surface:rgb(255 255 255 / .58); --glass-toolbar:rgb(255 255 255 / .62);
+  --glass-sidebar:rgb(255 255 255 / .52); --glass-popup:rgb(255 255 255 / .84); --glass-input:rgb(244 247 249 / .75);
+  --glass-terminal:rgb(30 48 61 / .82); --glass-solid:#ffffff; --glass-terminal-solid:#223746;
+  --glass-edge:inset 0 1px 0 #fffffff2,inset 0 -1px 0 #d9b58c26,inset 0 0 0 1px #64809a22,inset 0 0 30px -16px #5c7c9c16;
+  --glass-ring:inset 0 0 0 1px #64809a2e;
+  --surface:var(--glass-surface); --surface-inset:var(--glass-input);
+  --surface-hover:#e9eef4cc; --surface-selected:#d6e8f4b8;
+  --shadow:0 20px 56px -20px #293f563a,0 2px 12px #293f5618;
+  color-scheme:light;
+}
+[data-ui-style="frosted"] body { background:var(--glass-base); color:var(--text); isolation:isolate; }
+[data-ui-style="frosted"][data-theme="light"] body { background:radial-gradient(ellipse at 15% 0%,#f9fafc,#f0f3f7 70%); }
+/* 底层大色斑缓慢漂移，为玻璃提供可折射的流动光色——液态玻璃的「液态」。
+   色相取经典强调色同族的蓝；两层光场以不同速度反向漂移形成视差，
+   玻璃板后的世界明显在流动，这是与经典主题最直观的差异。 */
+[data-ui-style="frosted"] body::before { content:""; position:fixed; z-index:-1; pointer-events:none; inset:-14%; opacity:.85;
+  background:radial-gradient(38% 44% at 22% 22%,#34607e,#0000 62%),radial-gradient(42% 38% at 76% 14%,#274a6c,#0000 64%),radial-gradient(46% 50% at 70% 80%,#1d3a5c,#0000 62%),radial-gradient(40% 42% at 24% 76%,#3e6f96,#0000 64%);
+  filter:blur(90px); animation:liquid-drift 36s ease-in-out infinite alternate; }
+[data-ui-style="frosted"] body::after { content:""; position:fixed; z-index:-1; pointer-events:none; inset:-30%; opacity:.66;
+  background:radial-gradient(42% 46% at 62% 30%,#3a6d95,#0000 60%),radial-gradient(36% 40% at 30% 70%,#20405f,#0000 62%);
+  filter:blur(120px); animation:liquid-drift 52s ease-in-out infinite alternate-reverse; }
+[data-ui-style="frosted"][data-theme="light"] body::before {
+  background:radial-gradient(38% 44% at 22% 22%,#b7cfe6,#0000 62%),radial-gradient(42% 38% at 76% 14%,#c8dcee,#0000 64%),radial-gradient(46% 50% at 70% 80%,#a6c3e0,#0000 62%),radial-gradient(40% 42% at 24% 76%,#d2e4f4,#0000 64%); }
+[data-ui-style="frosted"][data-theme="light"] body::after { opacity:.6;
+  background:radial-gradient(42% 46% at 62% 30%,#aecbe8,#0000 60%),radial-gradient(36% 40% at 30% 70%,#c2d8ec,#0000 62%); }
+@keyframes liquid-drift { from { transform:translate3d(-2.5%,-1.5%,0) scale(1.05); } to { transform:translate3d(2.5%,2%,0) scale(1.14); } }
+[data-ui-style="frosted"] .sidebar { background:var(--glass-sheen),var(--glass-sidebar); backdrop-filter:blur(30px) saturate(1.8) brightness(1.05); -webkit-backdrop-filter:blur(30px) saturate(1.8) brightness(1.05); box-shadow:var(--glass-edge),inset -1px 0 var(--border),var(--shadow); }
+/* 宽屏下监控区不再是独立玻璃卡：内容直接融入画布，只从顶部工具栏下方
+   开始（margin-top:48px），与 Shell 和 SFTP 面板顶部对齐；仅 Shell 与
+   SFTP 两块玻璃与画布轻微分隔。窄屏抽屉保持玻璃面避免压字。 */
+:root:not([data-narrow="true"])[data-ui-style="frosted"] .sidebar { background:transparent; box-shadow:none; backdrop-filter:none; -webkit-backdrop-filter:none; border-radius:0; }
+html[data-ui-style="frosted"]:not([data-narrow="true"]):not([data-monitor-visible="false"]) .sidebar { margin-top:48px; padding-top:0; }
+/* 玻璃面上不留硬描边：芯片只靠底面色差成块，面板内分隔用明暗差完成，
+   不出现直角发丝线。输入控件的细边框保留（那是控件，不是卡片）。 */
+[data-ui-style="frosted"] .address-copy { border:0; border-radius:10px; }
+[data-ui-style="frosted"] .terminal-panel :is(.terminal-meta,.terminal-command-bar) { border:0; }
+[data-ui-style="frosted"] :is(.files-toolbar,.file-tabs,.file-table thead,.file-status,.commands-toolbar,.transfer-notice) { border:0; }
+[data-ui-style="frosted"] :is(.disk-row + .disk-row,.process-table tbody tr + tr,.transfer-row + .transfer-row) { border:0; }
+/* 监控信息融入同一玻璃面，以留白区分内容，不逐项叠加卡片。 */
+[data-ui-style="frosted"] .sidebar :is(.system-section,.host-card,.disk-section,.network-card,.process-card,.process-details,.disk-resources,.disk-io) { background:transparent; border:0; border-radius:0; box-shadow:none; backdrop-filter:none; -webkit-backdrop-filter:none; }
+[data-ui-style="frosted"] .sidebar .network-grid { gap:14px; margin-top:16px; }
+[data-ui-style="frosted"] .sidebar .network-card { padding:0; }
+[data-ui-style="frosted"] .sidebar .process-details { margin-top:18px; }
+[data-ui-style="frosted"] .sidebar .disk-readout:is(.read,.write) { padding:0; background:transparent; }
+[data-ui-style="frosted"] .sidebar :is(.disk-row + .disk-row,.process-table tbody tr + tr,.metric + .metric,.file-status) { border-color:var(--border); }
+[data-ui-style="frosted"] .files-panel { background:var(--glass-sheen),var(--glass-surface); box-shadow:var(--glass-edge),var(--shadow); border-radius:20px; backdrop-filter:blur(26px) saturate(1.7); -webkit-backdrop-filter:blur(26px) saturate(1.7); }
+/* 会话栏直接融入工作台背景，Shell 和 SFTP 的面板间距负责区分区域。 */
+[data-ui-style="frosted"] .session-bar { background:transparent; box-shadow:none; backdrop-filter:none; -webkit-backdrop-filter:none; }
+[data-ui-style="frosted"] .session-bar .brand { border-color:var(--border); }
+[data-ui-style="frosted"] .session-bar .window-controls { background:var(--surface-inset); }
+[data-ui-style="frosted"] .session-tab { background:transparent; border:0; border-radius:12px; }
+[data-ui-style="frosted"] .session-tab.active { background:var(--glass-popup); box-shadow:var(--glass-edge); }
+/* 终端玻璃仅在深色主题启用：浅色画布太亮，任何半透明石板底都会被提亮成
+   灰蒙层，浅色文字对比不足；浅色模式终端保持经典实底石板面。 */
+[data-ui-style="frosted"][data-theme="dark"] .terminal-panel { background:var(--glass-terminal-sheen),var(--glass-terminal); box-shadow:var(--glass-edge),var(--shadow); border-radius:20px; backdrop-filter:blur(30px) saturate(1.7); -webkit-backdrop-filter:blur(30px) saturate(1.7); }
+[data-ui-style="frosted"] .terminal-panel::before,[data-ui-style="frosted"] .terminal-panel::after { display:none; background-image:none; }
+[data-ui-style="frosted"][data-theme="dark"] .terminal-panel :is(.terminal-meta,.terminal-command-bar) { background:#ffffff08; border-color:#ffffff16; backdrop-filter:none; -webkit-backdrop-filter:none; }
+[data-ui-style="frosted"] :is(dialog,.connections-drawer,.settings-menu,.popup-menu,.themed-select-popup,.session-tab-menu,.server-group-menu) { background:var(--glass-sheen),var(--glass-popup); color:var(--text); border-color:var(--border); box-shadow:0 22px 64px #00000055,var(--glass-edge); backdrop-filter:blur(30px) saturate(1.6); -webkit-backdrop-filter:blur(30px) saturate(1.6); }
+[data-ui-style="frosted"] :is(.specs,.cpu-model,.metric,.chart-caption,.process-heading,.disk-row,.file-status,.file-table,.tree-row,.tree-shortcut,.connection-card-text,.drawer-heading h2,dialog h2,.brand) { color:var(--text); }
+[data-ui-style="frosted"] :is(.process-table,.file-table) :is(th,td),[data-ui-style="frosted"] .system-section :is(h2,b,strong) { color:var(--text-secondary); border-color:var(--border); }
+[data-ui-style="frosted"] :is(.file-table thead,.files-toolbar,.file-tabs,.file-status,.directory-tree,.commands-toolbar,.transfer-notice) { background:transparent; border-color:var(--border); }
+/* 目录与文件列表融入同一面板，交互状态仍保留底色。 */
+[data-ui-style="frosted"] :is(.file-table-wrap,.directory-tree,.file-table thead) { background:transparent; border:0; border-radius:0; box-shadow:none; }
+/* 文件列表去掉内框：表头不做底带也不粘顶，作为标题行随内容滚动，
+   内容靠留白、标题与选中状态区分。 */
+[data-ui-style="frosted"] .file-table thead { position:static; }
+[data-ui-style="frosted"] :is(.file-search,.path-form,.connection-search,.meter,dialog input,dialog select,dialog textarea,.server-icon,.themed-select-trigger,.count-badge,.upload-button) { background:var(--glass-input); color:var(--text); border:0; border-radius:9px; box-shadow:var(--glass-ring); }
+[data-ui-style="frosted"] :is(.connection-card,.tree-row,.tree-shortcut,.file-tab).selected,[data-ui-style="frosted"] .file-tab.active,[data-ui-style="frosted"] .file-table tr.selected { background:var(--surface-selected); color:var(--accent); }
+[data-ui-style="frosted"] button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+/* Stable opaque equivalents preserve readability when transparency is unavailable. */
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))) {
+  [data-ui-style="frosted"] body::before,[data-ui-style="frosted"] body::after { display:none; }
+  :root[data-ui-style="frosted"][data-theme] { --glass-sheen:none; --glass-terminal-sheen:none; --glass-edge:0 0 0 0 transparent; --glass-ring:inset 0 0 0 1px var(--border); --glass-surface:var(--glass-solid); --glass-toolbar:var(--glass-solid); --glass-sidebar:var(--glass-solid); --glass-popup:var(--glass-solid); --glass-terminal:var(--glass-terminal-solid); }
+}
+@media (prefers-reduced-transparency:reduce) {
+  [data-ui-style="frosted"] body::before,[data-ui-style="frosted"] body::after { display:none; }
+  :root[data-ui-style="frosted"][data-theme] { --glass-sheen:none; --glass-terminal-sheen:none; --glass-edge:0 0 0 0 transparent; --glass-ring:inset 0 0 0 1px var(--border); --glass-surface:var(--glass-solid); --glass-toolbar:var(--glass-solid); --glass-sidebar:var(--glass-solid); --glass-popup:var(--glass-solid); --glass-terminal:var(--glass-terminal-solid); }
+  [data-ui-style="frosted"] :is(.sidebar,.session-bar,.files-panel,.terminal-panel,dialog,.connections-drawer,.settings-menu,.popup-menu,.themed-select-popup,.session-tab-menu) { backdrop-filter:none; -webkit-backdrop-filter:none; }
+}
+@media (prefers-reduced-motion:reduce) { [data-ui-style="frosted"] body::before,[data-ui-style="frosted"] body::after { animation:none; } }
+@media (forced-colors:active) {
+  [data-ui-style="frosted"] body::before,[data-ui-style="frosted"] body::after { display:none; }
+  [data-ui-style="frosted"][data-theme] :is(.sidebar,.files-panel,.terminal-panel,dialog,.connections-drawer,.settings-menu,.popup-menu,.themed-select-popup,.session-tab-menu) { background:Canvas; color:CanvasText; outline:1px solid CanvasText; backdrop-filter:none; -webkit-backdrop-filter:none; box-shadow:none; }
+  .ui-style-card[aria-pressed="true"],.ui-style-segmented button[aria-pressed="true"] { border:2px solid Highlight; }
+}
+

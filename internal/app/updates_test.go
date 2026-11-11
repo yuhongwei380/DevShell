@@ -325,7 +325,7 @@ func TestDownloadMustMatchOfferAndBytes(t *testing.T) {
 			if corrupt {
 				// Keep the one-shot offer refresh hermetic: the stub probe
 				// reports no newer offer, so the failure must surface.
-				a.updateCheck.probe = func(context.Context, time.Duration) UpdateStatus { return noUpdate("none") }
+				a.updateCheck.probe = func(context.Context, time.Duration, string) UpdateStatus { return noUpdate("none") }
 			}
 			payload := []byte("verified update content")
 			path := t.TempDir() + "/payload"
@@ -434,7 +434,7 @@ func TestStaleOfferRefreshesAndRedownloads(t *testing.T) {
 	})
 	a.setUpdateResult(UpdateStatus{Status: "available", Package: &UpdatePackage{Format: NativePackageFormat(), Build: ApplicationBuild + 1, Version: ApplicationVersion, URL: s.URL + "/up.deb", SHA256: hashOld, ExecutableSHA256: hashOld, Size: int64(len(oldPayload)), expiresAt: time.Now().Add(time.Hour).Unix()}})
 	var probes int
-	a.updateCheck.probe = func(context.Context, time.Duration) UpdateStatus {
+	a.updateCheck.probe = func(context.Context, time.Duration, string) UpdateStatus {
 		probes++
 		return UpdateStatus{Status: "available", Package: &UpdatePackage{Format: NativePackageFormat(), Build: ApplicationBuild + 1, Version: ApplicationVersion, URL: s.URL + "/up.deb", SHA256: hashNew, ExecutableSHA256: hashNew, Size: int64(len(newPayload)), expiresAt: time.Now().Add(time.Hour).Unix()}}
 	}

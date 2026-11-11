@@ -127,8 +127,10 @@ window.DengUIAppearance = (() => {
   }
   function fillColors() {
     if (!dialog) return;
+    // 液态玻璃沿用经典默认文字色（不改色板，只加玻璃材质）；自定义色仍优先。
+    const palette = defaults;
     for (const theme of ['light', 'dark']) {
-      const row = dialog.querySelector(`[data-ui-color-theme="${theme}"]`), color = appearance.uiTextColors?.[theme] || defaults[theme];
+      const row = dialog.querySelector(`[data-ui-color-theme="${theme}"]`), color = appearance.uiTextColors?.[theme] || palette[theme];
       row.querySelector('input[type=color]').value = color;
       row.querySelector('input[type=text]').value = color;
       row.querySelector('.ui-color-state').textContent = appearance.uiTextColors?.[theme] ? '已保存自定义颜色' : '使用默认颜色';
@@ -183,7 +185,7 @@ window.DengUIAppearance = (() => {
     }
     dialog.addEventListener('close', () => { if (colorSaveTimer) { clearTimeout(colorSaveTimer); colorSaveTimer = null; chooseAppearance({ uiTextColors: { ...appearance.uiTextColors } }).catch(error => toast(error.message)); } });
     dialog.querySelector('#close-ui-appearance').onclick = () => dialog.close();
-    dialog.querySelector('#switch-shell-fonts').onclick = safe(async () => { dialog.close(); await openAppearance('font'); });
+    dialog.querySelector('#switch-shell-fonts').onclick = safe(async () => { dialog.close(); await openAppearance(); });
     dialog.querySelector('#online-ui-fonts').onclick = safe(() => window.DengFontLibrary.open('ui-font'));
     dialog.querySelector('#import-ui-font').onclick = safe(importFont);
     dialog.querySelector('#ui-font-picker').onchange = safe(async event => {
@@ -196,7 +198,7 @@ window.DengUIAppearance = (() => {
       } finally { button.disabled = false; }
     });
     document.querySelector('#manage-ui-appearance').onclick = safe(open);
-    window.addEventListener('cloudshell:theme', () => applyColors());
+    window.addEventListener('cloudshell:theme', () => { applyColors(); fillColors(); });
   }
   async function open() { setSettingsMenu(false); if (document.querySelector('#appearance-dialog')?.dataset.kind === 'font') document.querySelector('#appearance-dialog').close(); await loadProfiles(); await render(); if (!dialog.open) dialog.show(); positionAppearancePalette(); }
   async function useFont(id, stillWanted = () => true) { await initCatalog(); const font = fonts().find(f => f.id === id); if (!font) throw new Error('界面字体不存在，请重新下载或导入'); return selectFont(font, stillWanted); }

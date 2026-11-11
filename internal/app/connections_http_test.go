@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"testing"
 	"testing/fstest"
+	"time"
 )
 
 func TestConnectionManagementHTTPContract(t *testing.T) {
@@ -72,6 +73,7 @@ func TestConnectionManagementHTTPContract(t *testing.T) {
 	request("DELETE", "/api/trash/"+profile.ID, nil)
 	request("DELETE", "/api/group-nodes/"+group.ID, nil)
 }
+
 // The UI promotes a credential typed at connect time by re-posting the public
 // profile view together with the secret. That round trip has to persist the
 // secret while keeping the inline proxy password the public view never reveals.
@@ -167,5 +169,238 @@ func TestConfigMigrationRefusesToProceedWithoutBackup(t *testing.T) {
 	current, err := os.ReadFile(path)
 	if err != nil || !bytes.Equal(current, original) {
 		t.Fatal("migration modified original after backup failure", err)
+	}
+}
+
+func TestProfileDuplicateCarriesStoredCredentials(t *testing.T) {
+	a, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	handler := a.Handler(fstest.MapFS{"index.html": {Data: []byte("fixture")}})
+	request := func(method, path string, input any) *httptest.ResponseRecorder {
+		t.Helper()
+		body, _ := json.Marshal(input)
+		req := httptest.NewRequest(method, "http://wails.localhost"+path, bytes.NewReader(body))
+		req.Header.Set("X-CloudShell-Token", a.Token())
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, req)
+		if response.Code != 200 {
+			t.Fatalf("%s %s: %d %s", method, path, response.Code, response.Body)
+		}
+		return response
+	}
+	response := request("POST", "/api/group-nodes", ServerGroup{Name: "Duplicate parent"})
+	var group ServerGroup
+	if err := json.Unmarshal(response.Body.Bytes(), &group); err != nil {
+		t.Fatal(err)
+	}
+	response = request("POST", "/api/profiles", Profile{
+		Name:    "Duplicate source",
+		Host:    "localhost",
+		User:    "root",
+		GroupID: group.ID,
+		Secret:  "dup-login-secret",
+		Proxy:   ProxyConfig{Type: "http", Host: "proxy.invalid", Port: 8080, User: "proxy-user", Password: "dup-proxy-secret"},
+	})
+	var source Profile
+	if err := json.Unmarshal(response.Body.Bytes(), &source); err != nil {
+		t.Fatal(err)
+	}
+	if !source.HasSecret || !source.Proxy.HasPassword {
+		t.Fatalf("source credential metadata lost: %+v", source)
+	}
+	response = request("POST", "/api/profiles/"+source.ID+"/duplicate", struct{}{})
+	if bytes.Contains(response.Body.Bytes(), []byte("dup-login-secret")) || bytes.Contains(response.Body.Bytes(), []byte("dup-proxy-secret")) {
+		t.Fatal("duplicate response disclosed credentials")
+	}
+	var clone Profile
+	if err := json.Unmarshal(response.Body.Bytes(), &clone); err != nil {
+		t.Fatal(err)
+	}
+	if clone.ID == "" || clone.ID == source.ID || clone.Name != source.Name || clone.GroupID != group.ID {
+		t.Fatalf("unexpected clone identity: %+v", clone)
+	}
+	if !clone.HasSecret || !clone.Proxy.HasPassword {
+		t.Fatalf("clone lost credential metadata: %+v", clone)
+	}
+	stored, err := a.store.Get(clone.ID)
+	if err != nil || stored.Secret != "dup-login-secret" || stored.Proxy.Password != "dup-proxy-secret" {
+		t.Fatalf("clone did not carry the stored credentials: %+v err=%v", stored, err)
+	}
+	if _, err := a.store.Get(source.ID); err != nil {
+		t.Fatalf("source must survive the duplicate: %v", err)
+	}
+	request("DELETE", "/api/profiles/"+source.ID, nil)
+	body, _ := json.Marshal(struct{}{})
+	req := httptest.NewRequest("POST", "http://wails.localhost/api/profiles/"+source.ID+"/duplicate", bytes.NewReader(body))
+	req.Header.Set("X-CloudShell-Token", a.Token())
+	trashed := httptest.NewRecorder()
+	handler.ServeHTTP(trashed, req)
+	if trashed.Code == 200 {
+		t.Fatalf("duplicating a trashed profile succeeded: %s", trashed.Body)
+	}
+}
+
+// 「复制链接」/「复制独立会话」提交 原名-clone；收藏夹与服务器管理共用同一份配置，
+// 名称必须保持唯一（重名时 store 追加 2/3… 后缀，删除副本后编号立即释放回填）。
+// 空 name 保留旧的
+// 原样复制行为；克隆渠道端点对不存在的会话必须干净失败。
+func TestProfileDuplicateCloneNamesAndChannelEndpoint(t *testing.T) {
+	a, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	handler := a.Handler(fstest.MapFS{"index.html": {Data: []byte("fixture")}})
+	request := func(method, path string, input any) *httptest.ResponseRecorder {
+		t.Helper()
+		body, _ := json.Marshal(input)
+		req := httptest.NewRequest(method, "http://wails.localhost"+path, bytes.NewReader(body))
+		req.Header.Set("X-CloudShell-Token", a.Token())
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, req)
+		if response.Code != 200 {
+			t.Fatalf("%s %s: %d %s", method, path, response.Code, response.Body)
+		}
+		return response
+	}
+	response := request("POST", "/api/profiles", Profile{Name: "Clone source", Host: "localhost", User: "root", Secret: "clone-secret"})
+	var source Profile
+	if err := json.Unmarshal(response.Body.Bytes(), &source); err != nil {
+		t.Fatal(err)
+	}
+	var cloneIDs []string
+	for _, want := range []string{"Clone source-clone", "Clone source-clone 2", "Clone source-clone 3"} {
+		response = request("POST", "/api/profiles/"+source.ID+"/duplicate", struct {
+			Name string `json:"name"`
+		}{Name: "Clone source-clone"})
+		if bytes.Contains(response.Body.Bytes(), []byte("clone-secret")) {
+			t.Fatal("named duplicate response disclosed credentials")
+		}
+		var clone Profile
+		if err := json.Unmarshal(response.Body.Bytes(), &clone); err != nil {
+			t.Fatal(err)
+		}
+		if clone.Name != want {
+			t.Fatalf("named duplicate = %q, want %q", clone.Name, want)
+		}
+		cloneIDs = append(cloneIDs, clone.ID)
+	}
+	response = request("POST", "/api/profiles/"+source.ID+"/duplicate", struct{}{})
+	var bare Profile
+	if err := json.Unmarshal(response.Body.Bytes(), &bare); err != nil {
+		t.Fatal(err)
+	}
+	if bare.Name != "Clone source" {
+		t.Fatalf("unnamed duplicate renamed: %q", bare.Name)
+	}
+	// 删除副本立即释放编号：删掉「-clone 2」后再复制，应回填 2 而不是累计到 4。
+	request("DELETE", "/api/profiles/"+cloneIDs[1], nil)
+	response = request("POST", "/api/profiles/"+source.ID+"/duplicate", struct {
+		Name string `json:"name"`
+	}{Name: "Clone source-clone"})
+	var refilled Profile
+	if err := json.Unmarshal(response.Body.Bytes(), &refilled); err != nil {
+		t.Fatal(err)
+	}
+	if refilled.Name != "Clone source-clone 2" {
+		t.Fatalf("named duplicate after deleting the middle clone = %q, want %q", refilled.Name, "Clone source-clone 2")
+	}
+	body, _ := json.Marshal(struct{}{})
+	req := httptest.NewRequest("POST", "http://wails.localhost/api/sessions/missing-session/channel", bytes.NewReader(body))
+	req.Header.Set("X-CloudShell-Token", a.Token())
+	missing := httptest.NewRecorder()
+	handler.ServeHTTP(missing, req)
+	if missing.Code == 200 {
+		t.Fatalf("clone channel for a nonexistent session succeeded: %s", missing.Body)
+	}
+}
+
+// 「一键清理」把回收站全部连接连同其连接历史一次清空：不得触碰在用连接，
+// 清理后 /api/config 不再有回收站区段，重复调用幂等。
+func TestTrashPurgeAllEndpoint(t *testing.T) {
+	a, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	handler := a.Handler(fstest.MapFS{"index.html": {Data: []byte("fixture")}})
+	request := func(method, path string, input any) *httptest.ResponseRecorder {
+		t.Helper()
+		body, _ := json.Marshal(input)
+		req := httptest.NewRequest(method, "http://wails.localhost"+path, bytes.NewReader(body))
+		req.Header.Set("X-CloudShell-Token", a.Token())
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, req)
+		if response.Code != 200 {
+			t.Fatalf("%s %s: %d %s", method, path, response.Code, response.Body)
+		}
+		return response
+	}
+	var ids []string
+	for _, name := range []string{"Purge one", "Purge two"} {
+		response := request("POST", "/api/profiles", Profile{Name: name, Host: "localhost", User: "root"})
+		var profile Profile
+		if err := json.Unmarshal(response.Body.Bytes(), &profile); err != nil {
+			t.Fatal(err)
+		}
+		if err := a.store.MarkConnected(profile.ID, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, profile.ID)
+	}
+	response := request("POST", "/api/profiles", Profile{Name: "Survivor", Host: "localhost", User: "root"})
+	var survivor Profile
+	if err := json.Unmarshal(response.Body.Bytes(), &survivor); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range ids {
+		request("DELETE", "/api/profiles/"+id, nil)
+	}
+	response = request("GET", "/api/config", nil)
+	var before Config
+	if err := json.Unmarshal(response.Body.Bytes(), &before); err != nil {
+		t.Fatal(err)
+	}
+	if len(before.Trash) != 2 || len(before.Servers) != 1 || len(before.ConnectionHistory) != 2 {
+		t.Fatalf("trash staging wrong: trash=%d servers=%d history=%d", len(before.Trash), len(before.Servers), len(before.ConnectionHistory))
+	}
+	response = request("POST", "/api/trash/purge-all", struct{}{})
+	var result struct {
+		OK      bool `json:"ok"`
+		Removed int  `json:"removed"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if !result.OK || result.Removed != 2 {
+		t.Fatalf("purge-all result: %+v", result)
+	}
+	response = request("GET", "/api/config", nil)
+	var after Config
+	if err := json.Unmarshal(response.Body.Bytes(), &after); err != nil {
+		t.Fatal(err)
+	}
+	if len(after.Trash) != 0 || len(after.Servers) != 1 || after.Servers[0].ID != survivor.ID || len(after.ConnectionHistory) != 0 {
+		t.Fatalf("purge-all left trash or touched live connections: %+v", after)
+	}
+	if _, err := a.store.Get(ids[0]); err == nil {
+		t.Fatal("purged profile still readable")
+	}
+	if _, err := a.store.Get(survivor.ID); err != nil {
+		t.Fatalf("survivor lost: %v", err)
+	}
+	response = request("POST", "/api/trash/purge-all", struct{}{})
+	var empty struct {
+		OK      bool `json:"ok"`
+		Removed int  `json:"removed"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &empty); err != nil {
+		t.Fatal(err)
+	}
+	if !empty.OK || empty.Removed != 0 {
+		t.Fatalf("second purge-all not idempotent: %+v", empty)
 	}
 }

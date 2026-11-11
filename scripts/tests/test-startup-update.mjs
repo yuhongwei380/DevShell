@@ -17,15 +17,16 @@ async function fixture(){
  const document=new EventTarget(),window=new EventTarget();let dialog,listener,rejectInstall,installs=0,unsubscribed=0;
  document.createElement=()=>dialog=new Element();document.body={append(){}};
  window.runtime={EventsOn(name,callback){assert.equal(name,'dengshell:update-progress');listener=callback;return()=>{listener=undefined;unsubscribed++}}};
+ let checks=[];
  const offer={status:'available',platform:'windows-amd64',currentVersion:'v0.01',latestVersion:'v0.01',currentBuild:20260915042,latestBuild:20260915043,package:{sha256:'fixture'}};
  const api=async path=>path==='/api/updates/check'?offer:{id:'job',status:'ready'};
  vm.runInNewContext(readFileSync(new URL('../../web/js/startup-update.js',import.meta.url),'utf8'),{
   document,window,Event,setTimeout,clearTimeout,console,api,desktopPage:true,appearanceSave:Promise.resolve(),
-  post:async()=>({id:'job',status:'ready'}),remove:async()=>{},
+  post:async(path,body)=>path==='/api/updates/check'?(checks.push(body||null),offer):{id:'job',status:'ready'},remove:async()=>{},toast:()=>{},
   native:()=>({InstallUpdate(){installs++;return new Promise((resolve,reject)=>{rejectInstall=reject})}})
  });
  document.dispatchEvent(new Event('DOMContentLoaded'));await tick();
- return {window,dialog,get installs(){return installs},get unsubscribed(){return unsubscribed},progress:message=>listener(message),fail:()=>rejectInstall(Error('更新助手准备超时'))};
+ return {window,get dialog(){return dialog},get checks(){return checks},get installs(){return installs},get unsubscribed(){return unsubscribed},progress:message=>listener(message),fail:()=>rejectInstall(Error('更新助手准备超时'))};
 }
 
 const f=await fixture();
@@ -43,4 +44,8 @@ assert.equal(f.unsubscribed,1);
 const retry=install.onclick();await tick();assert.equal(f.installs,2);assert.equal(bar.hidden,false);
 f.fail();await retry;assert.equal(f.unsubscribed,2);
 later.onclick();await f.window.DevShellStartupReady;
-console.log('Startup update: build labels, preparation progress, failure recovery, retry and event cleanup passed.');
+const manual=f.window.DengUpdates.checkNow('rc');await tick();
+assert.equal(f.checks.at(-1)?.channel,'rc','manual check must carry the chosen channel');
+assert.match(f.dialog.querySelector('#startup-update-versions').textContent,/20260915042.*20260915043/);
+f.dialog.close();await manual;
+console.log('Startup update: build labels, preparation progress, failure recovery, retry, channel parameter and event cleanup passed.');

@@ -21,10 +21,25 @@
   dialog.addEventListener('close',()=>{stopped=true;dialog.remove();resolve()},{once:true});document.body.append(dialog);dialog.showModal();later.focus();
  })}
  let checking=false;
-async function checkNow(){
- if(checking)return;checking=true;toast('正在检查更新…');
- try{
-  const result=await post('/api/updates/check',{});
+ // 手动检查更新先选通道：「更新 release」只查找正式版；「更新 rc 版本」走
+ // 完整 Releases 列表（含 rc 预览），正式版也可直接升级到更新的 rc 构建。
+ // 启动自动检查不走这里，仍按当前构建类型自动选择。
+ function pickUpdateChannel(){return new Promise(resolve=>{
+  const dialog=document.createElement('dialog');dialog.className='manager-dialog startup-update-dialog';dialog.id='update-channel-dialog';
+  dialog.innerHTML='<div class="dialog-heading"><div><h2>检查更新方式</h2><p>选择本次手动检查使用的更新通道</p></div><button type="button" class="icon-button" aria-label="关闭更新方式选择"><svg><use href="#i-close"/></svg></button></div><div class="update-channel-options"><label class="update-channel-option"><input type="radio" name="update-channel" value="release" checked><span><strong>更新 release</strong><em>只查找正式 release 版本；当前运行 rc 预览版时也可直接升级到正式版</em></span></label><label class="update-channel-option"><input type="radio" name="update-channel" value="rc"><span><strong>更新 rc 版本</strong><em>查找最新 rc 预览版；允许正式版升级到更新的 rc 构建</em></span></label><p class="update-channel-help">两种通道都会继续校验产品、平台、构建高水位与 SHA-256，不会降级到更低构建。当前运行 rc 预览版时默认选中「更新 rc 版本」。</p></div><div class="dialog-buttons"><button type="button" class="secondary-button" id="update-channel-cancel">取消</button><button type="button" class="primary-button" id="update-channel-go">开始检查</button></div>';
+  if(/-rc\.?\d/.test(String(window.DEVSHELL?.displayVersion||'')))dialog.querySelector('input[value="rc"]').checked=true;
+  const cancel=()=>dialog.close(),go=()=>{const value=dialog.querySelector('input[name="update-channel"]:checked')?.value||'release';dialog.close();resolve(value)};
+  dialog.querySelector('#update-channel-go').onclick=go;dialog.querySelector('#update-channel-cancel').onclick=cancel;dialog.querySelector('.icon-button').onclick=cancel;
+  dialog.oncancel=event=>{event.preventDefault();cancel()};
+  dialog.addEventListener('close',()=>{dialog.remove();resolve('')},{once:true});
+  document.body.append(dialog);dialog.showModal();
+ });}
+ async function checkNow(channel){
+  if(checking)return;
+  if(channel!=='release'&&channel!=='rc'){channel=await pickUpdateChannel();if(!channel)return}
+  checking=true;toast(channel==='rc'?'正在检查更新（rc 版本）…':'正在检查更新（release）…');
+  try{
+   const result=await post('/api/updates/check',{channel});
   if(result?.status==='available'){await showUpdate(result);return;}
   const label=(version,build)=>build?`${version}（构建 ${build}）`:version;
   if(result?.reason==='current'||result?.reason==='build-rollback'||result?.reason==='version-rollback')toast(`已是最新版本 ${label(result.currentVersion,result.currentBuild)}`);
@@ -40,17 +55,31 @@ window.DengUpdates={checkNow,showUpdate,mirrorSettings};
 const MIRROR_PRESETS=[['直连 GitHub（默认）',''],['gh-proxy.org','https://gh-proxy.org'],['gh-proxy.com','https://gh-proxy.com'],['ghfast.top','https://ghfast.top'],['mirror.mikus.ink','https://mirror.mikus.ink']];
 function mirrorSettings(){return new Promise(resolve=>{
  const dialog=document.createElement('dialog');dialog.className='manager-dialog startup-update-dialog';dialog.id='update-mirror-dialog';
- dialog.innerHTML='<div class="dialog-heading"><div><h2>GitHub 更新加速域名</h2><p id="update-mirror-note">网络受限时可改用镜像下载更新，清单与安装包仍强制校验</p></div><button type="button" class="icon-button" aria-label="关闭加速设置"><svg><use href="#i-close"/></svg></button></div><div class="update-mirror-body"><label for="update-mirror-preset">常用加速域名</label><select id="update-mirror-preset">'+MIRROR_PRESETS.map(([label,value])=>`<option value="${value}">${label}</option>`).join('')+'<option value="__custom">自定义…</option></select><label for="update-mirror-input">自定义地址（https，仅主机名）</label><input id="update-mirror-input" placeholder="例如 https://gh-proxy.org" spellcheck="false" autocomplete="off"><p class="update-mirror-help">下载仍会校验产品、平台、构建号与 SHA-256；加速域名失败时自动回落直连。留空即直连。</p><p id="update-mirror-error" role="alert"></p></div><div class="dialog-buttons"><button type="button" class="secondary-button" id="update-mirror-clear">清除（直连）</button><button type="button" class="primary-button" id="update-mirror-save">保存</button></div>';
- const preset=dialog.querySelector('#update-mirror-preset'),input=dialog.querySelector('#update-mirror-input'),error=dialog.querySelector('#update-mirror-error');
+ dialog.innerHTML='<div class="dialog-heading"><div><h2>GitHub 更新加速域名</h2><p id="update-mirror-note">网络受限时可改用镜像下载更新，清单与安装包仍强制校验</p></div><button type="button" class="icon-button" aria-label="关闭加速设置"><svg><use href="#i-close"/></svg></button></div><div class="update-mirror-body"><label for="update-mirror-preset">常用加速域名</label><select id="update-mirror-preset">'+MIRROR_PRESETS.map(([label,value])=>`<option value="${value}">${label}</option>`).join('')+'<option value="__custom">自定义…</option></select><label for="update-mirror-input">自定义地址（https，仅主机名）</label><input id="update-mirror-input" placeholder="例如 https://gh-proxy.org" spellcheck="false" autocomplete="off"><p class="update-mirror-help">下载仍会校验产品、平台、构建号与 SHA-256；加速域名失败时自动回落直连。留空即直连。</p><p id="update-mirror-test" class="update-mirror-help"></p><p id="update-mirror-error" role="alert"></p></div><div class="dialog-buttons"><button type="button" class="secondary-button" id="update-mirror-clear">清除（直连）</button><button type="button" class="primary-button" id="update-mirror-save">保存</button></div>';
+ const preset=dialog.querySelector('#update-mirror-preset'),input=dialog.querySelector('#update-mirror-input'),error=dialog.querySelector('#update-mirror-error'),testLine=dialog.querySelector('#update-mirror-test');
  const fill=value=>{const known=MIRROR_PRESETS.find(([,v])=>v===value);preset.value=known?value:'__custom';if(known)input.value='';else input.value=value||'';};
+  const selected=()=>preset.value==='__custom'?input.value:preset.value;
+  // Connectivity is probed automatically (on open, on preset switch and
+  // after saving) so an accelerator that cannot proxy the update URLs is
+  // obvious here instead of surfacing later as a failed update check.
+  let testSeq=0,rowsSeq=0;const probed=new Map(),inflight=new Map();
+  const shortReason=p=>p.reason==='network'?'无法连接':p.reason==='unexpected-body'?'返回内容异常':`HTTP ${p.status||'请求失败'}`;
+  const probeText=p=>p.ok?`正常（${p.latencyMS}ms）`:`不可用（${shortReason(p)}）`;
+  const showDetails=result=>{const parts=(result.probes||[]).map(p=>`${p.role==='list'?'更新列表源':'更新下载源'} ${probeText(p)}`);testLine.textContent=`连通性检测 · ${result.host||'直连 GitHub'}：`+(parts.join(' · ')||'无可探测地址')};
+  const probe=mirror=>{const key=String(mirror||'').trim();if(probed.has(key))return Promise.resolve(probed.get(key));const running=inflight.get(key)||post('/api/updates/mirror-test',{mirror:key}).then(result=>{probed.set(key,result);return result}).finally(()=>inflight.delete(key));inflight.set(key,running);return running};
+  const rowText=(base,result)=>{const probes=result.probes||[],list=probes.find(p=>p.role==='list'),download=probes.find(p=>p.role==='download');if(!probes.length)return `${base} · 无可探测地址`;if(list?.ok&&download?.ok)return `${base} · ${Math.max(list.latencyMS||0,download.latencyMS||0)}ms`;if(list?.ok)return `${base} · ${list.latencyMS||0}ms · 下载源${shortReason(download)}`;return `${base} · 列表源${list?shortReason(list):'无法连接'}`};
+  const setRow=(value,result)=>{const option=[...preset.options].find(o=>o.value===value);if(!option||value==='__custom')return;const base=MIRROR_PRESETS.find(([,v])=>v===value)?.[0]||'直连 GitHub（默认）';option.textContent=result?rowText(base,result):`${base} · 检测中…`;window.DengSelect?.refresh(preset)};
+  const probeAllRows=async()=>{const seq=++rowsSeq;for(const[,value]of MIRROR_PRESETS)setRow(value,null);for(const[,value]of MIRROR_PRESETS)probe(value).then(result=>{if(seq!==rowsSeq)return;setRow(value,result);if(selected()===value)showDetails(result)}).catch(()=>{if(seq===rowsSeq)setRow(value,{probes:[{role:'list',ok:false,reason:'network',status:0,latencyMS:0}]})})};
+  const runTest=async value=>{const seq=++testSeq,mirror=String(value||'').trim();testLine.textContent='正在自动检测连通性…';try{const result=await probe(mirror);if(seq!==testSeq)return;showDetails(result);if(preset.value!=='__custom')setRow(preset.value,result);}catch(reason){if(seq===testSeq)testLine.textContent='连通性检测未完成：'+(reason?.message||reason)}};
  const current=async()=>{try{const config=await api('/api/config');fill(config?.appearance?.updateMirror||'')}catch{fill('')}};
- const commit=async value=>{error.textContent='';try{await post('/api/appearance/patch',{updateMirror:String(value||'').trim()});toast(String(value||'').trim()?'已保存，检查与下载更新将优先使用该加速域名':'已清除加速域名，恢复直连 GitHub');dialog.close();}catch(reason){error.textContent=reason?.message||String(reason)}};
- preset.onchange=()=>{if(preset.value!=='__custom')input.value=''};
+ const commit=async value=>{error.textContent='';try{await post('/api/appearance/patch',{updateMirror:String(value||'').trim()});toast(String(value||'').trim()?'已保存，检查与下载更新将优先使用该加速域名':'已清除加速域名，恢复直连 GitHub');runTest(value);}catch(reason){error.textContent=reason?.message||String(reason)}};
+ preset.onchange=()=>{if(preset.value!=='__custom')input.value='';runTest(selected())};
+  input.onchange=()=>{if(preset.value==='__custom')runTest(input.value)};
  dialog.querySelector('#update-mirror-save').onclick=()=>commit(preset.value==='__custom'?input.value:preset.value);
  dialog.querySelector('#update-mirror-clear').onclick=()=>{fill('');commit('')};
  const close=()=>dialog.close();dialog.querySelector('.icon-button').onclick=close;dialog.oncancel=event=>{event.preventDefault();close()};
  dialog.addEventListener('close',()=>{dialog.remove();resolve()},{once:true});
- document.body.append(dialog);dialog.showModal();current();
+ document.body.append(dialog);dialog.showModal();current().finally(()=>{probeAllRows();runTest(selected())});
 });}
 document.addEventListener('DOMContentLoaded',async()=>{let timer;try{if(window.DEVSHELL?.detachedNonce)return;const check=Promise.race([api('/api/updates/check').catch(()=>null),new Promise(resolve=>{timer=setTimeout(()=>resolve(null),3000)})]);const result=await check;clearTimeout(timer);if(result?.status==='available')await showUpdate(result);}catch(e){console.warn('启动更新检查未完成',e)}finally{clearTimeout(timer);resolveStartup();window.dispatchEvent(new Event('dengshell:startup-ready'))}},{once:true});
 })();

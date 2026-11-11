@@ -1,9 +1,11 @@
-:root { --view-width:100vw; --view-height:100dvh; --sidebar-default:304px; --files-default:clamp(150px,25vh,300px); --sidebar-width:var(--sidebar-default); --files-height:var(--files-default); --terminal-background:none; --background-opacity:.42; --terminal-foreground:#d3e0e8; }
+:root { --view-width:100vw; --view-height:100dvh; --sidebar-default:304px; --files-default:clamp(150px,25vh,300px); --sidebar-width:var(--sidebar-default); --files-height:var(--files-default); --terminal-foreground:#d3e0e8; }
 body { transform-origin:0 0; }
 .brand-logo { width:26px; height:26px; flex-shrink:0; }
 .session-bar { --wails-draggable:drag; user-select:none; gap:5px; min-width:0; }
 .session-bar :is(button,input,select,.session-tab) { --wails-draggable:no-drag; }
-.session-bar .brand { --wails-draggable:no-drag; }
+/* 品牌区（窄屏外固定悬浮在监控栏上方）的空白处应能拖动窗口；
+   其中按钮由上一条规则单独排除。 */
+.session-bar .brand { --wails-draggable:drag; }
 .session-tabs { min-width:0; }
 #settings-button { flex-shrink:0; color:var(--muted); }
 #about-dialog { width:360px; }
@@ -27,22 +29,21 @@ body { transform-origin:0 0; }
 .window-controls .window-close:hover { background:#c2696e; color:white; }
 .frameless .session-row { padding-right:7px; }
 .terminal-panel { isolation:isolate; }
-/* 纯色 · 全黑：用户显式选择，压过明暗主题的渐变底色。 */
-.terminal-panel.solid-black { background:#000!important; }
-.terminal-panel::before { content:""; position:absolute; inset:0; z-index:0; background-image:var(--terminal-background); background-size:cover; background-position:center; background-color:transparent; background-blend-mode:normal; opacity:var(--background-opacity); filter:brightness(.6); pointer-events:none; }
-/* Dim the backdrop without changing the terminal's ANSI foreground/background. */
-.terminal-panel.has-background::after { content:""; position:absolute; inset:0; z-index:0; background:rgb(13 24 32); opacity:calc(var(--background-opacity) * .35); pointer-events:none; }
 .terminal-panel > * { position:relative; z-index:1; }
 .terminal-output,.terminal-session,dialog textarea { font-family:var(--terminal-family,monospace); }
+/* Program-requested backgrounds (OSC 11) fill the output area once, including
+   unused cell space. Imported themes keep the transparent default. */
+.terminal-output { background:var(--terminal-background,transparent); }
+.terminal-session .xterm .xterm-scrollable-element { background-color:transparent !important; }
 /* Match measurement and rendering; contextual ligatures must not change cells. */
 .terminal-grid-metrics :is(.xterm-rows,.xterm-char-measure-element,.xterm-width-cache-measure-container) { font-variant-ligatures:none; font-feature-settings:"liga" 0,"calt" 0; font-kerning:none; }
 .terminal-grid-metrics .xterm-rows > div { position:relative; }
 .terminal-grid-metrics .terminal-box-glyph { font-size:0; }
 .terminal-grid-metrics .terminal-box-glyph > svg { position:absolute; inset:0; display:block; width:100%; height:100%; overflow:visible; fill:none; stroke:currentColor; stroke-linecap:square; stroke-linejoin:round; pointer-events:none; }
 .workspace { grid-template-rows:minmax(130px,1fr) 8px var(--files-height); }
-.settings-menu { position:fixed; z-index:20; width:282px; max-width:calc(var(--view-width) - 16px); max-height:calc(var(--view-height) - 54px); overflow:auto; background:var(--surface,#fff); border-radius:16px; padding:8px; box-shadow:0 12px 44px #152c4329; color:var(--text,#43576b); scrollbar-width:thin; scrollbar-color:#a4b6c350 transparent; }
-.settings-caption { font-size:10px; color:var(--muted); padding:9px 10px 11px; }
-.settings-menu-view > button { display:flex; align-items:center; gap:10px; width:100%; padding:12px 10px; border-radius:10px; text-align:left; font-size:12px; }
+.settings-menu { position:fixed; z-index:20; width:282px; max-width:calc(var(--view-width) - 16px); max-height:calc(var(--view-height) - 54px); overflow:auto; background:var(--surface,#fff); border-radius:16px; padding:6px; box-shadow:0 12px 44px #152c4329; color:var(--text,#43576b); scrollbar-width:thin; scrollbar-color:#a4b6c350 transparent; }
+.settings-caption { font-size:10px; color:var(--muted); padding:6px 10px 8px; }
+.settings-menu-view > button { display:flex; align-items:center; gap:10px; width:100%; padding:9px 10px; border-radius:10px; text-align:left; font-size:12px; }
 .settings-menu-view > button svg { width:16px; height:16px; color:var(--muted); }
 .settings-menu-view > button span { margin-left:auto; font-size:10px; color:var(--muted); }
 .settings-menu-view > button:hover { background:var(--surface-hover,#edf3f7); }
@@ -54,6 +55,11 @@ body { transform-origin:0 0; }
 .settings-submenu-heading strong { font-size:12px; font-weight:600; }
 .scale-setting { display:flex; align-items:center; justify-content:space-between; gap:15px; font-size:12px; margin:8px 10px; padding-top:12px; border-top:1px solid var(--border); }
 .scale-setting select { border:0; background:var(--surface-inset,#f0f4f7); border-radius:8px; color:inherit; padding:6px 9px; font:inherit; }
+/* Rows inside the settings menu read as one list with the plain menu buttons;
+   divider borders would cut through that list, so none are drawn there. */
+.settings-menu-view .scale-setting { border-top:0; padding-top:0; margin:4px 10px; }
+.settings-menu-view .scale-setting select { padding:4px 9px; }
+.settings-menu-view .scale-setting .themed-select-trigger { min-height:27px; padding:4px 9px; }
 .placement-setting input[type=checkbox] { width:15px; height:15px; margin:0; flex:none; accent-color:var(--accent,#658daf); }
 dialog { max-width:calc(var(--view-width) - 24px); max-height:calc(var(--view-height) - 24px); }
 .connections-drawer { max-width:calc(var(--view-width) - 24px); bottom:12px; }
@@ -64,18 +70,11 @@ dialog { max-width:calc(var(--view-width) - 24px); max-height:calc(var(--view-he
 .manager-dialog .dialog-heading > button { flex-shrink:0; }
 .manager-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:12px 0 18px; font-size:11px; color:var(--muted); }
 .manager-toolbar button { flex-shrink:0; }
-.background-strength { display:flex; align-items:center; gap:12px; margin:12px 0 20px; background:var(--surface-inset,#f4f7fa); padding:12px 14px; border-radius:12px; }
-.background-strength label { margin:0; flex:none; display:flex; flex-direction:row; gap:7px; white-space:nowrap; }
-.background-strength input { padding:0; border:0; min-width:60px; flex:1; width:auto; accent-color:#7b9db4; }
-.background-strength > span { font-size:10px; color:var(--muted); }
 .asset-list { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
 .asset-card { min-width:0; overflow:hidden; border-radius:13px; background:var(--surface-inset,#f4f7fa); }
 .asset-card.selected { background:var(--surface-selected,#e8f0f6); }
 .asset-choice { display:block; width:100%; text-align:left; }
 .asset-choice:hover { background:var(--surface-hover,#edf2f6); }
-.background-thumb { width:100%; height:100px; background-color:#1b2e3a; background-size:cover; background-position:center; display:grid; place-items:center; color:#9ab5c7; }
-.background-thumb.solid-black-thumb { background-color:#000; }
-.background-thumb svg { width:30px; height:30px; opacity:.7; }
 .asset-caption { display:flex; flex-direction:column; gap:6px; padding:12px; }
 .asset-caption strong { font-size:12px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .asset-caption span { font-size:10px; color:var(--muted); }
@@ -111,8 +110,6 @@ dialog { max-width:calc(var(--view-width) - 24px); max-height:calc(var(--view-he
 [data-narrow="true"] .file-tabs { padding-inline:8px; gap:1px; }
 [data-narrow="true"] .file-tab { padding-inline:9px; }
 [data-narrow="true"] .asset-list { grid-template-columns:repeat(2,minmax(0,1fr)); }
-[data-narrow="true"] .background-strength { flex-wrap:wrap; }
-[data-narrow="true"] .background-strength > span { display:none; }
 [data-narrow="true"] .form-row { gap:8px; }
 [data-narrow="true"] dialog { padding:18px; }
 [data-narrow="true"] .window-controls button { width:27px; }
@@ -137,9 +134,6 @@ dialog { max-width:calc(var(--view-width) - 24px); max-height:calc(var(--view-he
 #monitor-backdrop { position:fixed; inset:42px 0 0; z-index:8; background:#10243733; }
 [data-narrow="true"][data-monitor-open="true"] .sidebar { display:flex; position:fixed; left:8px; top:48px; bottom:12px; width:var(--sidebar-width); max-width:calc(var(--view-width) - 16px); z-index:9; border-radius:16px; box-shadow:0 8px 40px #152c4333; background:var(--surface-inset,#f0f3f7); }
 .font-preview select { background:#2c4454; color:#d7e1e8; }
-.background-strength input { appearance:none; -webkit-appearance:none; height:4px; background:var(--border,#dde6ed); border-radius:4px; }
-.background-strength input::-webkit-slider-thumb { appearance:none; width:14px; height:14px; border-radius:50%; background:#7b9db4; cursor:pointer; }
-.terminal-panel:not(.has-background)::before { display:none; }
 
 /* A movable utility palette leaves the terminal visible and interactive. */
 #appearance-dialog { position:fixed; inset:auto; margin:0; width:470px; max-width:calc(var(--view-width) - 16px); max-height:min(680px,calc(var(--view-height) - 16px)); padding:0; z-index:25; overflow:hidden; border-radius:17px; box-shadow:0 12px 46px #152d4338; }
@@ -156,9 +150,6 @@ dialog { max-width:calc(var(--view-width) - 24px); max-height:calc(var(--view-he
 #appearance-dialog .asset-caption { padding:9px 10px; gap:4px; }
 #appearance-dialog .asset-caption strong { font-size:11px; }
 #appearance-dialog .asset-caption span { font-size:9px; }
-#appearance-dialog .background-thumb { height:100px; }
-#appearance-dialog .background-strength { flex-wrap:wrap; gap:10px; padding:10px 12px; margin:0 0 12px; }
-#appearance-dialog .background-strength > span { display:block; flex-basis:100%; }
 #appearance-dialog .font-preview { padding:11px 13px; margin:0 0 12px; }
 #appearance-dialog .font-preview pre { margin:7px 0 10px; line-height:1.5; }
 .font-preview-options { display:flex; gap:20px; align-items:center; }

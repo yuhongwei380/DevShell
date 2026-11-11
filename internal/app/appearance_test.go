@@ -16,7 +16,6 @@ func TestFontColorsPersistPerFamilyAndCannotMutateStore(t *testing.T) {
 	}
 	value := defaultAppearance()
 	value.FontColors = map[string]string{"builtin:jetbrains-mono": "#BADA55", "builtin:fira-code": "#99ccff"}
-	value.BackgroundOpacity = .9
 	saved, err := s.SaveAppearance(value)
 	if err != nil {
 		t.Fatal(err)
@@ -32,8 +31,8 @@ func TestFontColorsPersistPerFamilyAndCannotMutateStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if reopened.List().Appearance.FontColors["builtin:jetbrains-mono"] != "#bada55" || reopened.List().Appearance.BackgroundOpacity != .9 {
-		t.Fatal("font colors or expanded background strength did not persist")
+	if reopened.List().Appearance.FontColors["builtin:jetbrains-mono"] != "#bada55" {
+		t.Fatal("font colors did not persist")
 	}
 	for _, color := range []string{"red", "#123", "#gg0000", "#12345678", "url(example)"} {
 		invalid := defaultAppearance()
@@ -41,40 +40,6 @@ func TestFontColorsPersistPerFamilyAndCannotMutateStore(t *testing.T) {
 		if _, err := s.SaveAppearance(invalid); err == nil {
 			t.Fatalf("invalid color accepted: %q", color)
 		}
-	}
-}
-
-func TestBackgroundDefaultMigrationPreservesExplicitChoices(t *testing.T) {
-	for _, test := range []struct {
-		name, data string
-		want       float64
-	}{
-		{"legacy default", `{"fontId":"builtin:jetbrains-mono","backgroundId":"builtin:mist","backgroundOpacity":0.18,"uiScale":1,"terminalFontSize":14}`, .42},
-		{"legacy zero", `{"backgroundOpacity":0}`, 0},
-		{"legacy custom", `{"backgroundOpacity":0.55}`, .55},
-		{"new explicit 18", `{"backgroundOpacity":0.18,"backgroundVersion":2}`, .18},
-		{"new default", `{}`, .42},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			var value Appearance
-			if err := json.Unmarshal([]byte(test.data), &value); err != nil {
-				t.Fatal(err)
-			}
-			if value.BackgroundOpacity != test.want || value.BackgroundVersion != 2 {
-				t.Fatalf("wrong migration: %+v", value)
-			}
-		})
-	}
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"appearance":{"fontId":"builtin:jetbrains-mono","backgroundId":"builtin:none","backgroundOpacity":0.18,"uiScale":1,"terminalFontSize":14}}`), 0600); err != nil {
-		t.Fatal(err)
-	}
-	s, err := OpenStore(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if value := s.List().Appearance; value.BackgroundID != "builtin:none" || value.BackgroundOpacity != .42 {
-		t.Fatalf("legacy pure-color selection changed: %+v", value)
 	}
 }
 

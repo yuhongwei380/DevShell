@@ -67,7 +67,6 @@
       sessions.set(state.id, state); state.host.dataset.session = state.id;
       state.openTerminalSocket();
       if (selected) activate(state.id); else renderTabs();
-      safe(refreshServerManagerHistory)();
       return state;
     } catch (error) {
       if (alive()) {

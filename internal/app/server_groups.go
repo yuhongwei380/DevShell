@@ -113,7 +113,10 @@ func (s *Store) assignProfileGroupLocked(profile *Profile) error {
 	}
 	name := strings.TrimSpace(profile.Group)
 	if name == "" {
-		name = "我的服务器"
+		// No group requested: the connection stays ungrouped. The "我的服务器"
+		// placeholder exists only for legacy configs migrated in upgradeConfig.
+		profile.Group = ""
+		return nil
 	}
 	groups := groupIndex(s.config.GroupNodes)
 	for _, group := range s.config.GroupNodes {
@@ -248,8 +251,10 @@ func (s *Store) MoveProfileGroup(id, groupID string) (Profile, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	groups := groupIndex(s.config.GroupNodes)
-	if _, ok := groups[groupID]; !ok {
-		return Profile{}, errors.New("目标分组不存在")
+	if groupID != "" {
+		if _, ok := groups[groupID]; !ok {
+			return Profile{}, errors.New("目标分组不存在")
+		}
 	}
 	for i, profile := range s.config.Servers {
 		if profile.ID != id || profile.DeletedAt != nil {
@@ -309,6 +314,76 @@ func (s *Store) DeleteGroup(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.deleteGroupLocked(id)
+}
+
+// DeleteGroupKeepConnections removes just this group node. Its connections
+// (including trashed ones) and direct child groups relocate into target — an
+// empty target means ungrouped (child groups return to the top level, which
+// groups allow). When useParent is set, the deleted group's parent becomes
+// the target. A named target must exist and must not be inside the deleted
+// subtree. Returns how many connections were relocated.
+func (s *Store) DeleteGroupKeepConnections(id, targetID string, useParent bool) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	byID := groupIndex(s.config.GroupNodes)
+	group, found := byID[id]
+	if !found {
+		return 0, errors.New("分组不存在")
+	}
+	target := targetID
+	if useParent {
+		target = group.ParentID
+	}
+	if target == id {
+		return 0, errors.New("不能移入正在删除的分组")
+	}
+	if target != "" {
+		if _, ok := byID[target]; !ok {
+			return 0, errors.New("接管的分组不存在，请重新选择")
+		}
+	}
+	children := map[string][]string{}
+	for _, entry := range s.config.GroupNodes {
+		children[entry.ParentID] = append(children[entry.ParentID], entry.ID)
+	}
+	subtree := map[string]bool{id: true}
+	queue := []string{id}
+	for i := 0; i < len(queue); i++ {
+		for _, child := range children[queue[i]] {
+			if !subtree[child] {
+				subtree[child] = true
+				queue = append(queue, child)
+			}
+		}
+	}
+	if subtree[target] {
+		return 0, errors.New("接管分组位于被删除分组内部，请选择其外的分组")
+	}
+	old := cloneConnectionConfig(s.config)
+	next := []ServerGroup{}
+	for _, entry := range s.config.GroupNodes {
+		if entry.ID == id {
+			continue
+		}
+		if entry.ParentID == id {
+			entry.ParentID = target
+		}
+		next = append(next, entry)
+	}
+	s.config.GroupNodes = next
+	moved := 0
+	for i := range s.config.Servers {
+		if s.config.Servers[i].GroupID == id {
+			s.config.Servers[i].GroupID = target
+			moved++
+		}
+	}
+	s.refreshLegacyGroupsLocked()
+	if err := s.writeLocked(); err != nil {
+		s.config = old
+		return 0, err
+	}
+	return moved, nil
 }
 
 // Legacy clients still send flat display names. Resolve a unique display path

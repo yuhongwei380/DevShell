@@ -207,6 +207,18 @@ func (d *Desktop) OpenTerminal(sessionID string) error {
 func (d *Desktop) OpenSerialTerminal(sessionID string) error {
 	return d.openTerminalSocketPath(sessionID, "/api/serial/sessions/"+url.PathEscape(sessionID)+"/terminal", "")
 }
+
+// OpenLocalShellTerminal bridges the local shell terminal WebSocket through
+// the same native IPC path. Local shells never participate in window handoff.
+func (d *Desktop) OpenLocalShellTerminal(sessionID string) error {
+	return d.openTerminalSocketPath(sessionID, "/api/local-shell/sessions/"+url.PathEscape(sessionID)+"/terminal", "")
+}
+
+// OpenTcpTerminal bridges a telnet session terminal WebSocket through the
+// same native IPC path, mirroring serial and local shell.
+func (d *Desktop) OpenTcpTerminal(sessionID string) error {
+	return d.openTerminalSocketPath(sessionID, "/api/tcp-sessions/"+url.PathEscape(sessionID)+"/terminal", "")
+}
 func (d *Desktop) openTerminalSocket(sessionID, nonce string) error {
 	return d.openTerminalSocketPath(sessionID, "/api/sessions/"+url.PathEscape(sessionID)+"/terminal", nonce)
 }
@@ -397,8 +409,6 @@ func (d *Desktop) ChooseAsset(kind string) (*app.ManagedAsset, error) {
 		title, label, pattern = "添加终端字体", "字体文件", "*.ttf;*.otf;*.woff;*.woff2"
 	case "ui-font":
 		title, label, pattern = "导入界面字体（重启后生效）", "字体文件", "*.ttf;*.otf;*.woff;*.woff2"
-	case "background":
-		title, label, pattern = "添加终端背景", "背景图片", "*.png;*.jpg;*.jpeg;*.webp"
 	default:
 		return nil, errors.New("未知资源类型")
 	}
@@ -468,11 +478,23 @@ func runDesktopBackend(application desktopBackend, assets fs.FS, configDir, deta
 		go sweepDetachedWebviewCaches(configDir)
 	}
 	nativeHandler := nativeAssetHandler(application, assets)
+	// The native backdrop only prevents a flash before the webview paints;
+	// every global style paints its own materials inside the opaque window.
+	windowBackground := options.NewRGB(240, 243, 247)
+	darkAtStart := preferences.Theme == "dark" || (preferences.Theme == "system" && platformSystemTheme() == "dark")
+	switch preferences.UIStyle {
+	case "frosted":
+		if darkAtStart {
+			windowBackground = options.NewRGB(57, 54, 51)
+		} else {
+			windowBackground = options.NewRGB(232, 230, 223)
+		}
+	}
 	return wails.Run(&options.App{
 		Title: "DevShell", Width: initial.Width, Height: initial.Height, MinWidth: initial.MinWidth, MinHeight: initial.MinHeight,
 		Frameless:        goruntime.GOOS == "windows",
 		StartHidden:      goruntime.GOOS == "windows",
-		BackgroundColour: options.NewRGB(240, 243, 247),
+		BackgroundColour: windowBackground,
 		AssetServer: &assetserver.Options{Assets: assets, Handler: nativeHandler, Middleware: func(next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Cache-Control", "no-store")

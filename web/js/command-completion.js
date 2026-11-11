@@ -16,16 +16,24 @@ window.DengCommandCompletion = (() => {
     { name: 'nslookup', usage: '主机', note: '本机 DNS 解析' },
     { name: 'dig', usage: '主机 [类型]', note: '本机 DNS 查询' },
     { name: 'curl', usage: '[-I] 网址', note: '本机 http/https 请求' },
+    { name: 'tcping', usage: '主机 端口 [-t]', note: '本机 TCP 连通探测' },
+    { name: 'telnet', usage: '主机 [端口]', note: '本机 TCP 会话，本标签拨号' },
     { name: 'help', note: '显示本机命令用法' },
     { name: 'exit', note: '关闭本标签' },
   ];
-  const welcomeCommands = sessionCommands.filter(command => ['ssh', 'ping', 'traceroute', 'nslookup', 'dig', 'curl'].includes(command.name));
+  const welcomeCommands = sessionCommands.filter(command => ['ssh', 'ping', 'traceroute', 'nslookup', 'dig', 'curl', 'tcping', 'telnet'].includes(command.name));
   // Same local-prompt test as renderSessionInfo(): while the bar is neither a
   // start page nor a live local prompt, Tab keeps its old behaviour.
   function commandsFor(state) {
-    if (!state) return welcomeCommands;
+    if (!state) return tcpToolsFiltered(welcomeCommands);
     if (state.connected || state.pendingConnection || state.disconnecting || state.detaching || state.handoffProvisional || state.ownershipUncertain) return null;
-    return sessionCommands;
+    return tcpToolsFiltered(sessionCommands);
+  }
+  // tcping / telnet follow the Settings → 其他功能 switch (default on); the
+  // backend rejects them too, the popup just keeps the offer list honest.
+  function tcpToolsFiltered(list) {
+    if (typeof appearance === 'undefined' || appearance.tcpToolsEnabled !== false) return list;
+    return list.filter(command => command.name !== 'tcping' && command.name !== 'telnet');
   }
   // Only the first token of the caret's line is a command word; the rest are
   // arguments DevShell never rewrites. A partial token after the caret (caret

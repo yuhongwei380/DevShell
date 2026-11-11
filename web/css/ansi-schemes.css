@@ -1,0 +1,33 @@
+/* 配色方案管理弹窗（设置 → 外观配置 → 配色方案），紧凑布局；按钮显式定尺，避免被全局 flex 规则撑大。 */
+#ansi-schemes-dialog{width:min(560px,calc(var(--view-width,100vw) - 32px));max-height:calc(var(--view-height,100vh) - 32px);padding:16px 18px;font-size:13px;overflow:auto;color:var(--text)}
+#ansi-schemes-dialog .dialog-heading{margin-bottom:10px;align-items:flex-start}
+#ansi-schemes-dialog h2{font-size:16px}
+#ansi-schemes-dialog form{display:grid;gap:9px}
+#ansi-schemes-dialog>p,#ansi-schemes-dialog form>p{margin:0;color:var(--muted,#5b6f7f);font-size:11.5px;line-height:1.5}
+.scheme-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.scheme-toolbar span{color:var(--muted,#5b6f7f);font-size:11px;white-space:nowrap}
+#scheme-import-button{flex:none;width:auto;align-self:flex-start;display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:8px;font-size:12px;line-height:1.4;white-space:nowrap}
+#scheme-import-button svg{width:14px;height:14px}
+.scheme-list{display:grid;gap:6px}
+.scheme-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 10px;border:1px solid var(--border,#dce6ee);border-radius:9px;background:var(--surface,#fff)}
+.scheme-info{display:grid;gap:2px;min-width:0}
+.scheme-info>strong{font-size:13px;overflow-wrap:anywhere}
+.scheme-swatches{display:flex;gap:2px}
+.scheme-swatches i{width:9px;height:9px;border-radius:2px;border:1px solid rgba(0,0,0,.18);background:var(--border,#dce6ee)}
+.scheme-summary{color:var(--muted,#5b6f7f);font-size:11px}
+.scheme-actions{display:flex;gap:6px;flex:none;justify-content:flex-end}
+.scheme-actions button{flex:none;width:auto;font-size:12px;line-height:1.4;padding:4px 9px;border-radius:7px;border:1px solid var(--border,#dce6ee);background:var(--surface,#fff);color:var(--text);white-space:nowrap;cursor:pointer}
+.scheme-actions button.danger-button{color:#b3261e;border-color:#e7b7b2}
+.scheme-rename{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.scheme-rename input{flex:1 1 160px;min-width:130px;padding:5px 8px;border:1px solid var(--border,#dce6ee);border-radius:7px;background:var(--surface,#fff);color:var(--text);font-size:12.5px}
+.scheme-rename button{flex:none;width:auto;font-size:12px;line-height:1.4;padding:4px 9px;border-radius:7px;border:1px solid var(--border,#dce6ee);color:var(--text);white-space:nowrap;cursor:pointer}
+.scheme-empty{color:var(--muted,#5b6f7f);font-size:11.5px}
+#scheme-error{color:#b3261e;font-size:11.5px}
+#scheme-error:empty{display:none}
+.scheme-row:hover{border-color:var(--accent,#2b6f8f)}
+html.dark .scheme-row,html[data-theme=dark] .scheme-row{background:var(--surface-inset,#1c2836);border-color:var(--border,#31404f)}
+html.dark .scheme-actions button,html[data-theme=dark] .scheme-actions button,html.dark .scheme-rename button,html[data-theme=dark] .scheme-rename button{background:var(--surface-inset,#1c2836);border-color:var(--border,#31404f);color:var(--text)}
+html.dark .scheme-actions button.danger-button,html[data-theme=dark] .scheme-actions button.danger-button{color:#ff9a8f;border-color:#7c423d}
+html.dark #scheme-error,html[data-theme=dark] #scheme-error{color:#ff9a8f}
+html.dark .scheme-rename input,html[data-theme=dark] .scheme-rename input{background:var(--surface,#16222e);border-color:var(--border,#31404f);color:var(--text)}
+@media(max-width:560px){.scheme-row{flex-wrap:wrap}.scheme-actions{flex-basis:100%}}

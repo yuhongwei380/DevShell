@@ -85,3 +85,5 @@ internal/app/C*Users*AppData*
 /.qa*/
 /.acl-recovery/
 /.verify-*/
+/.gocache/
+/.gotmp/

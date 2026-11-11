@@ -8,12 +8,12 @@
   <script src="js/bootstrap.js?v=20261025-devshell-rc1"></script>
   <script>if(location.protocol!=='wails:'&&location.hostname!=='wails.localhost'){const nonce=new URLSearchParams(location.search).get('window');if(/^[A-Za-z0-9_-]{24,96}$/.test(nonce||'')){window.DEVSHELL.detachedNonce=nonce;}}</script>
   <script src="js/security-lock.js?v=20261025-devshell-rc1"></script>
-  <script src="js/theme.js?v=20261102-mergetheme1"></script>
+  <script src="js/theme.js?v=20261107-frosted-darkonly1"></script>
   <link rel="stylesheet" href="vendor/xterm.css">
   <link rel="stylesheet" href="css/style.css?v=20261102-hdrdot1">
   <link rel="stylesheet" href="css/theme.css?v=20261101-tabdot1">
   <link rel="stylesheet" href="css/workspace-tools.css?v=20261001-composer">
-  <link rel="stylesheet" href="css/appearance.css?v=20261101-hdrmerge1">
+  <link rel="stylesheet" href="css/appearance.css?v=20261110-iterm2">
   <link rel="stylesheet" href="css/process-view.css?v=20260920-v002-b70">
   <link rel="stylesheet" href="css/workspace-refinements.css?v=20261025-cmdtab1">
   <link rel="stylesheet" href="css/file-browser.css?v=20260921-v002-b72">
@@ -21,7 +21,7 @@
   <link rel="stylesheet" href="css/config-document.css?v=20260920-v002-b70">
   <link rel="stylesheet" href="css/startup-update.css?v=20261102-sectag1">
   <link rel="stylesheet" href="css/desktop-polish.css?v=20261101-hdrmerge5">
-  <link rel="stylesheet" href="css/server-manager.css?v=20261101-backup1">
+  <link rel="stylesheet" href="css/server-manager.css?v=20261103-dragmove1">
   <link rel="stylesheet" href="css/connection-extras.css?v=20260920-v002-b70">
   <link rel="stylesheet" href="css/help-guide.css?v=20261101-hdrmerge1">
   <link rel="stylesheet" href="css/appearance-tools.css?v=20261031-sftp-close">
@@ -35,12 +35,14 @@
   <link rel="stylesheet" href="css/session-windows.css?v=20261102-concise1">
   <link rel="stylesheet" href="css/system-identity.css?v=20260920-v002-b70">
   <link rel="stylesheet" href="css/chart-styles.css?v=20260920-v002-b70">
+  <link rel="stylesheet" href="css/ansi-schemes.css?v=20261110-iterm2">
+  <link rel="stylesheet" href="css/ui-styles.css?v=20261107-shellglass4">
   <link rel="stylesheet" href="css/light-theme.css?v=20261101-hdrmerge1">
   <link rel="stylesheet" href="css/ui-appearance.css?v=20260920-v002-b70">
   <link rel="stylesheet" href="css/security-lock.css?v=20260920-v002-b70">
   <link rel="stylesheet" href="css/soft-dark.css?v=20261101-hdrmerge1">
 <link rel="stylesheet" href="css/rdp.css?v=20260927-preview1">
-  <link rel="stylesheet" href="css/connection-form.css?v=20261019-serial1">
+  <link rel="stylesheet" href="css/connection-form.css?v=20261102-autocmd2">
   <link rel="stylesheet" href="css/upload-confirmation.css?v=20260928-overwrite1">
 </head>
 <body>
@@ -68,6 +70,7 @@
     <symbol id="i-code" viewBox="0 0 24 24"><path d="m7 7-5 5 5 5m10-10 5 5-5 5m-4-13-2 20"/></symbol>
     <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></symbol>
     <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></symbol>
+    <symbol id="i-swatch" viewBox="0 0 24 24"><path d="M3 4h18v4H3zM3 11h7v9H3zM13 11h8v4h-8zM13 17h8v3h-8z"/></symbol>
     <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="8" r="5"/><path d="m11.5 11.5 9 9M16 16l3-3m-1 5 3-3"/></symbol>
     <symbol id="i-settings" viewBox="0 0 24 24"><path d="M19.02,9.09 L19.45,10.52 L21.89,10.51 L21.89,13.49 L19.45,13.48 L19.02,14.91 L18.32,16.22 L20.04,17.94 L17.94,20.04 L16.22,18.32 L14.91,19.02 L13.48,19.45 L13.49,21.89 L10.51,21.89 L10.52,19.45 L9.09,19.02 L7.78,18.32 L6.06,20.04 L3.96,17.94 L5.68,16.22 L4.98,14.91 L4.55,13.48 L2.11,13.49 L2.11,10.51 L4.55,10.52 L4.98,9.09 L5.68,7.78 L3.96,6.06 L6.06,3.96 L7.78,5.68 L9.09,4.98 L10.52,4.55 L10.51,2.11 L13.49,2.11 L13.48,4.55 L14.91,4.98 L16.22,5.68 L17.94,3.96 L20.04,6.06 L18.32,7.78 Z"/><circle cx="12" cy="12" r="3"/></symbol>
     <symbol id="i-github" viewBox="0 0 24 24"><path d="M9 19c-4.3 1.3-4.3-2.2-6-2.7m12 5v-3.4a3 3 0 0 0-.8-2.4c2.7-.3 5.5-1.3 5.5-6A4.7 4.7 0 0 0 18.4 6a4.4 4.4 0 0 0-.1-3.3s-1-.3-3.4 1.3a11.6 11.6 0 0 0-6 0C6.5 2.4 5.5 2.7 5.5 2.7A4.4 4.4 0 0 0 5.4 6a4.7 4.7 0 0 0-1.3 3.5c0 4.7 2.8 5.7 5.5 6A3 3 0 0 0 9 18v3.3"/></symbol>
@@ -119,9 +122,9 @@
             <button class="icon-button header-pill" id="security-lock-button" aria-label="立即锁定" title="请先在设置中启用安全锁定" disabled><svg><use href="#i-lock"/></svg></button>
           </div>
           <button id="connection-button" class="connection-button" title="服务器管理" aria-label="服务器管理"><svg><use href="#i-server"/></svg></button>
-          <button id="pinned-toggle" class="connection-button pinned-toggle-button" title="链接栏" aria-label="展开链接栏" aria-haspopup="true" aria-expanded="false" hidden><svg><use href="#i-bookmark"/></svg></button>
+          <button id="pinned-toggle" class="connection-button pinned-toggle-button" title="收藏夹" aria-label="展开收藏夹" aria-haspopup="true" aria-expanded="false" hidden><svg><use href="#i-bookmark"/></svg></button>
           <div id="session-tabs" class="session-tabs"></div>
-          <button class="icon-button add-session" id="add-session" aria-label="新选项卡" title="新选项卡"><svg><use href="#i-plus"/></svg></button>
+          <button class="icon-button add-session" id="add-session" aria-label="新会话" title="新会话"><svg><use href="#i-plus"/></svg></button>
           <div class="session-tab-tools">
             <button class="icon-button" id="session-tabs-previous" aria-label="向左滚动选项卡" title="向左滚动选项卡" disabled><svg><use href="#i-chevron"/></svg></button>
             <button class="icon-button" id="session-tabs-next" aria-label="向右滚动选项卡" title="向右滚动选项卡" disabled><svg><use href="#i-chevron"/></svg></button>
@@ -131,7 +134,7 @@
           <div class="window-controls" id="window-controls" hidden><button data-window-action="minimise" title="最小化" aria-label="最小化"><svg><use href="#i-minimise"/></svg></button><button data-window-action="toggle-maximise" id="window-maximise" title="最大化" aria-label="最大化"><svg><use href="#i-maximise"/></svg></button><button data-window-action="close" class="window-close" title="关闭窗口" aria-label="关闭窗口"><svg><use href="#i-close"/></svg></button></div>
         </div>
       </nav>
-      <div class="pinned-bar" id="pinned-bar" aria-label="链接栏" hidden></div>
+      <div class="pinned-bar" id="pinned-bar" aria-label="收藏夹" hidden></div>
       <section id="rdp-panel" class="rdp-panel" aria-label="RDP 远程桌面" hidden>
         <header class="rdp-toolbar"><div><strong id="rdp-active-name"></strong><span id="rdp-active-status"></span></div><div><label class="rdp-resolution-label">分辨率<select id="rdp-resolution" title="跟随窗口可避免低分辨率画面被放大；固定分辨率会等比适应窗口"><option value="0x0">跟随窗口 · 清晰</option><option value="1920x1080">1920 × 1080</option><option value="1600x900">1600 × 900</option><option value="1280x800">1280 × 800</option><option value="1024x768">1024 × 768</option></select></label><button id="rdp-secure-attention" type="button" title="向远程 Windows 发送安全注意序列">Ctrl + Alt + Del</button><button id="rdp-active-reconnect" type="button">重新连接</button><button id="rdp-active-disconnect" type="button">断开</button></div></header>
         <div id="rdp-viewport" class="rdp-viewport"><div id="rdp-placeholder" class="rdp-placeholder"><strong id="rdp-placeholder-message">连接中…</strong><p>连接后点击画面即可操作远程桌面。</p></div></div>
@@ -168,14 +171,14 @@
   <div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
   <aside class="connections-drawer" id="connections-drawer" aria-label="服务器分组管理" hidden>
     <div class="drawer-heading"><h2>服务器管理</h2>
-      <div class="server-manager-tabs" role="tablist" aria-label="连接列表"><button id="server-tab-servers" role="tab" aria-selected="true" aria-controls="connection-groups" data-server-tab="servers">服务器<span>0</span></button><button id="server-tab-history" role="tab" aria-selected="false" aria-controls="connection-groups" data-server-tab="history" tabindex="-1">历史连接<span>0</span></button><button id="server-tab-trash" role="tab" aria-selected="false" aria-controls="connection-groups" data-server-tab="trash" tabindex="-1">已删除<span>0</span></button></div>
+      <div class="server-manager-tabs" role="tablist" aria-label="连接列表"><button id="server-tab-servers" role="tab" aria-selected="true" aria-controls="connection-groups" data-server-tab="servers">服务器<span>0</span></button><button id="server-tab-trash" role="tab" aria-selected="false" aria-controls="connection-groups" data-server-tab="trash" tabindex="-1">已删除<span>0</span></button></div>
       <button id="close-connections" class="icon-button" aria-label="关闭服务器管理"><svg><use href="#i-close"/></svg></button>
     </div>
     <div id="server-manager-tools" class="server-manager-tools">
       <label class="connection-search"><svg><use href="#i-search"/></svg><input id="connection-search" placeholder="搜索名称、地址、分组或备注" aria-label="搜索服务器"></label>
     </div>
     <div id="connection-groups" role="tabpanel" aria-labelledby="server-tab-servers"></div>
-    <div id="server-manager-create" class="server-manager-create"><button class="new-connection" id="new-connection"><svg><use href="#i-plus"/></svg>新建连接</button><button class="text-button" id="open-rdp-sessions" type="button" hidden>RDP 会话</button><button class="text-button" id="new-group">＋ 新建分组</button><button class="text-button" id="export-backup" type="button" title="导出连接、密钥与主机指纹为备份文件">备份</button><button class="text-button" id="import-backup" type="button" title="从备份文件导入连接">恢复</button><input type="file" id="backup-picker" accept="application/json,.json" hidden></div>
+    <div id="server-manager-create" class="server-manager-create"><button class="new-connection" id="new-connection"><svg><use href="#i-plus"/></svg>新建连接</button><button class="text-button" id="open-rdp-sessions" type="button" hidden>RDP 会话</button><button class="text-button" id="new-group">＋ 新建分组</button><button class="text-button" id="export-backup" type="button" title="导出连接、密钥与主机指纹为备份文件">备份</button><button class="text-button" id="import-backup" type="button" title="从备份文件导入连接">恢复</button><button class="text-button server-danger" id="purge-trash" type="button" hidden title="永久删除全部已删除连接及其凭据与连接历史，无法恢复">一键清理</button><input type="file" id="backup-picker" accept="application/json,.json" hidden></div>
   </aside>
   <div id="server-group-menu" class="server-group-menu" role="menu" aria-label="分组操作" hidden></div>
   <dialog id="server-move-dialog" aria-labelledby="server-move-title"><form id="server-move-form">
@@ -184,6 +187,13 @@
     <label>移动到分组<select name="groupId" id="server-move-group" required></select></label>
     <p id="server-move-error" role="alert" hidden></p>
     <button type="submit" id="save-server-move" class="primary-button">移动</button>
+  </form></dialog>
+  <dialog id="server-group-keep-dialog" aria-labelledby="server-group-keep-title"><form id="server-group-keep-form">
+    <div class="dialog-heading"><h2 id="server-group-keep-title">删除分组（保留连接）</h2><button type="button" id="cancel-server-group-keep" class="icon-button" aria-label="取消删除"><svg><use href="#i-close"/></svg></button></div>
+    <p id="server-group-keep-scope"></p>
+    <label>连接与子分组移交给<select name="targetGroupId" id="server-group-keep-target" required></select></label>
+    <p id="server-group-keep-error" role="alert" hidden></p>
+    <button type="submit" id="save-server-group-keep" class="primary-button">删除分组</button>
   </form></dialog>
   <dialog id="server-group-dialog"><form id="server-group-form">
     <div class="dialog-heading"><h2 id="server-group-editor-title">新建分组</h2><button type="button" id="cancel-server-group" class="icon-button" aria-label="取消分组编辑"><svg><use href="#i-close"/></svg></button></div>
@@ -251,6 +261,12 @@
       <p class="proxy-note">直连跟随系统路由；使用代理时，由代理端解析域名。</p>
     </details>
     <label class="connection-notes-field">备注（可选）<textarea id="connection-notes" name="notes" rows="3" aria-describedby="connection-notes-hint" placeholder="续费网址、到期时间、用途等"></textarea><small id="connection-notes-hint" class="notes-input-hint" aria-live="polite">正文最多 3 行，每行最多 20 个中文或 40 个英文字符</small></label>
+    <details class="auto-command-settings" id="auto-command-settings">
+      <summary>连接后自动执行 <span id="auto-command-summary">未配置</span><svg><use href="#i-chevron"/></svg></summary>
+      <label class="checkbox-label"><input name="autoRun" type="checkbox" id="connection-auto-run">连接成功后自动执行下列命令</label>
+      <label>命令（每行一条，按顺序执行）<textarea name="autoCommands" id="connection-auto-commands" rows="4" spellcheck="false" autocomplete="off" placeholder="cd /data&#10;tmux attach -t dev || tmux new -s dev"></textarea></label>
+      <p class="proxy-note">命令会敲进这条连接的远端终端，Shell 就绪后按顺序执行；断开重连后会再次执行。全局开关在「设置 → 其他功能」。</p>
+    </details>
     </aside></div></div>
     <div class="connection-form-footer">
     <button type="button" id="reset-host-key" class="text-button" hidden>重置此服务器的主机指纹</button>
@@ -258,7 +274,7 @@
     </div>
   </form></dialog>
   <dialog id="rdp-sessions-dialog" class="manager-dialog"><div class="dialog-heading"><div><h2>远程桌面</h2><p>内置 RDP · 标签页</p></div><button type="button" class="icon-button" id="close-rdp-sessions" aria-label="关闭远程桌面列表"><svg><use href="#i-close"/></svg></button></div><p class="rdp-session-help">首次连接时请核对证书窗口中的服务器地址和指纹。安全锁定会断开 RDP。</p><div id="rdp-session-list" aria-live="polite"></div><p id="rdp-session-empty" class="empty-state">还没有远程桌面会话。新建连接时选择 RDP。</p><button type="button" id="new-rdp-connection" class="primary-button">新建 RDP 连接</button></dialog>
-  <dialog id="action-dialog"><form id="action-form"><h2 id="action-title"></h2><p id="action-description"></p><label id="action-input-label"><input id="action-input" autocomplete="off"></label><div class="dialog-buttons"><button type="button" id="action-cancel">取消</button><button type="submit" class="primary-button" id="action-confirm">确定</button></div></form></dialog>
+  <dialog id="action-dialog"><form id="action-form"><h2 id="action-title"></h2><p id="action-description"></p><label id="action-input-label"><input id="action-input" autocomplete="off"></label><div class="dialog-buttons"><button type="button" id="action-alt" hidden></button><button type="button" id="action-cancel">取消</button><button type="submit" class="primary-button" id="action-confirm">确定</button></div></form></dialog>
   <dialog id="command-dialog"><form id="quick-command-form">
     <div class="dialog-heading"><h2 id="command-dialog-title">新建快捷命令</h2><button type="button" class="icon-button" id="cancel-command" aria-label="关闭命令编辑器"><svg><use href="#i-close"/></svg></button></div>
     <input name="id" type="hidden"><div class="form-row"><label>名称<input name="name" required maxlength="100" placeholder="例如：查看容器"></label><div class="command-group-field"><label for="quick-command-group">分组</label><div class="command-group-choice"><select id="quick-command-group" name="group" required aria-label="命令分组"></select><button type="button" class="icon-button" id="new-command-group" title="新建命令分组" aria-label="新建命令分组"><svg><use href="#i-plus"/></svg></button></div></div></div>
@@ -278,6 +294,7 @@
       <button role="menuitem" id="manage-keys"><svg><use href="#i-key"/></svg>密钥管理器<span>私钥与公钥</span></button>
       <button role="menuitem" id="manage-appearance-config" data-settings-view="appearance" aria-haspopup="menu" aria-controls="settings-appearance-view" aria-expanded="false"><svg><use href="#i-sun"/></svg>外观配置<span>字体与布局</span><svg class="settings-chevron"><use href="#i-chevron"/></svg></button>
       <button role="menuitem" id="manage-proxies"><svg><use href="#i-network"/></svg>代理管理器<span>连接路径</span></button>
+      <button role="menuitem" id="manage-other-features" data-settings-view="other" aria-haspopup="menu" aria-controls="settings-other-view" aria-expanded="false"><svg><use href="#i-settings"/></svg>其他功能<svg class="settings-chevron"><use href="#i-chevron"/></svg></button>
       <button role="menuitem" id="help-button" aria-label="使用手册与功能引导" aria-haspopup="dialog"><svg><use href="#i-help-book"/></svg>使用手册与功能引导<span>帮助</span></button>
       <button role="menuitem" id="release-notes-button" aria-haspopup="dialog" aria-controls="release-notes-dialog"><svg><use href="#i-history"/></svg>更新日志<span>当前版本</span></button>
       <div class="scale-setting"><label for="ui-scale">界面缩放</label><select id="ui-scale" aria-label="界面缩放"><option value="0.75">75%</option><option value="0.9">90%</option><option value="1">100%</option><option value="1.1">110%</option><option value="1.25">125%</option><option value="1.5">150%</option><option value="1.75">175%</option><option value="2">200%</option></select></div>
@@ -287,20 +304,37 @@
       <div class="settings-submenu-heading"><button type="button" role="menuitem" id="appearance-settings-back" data-settings-view="main"><svg><use href="#i-chevron"/></svg>返回设置</button><strong>外观配置</strong></div>
       <button role="menuitem" id="manage-ui-appearance"><svg><use href="#i-type"/></svg>界面字体与文字颜色<span>界面字体</span></button>
       <button role="menuitem" id="manage-shell-fonts"><svg><use href="#i-type"/></svg>Shell 字体与颜色<span>终端字体</span></button>
-      <button role="menuitem" id="manage-backgrounds"><svg><use href="#i-image"/></svg>背景管理器<span>终端背景</span></button>
+      <button role="menuitem" id="manage-ui-styles" aria-haspopup="dialog" aria-controls="ui-styles-dialog"><svg><use href="#i-layout"/></svg>全局主题<span>整套界面材质</span></button>
       <button role="menuitem" id="manage-chart-styles"><svg><use href="#i-network"/></svg>曲线样式<span>网速与延迟</span></button>
+      <button role="menuitem" id="manage-ansi-schemes" aria-haspopup="dialog" aria-controls="ansi-schemes-dialog"><svg><use href="#i-swatch"/></svg>配色方案<span>导入与管理 iTerm 配色</span></button>
       <div class="scale-setting"><label for="ansi-palette">终端 ANSI 颜色</label><select id="ansi-palette" aria-label="终端 ANSI 颜色预设"><option value="soft">柔和</option><option value="vivid">高饱和</option><option value="bright">鲜亮</option></select></div>
       <button role="menuitem" id="reset-layout" title="恢复默认布局与终端字号" aria-label="恢复默认布局"><svg><use href="#i-layout"/></svg>恢复默认布局<span>布局与字号</span></button>
     </div>
+    <div class="settings-menu-view" id="settings-other-view" role="group" aria-label="其他功能" hidden>
+      <div class="settings-submenu-heading"><button type="button" role="menuitem" id="other-settings-back" data-settings-view="main"><svg><use href="#i-chevron"/></svg>返回设置</button><strong>其他功能</strong></div>
+      <div class="scale-setting placement-setting"><label for="feature-auto-commands">连接后自动执行命令</label><select id="feature-auto-commands" aria-label="连接后自动执行命令" title="SSH 连接按各自配置把命令敲进远端终端；关闭后所有连接都不再自动执行"><option value="true">开启</option><option value="false">关闭</option></select></div>
+      <div class="scale-setting placement-setting"><label for="feature-local-shell">本地终端</label><select id="feature-local-shell" aria-label="本地终端" title="开启后点“+”直接新开本机终端（macOS 登录 bash/zsh；Windows 默认 WSL 发行版）；关闭时保持新会话起始页"><option value="true">开启</option><option value="false">关闭</option></select></div>
+      <div class="scale-setting placement-setting"><label for="feature-tcp-tools">候选栏 TCP 工具</label><select id="feature-tcp-tools" aria-label="候选栏 TCP 工具" title="本机提示符与 Tab 候选中的 tcping（TCP 连通探测）与 telnet（本标签 TCP 会话）；关闭后不再提供这两个命令"><option value="true">开启</option><option value="false">关闭</option></select></div>
+    </div>
   </div>
   <dialog id="about-dialog" aria-labelledby="about-title"><div class="dialog-heading"><h2 id="about-title">关于 DevShell</h2><button type="button" class="icon-button" id="close-about" aria-label="关闭版本信息"><svg><use href="#i-close"/></svg></button></div><dl class="about-versions"><dt>软件版本</dt><dd id="about-version"></dd><dt>构建版本</dt><dd id="about-build"></dd></dl></dialog>
+  <dialog id="ui-styles-dialog" aria-labelledby="ui-styles-title" aria-describedby="ui-styles-description">
+    <div class="dialog-heading"><div><h2 id="ui-styles-title">全局主题</h2><p id="ui-styles-description">整套界面材质即时切换；字体、ANSI 与布局保持不变。</p></div><button type="button" class="icon-button" id="close-ui-styles" aria-label="关闭全局主题"><svg><use href="#i-close"/></svg></button></div>
+    <fieldset><legend>明暗模式</legend><div class="ui-style-segmented" role="group" aria-label="明暗模式">
+      <button type="button" data-theme-mode="light">浅色</button><button type="button" data-theme-mode="dark">深色</button><button type="button" data-theme-mode="system">跟随系统</button>
+    </div></fieldset>
+    <fieldset><legend>工作台样式</legend><div class="ui-style-grid">
+      <button type="button" class="ui-style-card" data-ui-style="classic"><span class="ui-style-swatch ui-style-swatch-classic" aria-hidden="true"><i></i><b></b><em></em></span><span class="ui-style-card-heading">经典 <span class="ui-style-selected">✓</span></span><small>沿用熟悉的蓝灰配色，面板不透明。</small><span class="ui-style-card-meta">不透明面板 · 经典配色</span></button>
+      <button type="button" class="ui-style-card" data-ui-style="frosted"><span class="ui-style-swatch ui-style-swatch-frosted" aria-hidden="true"><i></i><b></b><em></em></span><span class="ui-style-card-heading">液态玻璃 <span class="ui-style-selected">✓</span></span><small>经典配色原样保留，面板化作半透明折射玻璃；边缘聚光高光，底层光色流动。</small><span class="ui-style-card-meta">经典配色 · 玻璃材质</span></button>
+    </div></fieldset>
+    <p class="ui-style-status" id="ui-style-status" role="status"></p>
+  </dialog>
   <dialog id="release-notes-dialog" aria-labelledby="release-notes-title"><div class="dialog-heading"><div><h2 id="release-notes-title">更新日志</h2><p id="release-notes-version"></p></div><button type="button" class="icon-button" id="close-release-notes" aria-label="关闭更新日志"><svg><use href="#i-close"/></svg></button></div><div id="release-notes-content"></div></dialog>
-  <dialog id="appearance-dialog" class="manager-dialog appearance-palette" aria-labelledby="appearance-title" aria-modal="false"><div class="dialog-heading appearance-drag-handle" id="appearance-drag-handle" tabindex="0" aria-label="拖动管理器，方向键移动，Home 恢复位置"><div><h2 id="appearance-title">背景管理器</h2><p id="appearance-description"></p></div><button class="icon-button" id="close-appearance" aria-label="关闭管理器"><svg><use href="#i-close"/></svg></button></div>
+  <dialog id="appearance-dialog" class="manager-dialog appearance-palette" aria-labelledby="appearance-title" aria-modal="false"><div class="dialog-heading appearance-drag-handle" id="appearance-drag-handle" tabindex="0" aria-label="拖动管理器，方向键移动，Home 恢复位置"><div><h2 id="appearance-title">Shell 字体与颜色</h2><p id="appearance-description"></p></div><button class="icon-button" id="close-appearance" aria-label="关闭管理器"><svg><use href="#i-close"/></svg></button></div>
     <nav class="font-kind-tabs" id="shell-font-navigation" aria-label="字体设置分类" hidden><button type="button" id="switch-ui-fonts" aria-pressed="false">界面字体</button><button type="button" aria-pressed="true">Shell 字体</button></nav>
     <div class="font-library-entry" id="shell-font-online-entry" hidden><button type="button" class="upload-button" id="online-shell-fonts">在线字体</button></div>
     <div class="appearance-body">
-      <div class="manager-toolbar"><span id="asset-count"></span><button class="upload-button" id="import-asset"><svg><use href="#i-plus"/></svg><span>导入背景</span></button></div>
-      <div class="background-strength" id="background-strength"><label for="background-opacity">背景强度 <output id="background-opacity-value">42%</output></label><input id="background-opacity" type="range" min="0" max="100" step="1"><span>向右拖动，让图片更清晰</span></div>
+      <div class="manager-toolbar"><span id="asset-count"></span><button class="upload-button" id="import-asset"><svg><use href="#i-plus"/></svg><span>导入字体</span></button></div>
       <div class="font-preview" id="font-preview" hidden><span id="font-preview-name"></span><pre id="font-preview-text">DevShell ~ $ echo "你好，世界！"
 中文目录 /home/用户  ┌─────┐
 繁體中文 ABC 012345  │ SSH │</pre><div class="font-preview-options"><label>字号<select id="terminal-size"></select></label></div></div>
@@ -308,6 +342,7 @@
       <div id="asset-list" class="asset-list"></div><input id="asset-picker" type="file" hidden>
     </div>
   </dialog>
+  <input id="iterm-picker" type="file" accept=".itermcolors" multiple hidden>
   <dialog id="proxies-dialog" class="manager-dialog"><div class="dialog-heading"><div><h2>代理管理器</h2><p>保存常用代理，在服务器连接配置中选择。</p></div><button class="icon-button" id="close-proxies" aria-label="关闭代理管理器"><svg><use href="#i-close"/></svg></button></div><div class="manager-toolbar"><span>支持 SOCKS5 与 HTTP CONNECT</span><button class="upload-button" id="new-proxy"><svg><use href="#i-plus"/></svg>新建代理</button></div><div id="proxy-list"></div><p class="empty-state" id="proxies-empty">还没有代理。可添加本机代理，也可连接远程代理。</p></dialog>
   <dialog id="backup-dialog" class="manager-dialog"><div class="dialog-heading"><div><h2>会话备份</h2><p>把连接、分组、密钥、代理与受信主机指纹导出为单个 JSON 文件，另一台机器导入即恢复。</p></div><button type="button" class="icon-button" id="close-backup" aria-label="关闭会话备份"><svg><use href="#i-close"/></svg></button></div><label class="backup-secrets"><input type="checkbox" id="backup-secrets" checked>包含已保存的密码、私钥与口令</label><p class="rdp-session-help">勾选后备份文件为明文 JSON，含敏感凭据，请妥善保管；不勾选只导出连接结构与主机指纹，导入后需重新填写凭据。</p><p id="backup-status" role="status"></p><button type="button" class="primary-button" id="do-export-backup">导出备份文件</button><p class="rdp-session-help">导入：在服务器管理底部点「恢复」并选择备份文件。同名同地址的连接自动跳过，不会重复。</p></dialog>
   <dialog id="proxy-editor-dialog"><form id="proxy-editor-form"><div class="dialog-heading"><h2 id="proxy-editor-title">新建代理</h2><button type="button" class="icon-button" id="close-proxy-editor" aria-label="关闭代理编辑"><svg><use href="#i-close"/></svg></button></div><input type="hidden" name="id"><label>名称<input name="name" required maxlength="100" placeholder="例如：本机代理"></label><label>类型<select name="type"><option value="socks5">SOCKS5</option><option value="http">HTTP CONNECT</option></select></label><div class="form-row"><label>地址<input name="host" required placeholder="127.0.0.1"></label><label class="port-field">端口<input name="port" type="number" min="1" max="65535" required value="7890"></label></div><label>用户名（可选）<input name="user" autocomplete="off"></label><label>密码（可选）<input name="password" type="password" autocomplete="new-password" placeholder="留空保留已保存密码"></label><label class="checkbox-label"><input type="checkbox" name="clearPassword">清除已保存的代理密码</label><button class="primary-button" type="submit" id="save-proxy">保存代理</button></form></dialog>
@@ -365,8 +400,9 @@
   <script src="js/command-composer.js?v=20261001-composer"></script>
   <script src="js/workspace-tools.js?v=20260925-v002-b86"></script>
   <script src="js/release-note-tags.js?v=20261102-sectag1"></script>
-  <script src="js/appearance.js?v=20261101-hdrmerge1"></script>
-  <script src="js/ui-appearance.js?v=20261025-devshell-rc1"></script>
+  <script src="js/appearance.js?v=20261110-iterm2"></script>
+  <script src="js/ui-appearance.js?v=20261105-liquidglass1"></script>
+  <script src="js/ui-styles.js?v=20261107-frosted-darkonly1"></script>
   <script src="js/font-library.js?v=20261019-brand1"></script>
   <script src="js/path-history.js?v=20260925-v002-b86"></script>
   <script src="js/directory-favorites.js?v=20260925-v002-b86"></script>
@@ -375,16 +411,18 @@
   <script src="js/latency-chart.js?v=20260920-v002-b70"></script>
   <script src="js/workspace-refinements.js?v=20261021-center1"></script>
   <script src="js/themed-select.js?v=20260920-v002-b70"></script>
-  <script src="js/terminal-integration.js?v=20261018-follow3"></script>
+  <script src="js/terminal-integration.js?v=20261102-autocmd1"></script>
   <script src="js/mtr-installation.js?v=20261019-brand1"></script>
   <script src="js/config-document.js?v=20261102-mergetheme1"></script>
   <script src="js/startup-update.js?v=20261101-updmirror2"></script>
   <script src="js/portable-preferences.js?v=20261025-devshell-rc1"></script>
-  <script src="js/server-manager.js?v=20261019-serial1"></script>
-  <script src="js/backup-manager.js?v=20261101-backup1"></script>
-  <script src="js/server-explorer.js?v=20261023-move145"></script>
-  <script src="js/help-guide.js?v=20261102-concise4"></script>
+  <script src="js/server-manager.js?v=20261103-nohistory1"></script>
+  <script src="js/backup-manager.js?v=20261103-nohistory1"></script>
+  <script src="js/server-explorer.js?v=20261103-nohistory1"></script>
+  <script src="js/help-guide.js?v=20261110-iterm2"></script>
   <script src="js/chart-styles.js?v=20260920-v002-b70"></script>
+  <script src="js/iterm-colors.js?v=20261110-iterm1"></script>
+  <script src="js/ansi-schemes.js?v=20261110-iterm2"></script>
   <script src="js/appearance-tools.js?v=20261102-concise4"></script>
   <script src="js/terminal-snapshot.js?v=20260920-v002-b70"></script>
   <script src="js/server-addresses.js?v=20261018-addr1"></script>
@@ -392,19 +430,21 @@
   <script src="js/window-transfers.js?v=20261025-devshell-rc1"></script>
   <div id="session-tabs-menu" class="session-tabs-menu" role="menu" aria-label="选项卡列表" hidden></div>
   <script src="js/session-tab-order.js?v=20261022-tabs1"></script>
-  <script src="js/session-windows.js?v=20261102-rename1"></script>
+  <script src="js/session-windows.js?v=20261103-pinmenu1"></script>
   <script src="js/session-tabs-layout.js?v=20261101-hdrmerge1"></script>
   <script src="js/start-tabs.js?v=20261023-numbering1"></script>
   <script src="js/system-identity.js?v=20260920-v002-b70"></script>
   <script src="js/rdp.js?v=20261101-tabdot1"></script>
-  <script src="js/serial.js?v=20261101-noicon1"></script>
+  <script src="js/serial.js?v=20261103-nohistory1"></script>
+  <script src="js/local-shell.js?v=20261102-localshell2"></script>
+  <script src="js/tcp-session.js?v=20261104-tcptools1"></script>
   <script src="js/upload-confirmation.js?v=20260928-overwrite1"></script>
   <script src="js/shell-transfers.js?v=20261101-transferpill1"></script>
-  <script src="js/app.js?v=20261102-concise4"></script>
-  <script src="js/quick-connect.js?v=20261101-save-menu1"></script>
-  <script src="js/local-prompt.js?v=20261022-tabs1"></script>
-  <script src="js/command-completion.js?v=20261025-cmdtab1"></script>
-  <script src="js/pinned-nav.js?v=20261102-rename1"></script>
+  <script src="js/app.js?v=20261110-iterm1"></script>
+  <script src="js/quick-connect.js?v=20261102-localshell1"></script>
+  <script src="js/local-prompt.js?v=20261104-tcptools1"></script>
+  <script src="js/command-completion.js?v=20261104-tcptools1"></script>
+  <script src="js/pinned-nav.js?v=20261103-servermenu1"></script>
   <script src="js/process-view.js?v=20261019-serial1"></script>
   <script src="js/common-apps.js?v=20261019-brand1"></script>
   <script src="js/text-model.js?v=20260920-v002-b70"></script>

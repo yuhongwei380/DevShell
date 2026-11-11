@@ -93,17 +93,32 @@ const parentPath = path => normalizePath('..', path);
 
 // Consistent in-app dialogs; serialised so multiple transfer errors cannot overlap.
 let dialogQueue = Promise.resolve();
-function ask({ title, description = '', input = false, value = '', secret = false, confirm = '确定', signal }) {
+function ask({ title, description = '', input = false, value = '', secret = false, confirm = '确定', alt = '', signal, cancelKey = false }) {
   const result = dialogQueue.then(() => new Promise(resolve => {
     if (signal?.aborted) return resolve(null);
     const dialog = $('#action-dialog');
     $('#action-title').textContent = title; $('#action-description').textContent = description;
     $('#action-input-label').hidden = !input; $('#action-input').type = secret ? 'password' : 'text'; $('#action-input').value = value;
     $('#action-confirm').textContent = confirm;
+    // Optional third action; resolve('alt') lets callers branch (e.g. duplicate
+    // a connection then edit the clone instead of keeping it as-is).
+    const altButton = $('#action-alt');
+    altButton.hidden = !alt; altButton.textContent = alt;
+    altButton.onclick = () => finish('alt');
     let done = false;
     const cancel = () => finish(null);
-    const finish = answer => { if (done) return; done = true; signal?.removeEventListener('abort', cancel); dialog.close(); resolve(answer); };
+    const finish = answer => { if (done) return; done = true; altButton.onclick = null; signal?.removeEventListener('abort', cancel); dialog.removeEventListener('keydown', onCtrlC); dialog.close(); resolve(answer); };
     signal?.addEventListener('abort', cancel, { once: true });
+    // cancelKey: connection-flow prompts also accept Ctrl+C as cancel (Xshell
+    // muscle memory). Copy stays intact — a live selection falls through.
+    const onCtrlC = event => {
+      if (!cancelKey || event.type !== 'keydown' || !event.ctrlKey || event.altKey || event.code !== 'KeyC') return;
+      if (input && $('#action-input').selectionStart !== $('#action-input').selectionEnd) return;
+      if (window.getSelection?.().toString()) return;
+      event.preventDefault();
+      cancel();
+    };
+    if (cancelKey) dialog.addEventListener('keydown', onCtrlC);
     $('#action-form').onsubmit = event => { event.preventDefault(); finish(input ? $('#action-input').value : true); };
     $('#action-cancel').onclick = () => finish(null);
     dialog.oncancel = event => { event.preventDefault(); finish(null); };
@@ -151,10 +166,32 @@ async function loadProfiles() {
 }
 
 function sessionDisplayName(state) {
-  const name = profileFor(state)?.name || '服务器';
-  if (!state) return name;
+  // 会话未重命名时，默认读取收藏夹、服务器管理里这份连接的名称。
+  const name = (state?.sessionName || '').trim() || profileFor(state)?.name || '服务器';
+  if (!state || !state.profileId) return name;
+  // SSH[n] 只属于共用同一条 SSH 连接的渠道会话（双击已连接标签打开）：
+  // 组内按标签顺序 SSH[0]、SSH[1]… 区分。
+  if (state.channelRoot) {
+    const group = [...sessions.values()].filter(s => s.channelRoot === state.channelRoot).sort((a, b) => (a.tabOrder ?? 0) - (b.tabOrder ?? 0));
+    if (group.length > 1) return `${name} SSH[${group.indexOf(state)}]`;
+  }
+  // 收藏夹、服务器列表点开的是各自重新拨号的独立连接，同连接开多个仍按会话编号区分。
   const peers = [...sessions.values()].filter(s => s.profileId === state.profileId).sort((a, b) => (a.tabOrder ?? 0) - (b.tabOrder ?? 0));
   return peers.length > 1 ? `${name} · 会话 ${peers.indexOf(state) + 1}` : name;
+}
+// 重命名会话：只给这个标签设自定义显示名，不回写连接配置——服务器管理与
+// 收藏夹里这份连接的名称不变；留空即清除自定义名，恢复默认读取连接名称。
+async function renameSession(state) {
+  if (!state || state.closed) return;
+  const current = (state.sessionName || '').trim();
+  const answer = await ask({ title: '重命名会话', description: '只修改这个会话标签的显示名称，不会改变服务器管理和收藏夹里这份连接的名称；留空恢复使用连接名称。', input: true, value: current || profileFor(state)?.name || '', confirm: '保存' });
+  if (answer === null) return;
+  const name = String(answer).trim();
+  if ([...name].length > 48) { toast('会话名称最长 48 个字符'); return; }
+  if (name === current) return;
+  state.sessionName = name;
+  renderTabs(); renderSessionInfo();
+  toast(name ? `会话已重命名为「${name}」` : '已恢复使用连接名称');
 }
 function releaseConnectionAttempt(state) {
   const key = state.connectionRequestKey;
@@ -165,6 +202,8 @@ function releaseConnectionAttempt(state) {
 async function connect(profileID, force = false, options = {}) {
   if (connectionProfile(profileID)?.protocol === "rdp") return window.DengRDP.connect(profileID, {...options, previousID: force ? options.sessionId : null});
   if (connectionProfile(profileID)?.protocol === "serial") return window.DengSerial.connect(profileID, {...options, previousID: force ? options.sessionId : null});
+  if (connectionProfile(profileID)?.protocol === "local") return window.DengLocalShell.reconnect({ ...options, previousID: force ? options.sessionId : null });
+  if (connectionProfile(profileID)?.protocol === "tcp") return window.DengTcpSession.reconnect({ ...options, profileId: profileID, previousID: force ? options.sessionId : null });
   const matches = [...sessions.values()].filter(s => s.profileId === profileID);
   const previous = force ? (options.sessionId ? sessions.get(options.sessionId) : matches.find(s => s.id === activeID) || matches[0]) : null;
   // Reconnect keeps the same profile in its own tab. A disconnected tab may
@@ -192,7 +231,7 @@ async function persistRunCredential(profile, secret, { replaceStored = false } =
   if (index >= 0) profiles[index] = saved; else profiles.push(saved);
   return saved.hasSecret === true;
 }
-async function connectProfile(profileID, { background = false, refreshHistory = true, previous = null, requestKey } = {}) {
+async function connectProfile(profileID, { background = false, previous = null, requestKey } = {}) {
   const profile = connectionProfile(profileID); if (!profile) return;
   if (profile.auth === 'key' && !profile.keyId && !profile.keyPath) {
     toast(`🔑  「${profile.name}」未找到私钥，请重新配置密钥。`);
@@ -230,8 +269,8 @@ async function connectProfile(profileID, { background = false, refreshHistory = 
       // These are exactly the auth modes persistRunCredential can write back, so
       // say up front that a successful connection stores the credential (a
       // not-yet-saved quick connection has no row to write into).
-      const promptNote = (profile.auth === 'key' ? '如果私钥没有加密，可直接确定。' : `${profile.user}@${profile.host}:${profile.port}`) + (temporaryProfiles.has(profileID) || declinedCredentials.has(profileID) ? '' : '\n连接成功后凭据会加密保存到该连接，之后自动连接。');
-      secret = await ask({ title: profile.auth === 'key' ? `私钥口令 · ${profile.name}` : `连接 ${profile.name}`, description: promptNote, input: true, secret: true, confirm: '连接', signal: state.connectionAbort.signal });
+      const promptNote = (profile.auth === 'key' ? '如果私钥没有加密，可直接确定。' : `${profile.user}@${profile.host}:${profile.port}`) + (temporaryProfiles.has(profileID) || declinedCredentials.has(profileID) ? '' : '\n连接成功后凭据会加密保存到该连接，之后自动连接。') + '\n按 Ctrl+C 可取消本次连接。';
+      secret = await ask({ title: profile.auth === 'key' ? `私钥口令 · ${profile.name}` : `连接 ${profile.name}`, description: promptNote, input: true, secret: true, confirm: '连接', signal: state.connectionAbort.signal, cancelKey: true });
       if (!alive()) return null;
       if (secret === null) { showConnectionProgress(state, '已取消连接', true); return null; }
       if (profile.auth === 'password' && !secret) throw new Error('请输入 SSH 密码');
@@ -247,7 +286,7 @@ async function connectProfile(profileID, { background = false, refreshHistory = 
           if (!['ssh_host_key_unknown', 'ssh_host_key_changed'].includes(error.code) || !error.hostKey || confirmations >= 2) throw error;
           const key = error.hostKey, changed = error.code === 'ssh_host_key_changed';
           showConnectionProgress(state, '等待核实服务器指纹...');
-          const accepted = await ask({ title: changed ? `服务器指纹已变化 · ${profile.name}` : `首次连接 · ${profile.name}`, description: `${key.host}\n算法：${key.algorithm}\n${changed ? `原指纹：${key.previousFingerprint}\n` : ''}新指纹：${key.fingerprint}\n\n${changed ? '服务器重装、密钥更换或连接被冒充都可能导致此变化。' : ''}请通过服务器控制台或可信管理员核对指纹；确认一致后才继续发送登录凭据。`, confirm: '已核实，信任并连接', signal: state.connectionAbort.signal });
+          const accepted = await ask({ title: changed ? `服务器指纹已变化 · ${profile.name}` : `首次连接 · ${profile.name}`, description: `${key.host}\n算法：${key.algorithm}\n${changed ? `原指纹：${key.previousFingerprint}\n` : ''}新指纹：${key.fingerprint}\n\n${changed ? '服务器重装、密钥更换或连接被冒充都可能导致此变化。' : ''}请通过服务器控制台或可信管理员核对指纹；确认一致后才继续发送登录凭据。按 Ctrl+C 可取消本次连接。`, confirm: '已核实，信任并连接', signal: state.connectionAbort.signal, cancelKey: true });
           if (!alive()) return null;
           if (!accepted) { showConnectionProgress(state, '已取消连接', true); return null; }
           hostKeyApproval = { host: key.host, fingerprint: key.fingerprint, previousFingerprint: key.previousFingerprint };
@@ -256,9 +295,19 @@ async function connectProfile(profileID, { background = false, refreshHistory = 
       }
     };
     let info;
-    try { info = await requestConnection(); }
+    const attemptOnce = async () => {
+      const pending = requestConnection();
+      const value = await awaitConnection(pending, state);
+      // Ctrl+C 或关闭标签会先结束等待（桌面 IPC 无法中断在途请求）：
+      // 请求若在之后仍成功，销毁这个迟建的会话。
+      if (!value) pending.then(late => { if (late?.id) remove(`/api/sessions/${late.id}`).catch(() => {}); }).catch(() => {});
+      return value;
+    };
+    try { info = await attemptOnce(); }
     catch (error) {
       if (!alive()) return null;
+      // Ctrl+C 取消：AbortError 不是认证失败，不删缓存凭据、也不再弹重输框。
+      if (state.connectionCancelled) return null;
       credentials.delete(profileID);
       const needsKeyPassphrase = profile.auth === 'key' && ['ssh_key_passphrase_required', 'ssh_key_passphrase_invalid'].includes(error.code);
       if (!needsKeyPassphrase && !(profile.auth === 'password' && error.code === 'ssh_authentication_failed')) throw error;
@@ -268,17 +317,17 @@ async function connectProfile(profileID, { background = false, refreshHistory = 
       // passphrases stay owned by the key manager and are never overwritten here.
       const replacesStored = profile.auth !== 'key' || !profile.keyId;
       credentialRetried = replacesStored;
-      secret = await ask({ title: `${needsKeyPassphrase ? (error.code === 'ssh_key_passphrase_required' ? '私钥口令' : '重新输入私钥口令') : '重新输入 SSH 密码'} · ${profile.name}`, description: error.message + `\n本次输入会替代缓存凭据${replacesStored ? '；连接成功后同时替换该连接已保存的旧凭据。' : '，不会修改密钥管理器中保存的口令。'}`, input: true, secret: true, confirm: '连接', signal: state.connectionAbort.signal });
+      secret = await ask({ title: `${needsKeyPassphrase ? (error.code === 'ssh_key_passphrase_required' ? '私钥口令' : '重新输入私钥口令') : '重新输入 SSH 密码'} · ${profile.name}`, description: error.message + `\n本次输入会替代缓存凭据${replacesStored ? '；连接成功后同时替换该连接已保存的旧凭据。' : '，不会修改密钥管理器中保存的口令。'}\n按 Ctrl+C 可取消本次连接。`, input: true, secret: true, confirm: '连接', signal: state.connectionAbort.signal, cancelKey: true });
       if (!alive()) return null;
       if (secret === null) { showConnectionProgress(state, '已取消连接', true); return null; }
       if (profile.auth === 'password' && !secret) throw new Error('请输入 SSH 密码');
       showConnectionProgress(state, '连接主机...');
-      info = await requestConnection();
+      info = await attemptOnce();
     }
     if (!info) return null;
-    // The user may close/retry this tab while a native request is still running.
+    // The user may close/retry this tab (or press Ctrl+C) while a native request is still running.
     // Dispose only that late result; never resurrect its placeholder or touch a newer attempt.
-    if (!alive()) { await remove(`/api/sessions/${info.id}`).catch(() => {}); return null; }
+    if (!alive() || state.connectionCancelled) { await remove(`/api/sessions/${info.id}`).catch(() => {}); return null; }
     const pendingID = state.id, selected = activeID === pendingID;
     sessions.delete(pendingID);
     Object.assign(state, info, { cwd: info.home, connected: true, localOnly: false, pendingConnection: false });
@@ -304,18 +353,80 @@ async function connectProfile(profileID, { background = false, refreshHistory = 
     // A slow or failed SFTP listing must not block any other SSH connection.
     if (state.sftpPending) void refreshFileStatus(state, true);
     else if (state.sftpAvailable !== false) navigate(info.home, state).catch(error => { if (!state.closed) toast(`⚠️  ${profile.name} 已连接，目录读取失败：${error.message}`); });
-    if (refreshHistory) safe(refreshServerManagerHistory)();
     return state;
   } catch (error) {
     if (alive()) {
-      showConnectionProgress(state, '连接主机失败：' + (error.message || String(error)), true); if (profile.verbose) startVerboseDiagnostics(state, profile.verbose, `handshake-${profileID}`); toast(`❌  ${profile.name}：${error.message || error}`);
-      if (!background && ['ssh_key_missing', 'ssh_key_unavailable', 'ssh_private_key_invalid', 'ssh_proxy_missing'].includes(error.code)) showConnectionForm(profile);
+      if (state.connectionCancelled || error?.name === 'AbortError') showConnectionProgress(state, '已取消连接（Ctrl+C）', true);
+      else {
+        showConnectionProgress(state, '连接主机失败：' + (error.message || String(error)), true); if (profile.verbose) startVerboseDiagnostics(state, profile.verbose, `handshake-${profileID}`); toast(`❌  ${profile.name}：${error.message || error}`);
+        if (!background && ['ssh_key_missing', 'ssh_key_unavailable', 'ssh_private_key_invalid', 'ssh_proxy_missing'].includes(error.code)) showConnectionForm(profile);
+      }
     }
     return null;
   } finally {
     releaseConnectionAttempt(state);
     if (alive() && state.localOnly) { state.pendingConnection = false; renderTabs(); if (current() === state) renderSessionInfo(); }
     renderConnections(); updateStatus();
+  }
+}
+// Ctrl+C（或标签上的「取消连接」）打断进行中的连接尝试：AbortController 取消
+// 在途的 POST /api/sessions，后端请求上下文随之取消、握手中途关闭 socket；
+// 绑定同一信号的凭据/指纹对话框也会关闭。标签保留为本机提示符，可再次连接。
+function cancelPendingConnection(state) {
+  if (!state?.pendingConnection || state.closed || state.connectionCancelled) return;
+  state.connectionCancelled = true;
+  state.connectionAbort?.abort();
+  showConnectionProgress(state, '已取消连接（Ctrl+C）', true);
+}
+// 让连接请求与其 AbortController 赛跑：桌面模式的 IPC 不响应 fetch abort，
+// 取消时先让标签立即回到本机提示符，迟到的成功结果由调用方销毁。
+function awaitConnection(attempt, state) {
+  const signal = state.connectionAbort.signal;
+  if (signal.aborted) return Promise.resolve(null);
+  return new Promise((resolve, reject) => {
+    const onAbort = () => resolve(null);
+    signal.addEventListener('abort', onAbort, { once: true });
+    attempt.then(
+      value => { signal.removeEventListener('abort', onAbort); resolve(value); },
+      error => { signal.removeEventListener('abort', onAbort); reject(error); },
+    );
+  });
+}
+// 复制同服务器SSH会话（Xshell 的「复制 SSH 渠道」语义）：后端在既有会话已认证
+// 的 SSH 传输上登记新会话——不拨号、不认证、不再核指纹；终端渠道与 PTY 随新
+// 标签的 WebSocket 接入打开。传输按引用计数保活：关闭任一标签不影响其余渠道,
+// 最后一个标签关闭时连接才断开；传输死亡则所有渠道随之断开。
+async function cloneSessionChannel(state) {
+  if (!state || state.closed || state.pendingConnection || !state.connected) { toast('请先连接这个会话，再复制同服务器SSH会话'); return null; }
+  if (state.localShell || state.telnet || state.serial) { toast('这个标签不是 SSH 会话，无法复制 SSH 渠道'); return null; }
+  try {
+    const info = await post(`/api/sessions/${encodeURIComponent(state.id)}/channel`, {});
+    if (!info?.id) throw new Error('后端没有返回新会话');
+    const clone = makeSessionState(info);
+    clone.tabOrder = nextSessionOrder++;
+    clone.sessionName = state.sessionName || ''; // 渠道继承源会话的自定义显示名
+    state.channelRoot ||= state.id;              // 首次复制时把源会话也登记进这条连接的渠道组
+    clone.channelRoot = state.channelRoot;       // 渠道组内的标签按 SSH[0]、SSH[1]… 命名
+    clone.announceConnectionReady = true;
+    sessions.set(clone.id, clone);
+    // 克隆不是占位标签:非占位标签在 createTerminal 内自动接入终端渠道,这里绝不
+    // 再开第二次 socket——同一会话第二次无交接接入会被后端 409「此会话已有终端」
+    // 拒绝,onclose 把刚建的标签标成断开(DS-290),正是本次修复的缺陷。
+    createTerminal(clone);
+    activate(clone.id);
+    setDrawer(false);
+    renderConnections();
+    if (clone.sftpPending) void refreshFileStatus(clone, true);
+    else if (info.sftpAvailable !== false) navigate(clone.cwd, clone).catch(error => { if (!clone.closed) toast(`⚠️  目录读取失败：${error.message}`); });
+    const profile = profileFor(clone);
+    if (profile?.verbose) startVerboseDiagnostics(clone, profile.verbose);
+    window.DengCommandHistory?.refresh(clone.profileId).catch(() => {});
+    if (current() === clone && clone.ready) { pollStats(); pollLatency(); }
+    toast(`已复制「${profileFor(state)?.name || '当前会话'}」的 SSH 连接；新标签打开独立终端渠道，关闭任一标签都不影响其余渠道`);
+    return clone;
+  } catch (error) {
+    toast(`❌ 复制同服务器SSH会话失败：${error.message || '未知错误'}`);
+    return null;
   }
 }
 function writeTerminalAndWait(state, text = '') {
@@ -329,6 +440,8 @@ function writeTerminalAndWait(state, text = '') {
   });
 }
 async function preserveReconnectTerminal(previous, next) {
+  // 原地重连/换地址替换的是同一个标签：自定义会话名跟着标签走，不随旧会话销毁。
+  next.sessionName = next.sessionName || previous.sessionName || '';
   // Drain xterm's asynchronous write queue, including the final output frame
   // and shell-confirmed history events, before disposing the old renderer.
   await writeTerminalAndWait(previous);
@@ -395,7 +508,7 @@ class DesktopSocket {
     queueMicrotask(() => {
       this.readyState = WebSocket.OPEN;
       // Serial tabs dial the serial terminal endpoint through the same IPC pipe.
-      const request = opener === 'serial' ? native().OpenSerialTerminal(id) : native().OpenTerminalWithHandoff ? native().OpenTerminalWithHandoff(id, handoffNonce) : native().OpenTerminal(id);
+      const request = opener === 'serial' ? native().OpenSerialTerminal(id) : opener === 'local' ? native().OpenLocalShellTerminal(id) : opener === 'tcp' ? native().OpenTcpTerminal(id) : native().OpenTerminalWithHandoff ? native().OpenTerminalWithHandoff(id, handoffNonce) : native().OpenTerminal(id);
       request.catch(error => { toast(String(error)); this.onerror?.(); finish(); });
     });
   }
@@ -409,6 +522,7 @@ function createTerminal(state) {
   const fit = new FitAddon.FitAddon(); terminal.loadAddon(fit); const serialize = new SerializeAddon.SerializeAddon(); terminal.loadAddon(serialize); state.serialize = serialize; terminal.open(host); state.term = terminal; state.fit = fit;
   if (state.localOnly) terminal.options.disableStdin = true;
   installTerminalFontMetrics(state);
+  installTerminalBackground(state);
   installTerminalMouseCoordinates(state);
   installTerminalScrollback(state);
   bindTerminalContext(state);
@@ -421,6 +535,8 @@ function createTerminal(state) {
     if (event.ctrlKey && !event.altKey && event.code === 'KeyC') {
       event.preventDefault();
       if (event.shiftKey) copyTerminalSelection(state).catch(() => toast('无法访问剪贴板'));
+      // 正在连接时 Ctrl+C 取消本次连接尝试，而不是向尚未建立的会话发 \x03。
+      else if (state.pendingConnection) cancelPendingConnection(state);
       else { terminal.clearSelection(); terminal.scrollToBottom(); sendInput(state, '\x03'); }
       return false;
     }
@@ -430,8 +546,8 @@ function createTerminal(state) {
   terminal.parser.registerOscHandler(7, data => { if (!state.follow) return false; try { const url = new URL(data); if (url.protocol === 'file:') { const path = decodeURIComponent(url.pathname); if (path !== state.cwd) navigate(path, state).catch(error => toast(error?.message || String(error))); } } catch {} return true; });
   const openSocket = () => {
   if (state.closed) return;
-  const socketURL = new URL(endpoint(`${state.serial ? '/api/serial/sessions/' : '/api/sessions/'}${state.id}/terminal`)); socketURL.protocol = socketURL.protocol === 'https:' ? 'wss:' : 'ws:'; socketURL.searchParams.set('token', boot.token); socketURL.searchParams.set('cols', String(terminal.cols)); socketURL.searchParams.set('rows', String(terminal.rows)); if (state.handoffNonce) socketURL.searchParams.set('handoff', state.handoffNonce);
-  const ws = native() ? new DesktopSocket(state.id, state.handoffNonce || '', state.serial ? 'serial' : '') : new WebSocket(socketURL); ws.binaryType = 'arraybuffer'; state.ws = ws;
+  const socketURL = new URL(endpoint(`${state.telnet ? '/api/tcp-sessions/' : state.localShell ? '/api/local-shell/sessions/' : state.serial ? '/api/serial/sessions/' : '/api/sessions/'}${state.id}/terminal`)); socketURL.protocol = socketURL.protocol === 'https:' ? 'wss:' : 'ws:'; socketURL.searchParams.set('token', boot.token); socketURL.searchParams.set('cols', String(terminal.cols)); socketURL.searchParams.set('rows', String(terminal.rows)); if (state.handoffNonce) socketURL.searchParams.set('handoff', state.handoffNonce);
+  const ws = native() ? new DesktopSocket(state.id, state.handoffNonce || '', state.telnet ? 'tcp' : state.localShell ? 'local' : state.serial ? 'serial' : '') : new WebSocket(socketURL); ws.binaryType = 'arraybuffer'; state.ws = ws;
   ws.onmessage = event => {
     if (state.closed || !state.connected || sessions.get(state.id) !== state) return;
     if (event.data instanceof ArrayBuffer) {
@@ -452,9 +568,13 @@ function createTerminal(state) {
     if (message.type === 'ready') {
       // The relay sends ready only after the remote shell starts, before its
       // first output. Window handoffs must not add text to a running shell.
-      if (state.announceConnectionReady) { state.announceConnectionReady = false; showConnectionProgress(state, state.serial ? '串口已打开！' : '连接主机成功！'); if (!state.serial && state.sftpAvailable === false && !state.sftpPending) showConnectionProgress(state, state.sftpDisabled ? 'Dropbear 连接默认关闭 SFTP，SSH 终端可正常使用。' : 'SFTP 文件服务不可用，SSH 终端可正常使用。'); }
+      const freshConnection = state.announceConnectionReady;
+      if (state.announceConnectionReady) { state.announceConnectionReady = false; showConnectionProgress(state, state.telnet ? 'TCP 会话已打开！' : state.localShell ? '本地 Shell 已打开！' : state.serial ? '串口已打开！' : '连接主机成功！'); if (!state.serial && !state.localShell && !state.telnet && state.sftpAvailable === false && !state.sftpPending) showConnectionProgress(state, state.sftpDisabled ? 'Dropbear 连接默认关闭 SFTP，SSH 终端可正常使用。' : 'SFTP 文件服务不可用，SSH 终端可正常使用。'); }
       if (state.sftpPending) void refreshFileStatus(state);
       acceptShellIntegration(state, message.integration); state.ready = true; applyPendingFollow(state); state.handoffProvisional = false; state.ownershipUncertain = false; terminal.options.disableStdin = !!state.detaching || !state.connected; state.restoring = false; state.restoration = null;
+      // Fresh connects only: queued per-profile commands (issue #5) start
+      // typing once the remote shell exists. Handoffs never replay them.
+      if (freshConnection) scheduleAutoCommands(state);
       if (!state.terminalOutputStarted && !state.terminalBackgroundTimer) state.terminalBackgroundTimer = setTimeout(() => { state.terminalBackgroundTimer = null; if (!state.closed && state.connected && sessions.get(state.id) === state) { state.terminalBackgroundReady = true; if (current() === state) { pollStats(); pollLatency(); } } }, 1000);
       if (activeID === state.id) renderSessionInfo(); if (activeID === state.id) { fitActive(); terminal.focus(); }
     }
@@ -480,12 +600,48 @@ function sendInput(state, data) {
   for (let start = 0; start < data.length;) { let end = Math.min(start + 16000, data.length); if (end < data.length && /[\uD800-\uDBFF]/.test(data[end - 1])) end--; sendMessage(state, { type: 'input', data: data.slice(start, end) }); start = end; }
 }
 function fitActive() { const state = current(); if (state && !state.detaching && !state.restoring && !state.host.hidden && state.host.clientWidth > 0 && state.host.clientHeight > 0) { state.fit.fit(); if (state.ready) sendMessage(state, { type: 'resize', cols: state.term.cols, rows: state.term.rows }); } }
+// Connect-time auto commands (issue #5). The profile's list is snapshotted at
+// connect, then typed into this session's terminal one line at a time. With
+// shell integration the prompt/busy reports are authoritative: a line is sent
+// only while the shell sits at its prompt, so interactive programs never
+// receive the following line on their stdin. Shells without integration fall
+// back to a slow timed cadence after the initial delay.
+function scheduleAutoCommands(state) {
+  clearTimeout(state.autoCommandTimer); state.autoCommandTimer = null;
+  const profile = connectionProfile(state.profileId);
+  const lines = profile?.autoRun && !state.serial ? (profile.autoCommands || []).filter(line => typeof line === 'string' && line.trim()) : [];
+  state.autoCommands = lines.length ? lines : null;
+  state.autoIndex = 0;
+  if (state.autoCommands) armAutoCommandFallback(state, 2500);
+}
+function armAutoCommandFallback(state, delay) {
+  clearTimeout(state.autoCommandTimer);
+  state.autoCommandTimer = setTimeout(() => { state.autoCommandTimer = null; advanceAutoCommands(state); }, delay);
+}
+function advanceAutoCommands(state) {
+  clearTimeout(state.autoCommandTimer); state.autoCommandTimer = null;
+  const lines = state.autoCommands;
+  if (!lines || state.closed || !state.connected || state.ready === false || state.detaching || state.restoring) return;
+  if (state.autoIndex >= lines.length) { state.autoCommands = null; return; }
+  if (typeof appearance !== 'undefined' && appearance.autoCommandsEnabled === false) return;
+  const integration = state.shellIntegration;
+  // An integrated shell reports busy while a command runs; the next prompt
+  // event drives the queue, and this timer only acts as a watchdog.
+  if (integration?.ready && !integration.atPrompt) { armAutoCommandFallback(state, 15000); return; }
+  const line = lines[state.autoIndex++];
+  if (state.autoIndex >= lines.length) state.autoCommands = null; else armAutoCommandFallback(state, integration?.ready ? 15000 : 1500);
+  sendInput(state, `${line.replace(/[\r\n]+$/g, '')}\r`);
+}
 new ResizeObserver(() => requestAnimationFrame(fitActive)).observe($('#terminal-output'));
 function markSessionDisconnected(state) {
   if (state.closed || !state.connected) return;
   state.connected = false; state.ready = false; state.navGeneration++; state.navAbort?.abort();
+  // A disconnected session never continues its queued connect-time commands.
+  state.autoCommands = null; clearTimeout(state.autoCommandTimer); state.autoCommandTimer = null;
   state.term.options.disableStdin = true;
-  if (state.serial) state.term.writeln('\r\n\x1b[38;5;245m串口已关闭，终端内容已保留。点击重新连接可重新打开串口。\x1b[0m');
+  if (state.localShell) state.term.writeln('\r\n\x1b[38;5;245m本地 Shell 已退出，终端内容已保留。点击重新连接可在本标签新开一个本地 Shell。\x1b[0m');
+  else if (state.telnet) state.term.writeln('\r\n\x1b[38;5;245mTCP 连接已关闭，终端内容已保留。点击重新连接可在本标签重拨同一主机端口。\x1b[0m');
+  else if (state.serial) state.term.writeln('\r\n\x1b[38;5;245m串口已关闭，终端内容已保留。点击重新连接可重新打开串口。\x1b[0m');
   else state.term.writeln('\r\n\x1b[38;5;245m连接已断开，终端内容已保留。点击重新连接可建立新会话。\x1b[0m');
   state.term.writeln('\x1b[38;5;245m💡  本机提示符已就绪：在下方输入框输入 ssh 用户@主机 连接新地址，reconnect 重连本会话，exit 关闭标签；↑ / ↓ 回看本机输入过的命令。\x1b[0m');
   // The remote shell is gone and terminal stdin is disabled: a blinking cursor
@@ -494,7 +650,7 @@ function markSessionDisconnected(state) {
   state.term.write('\x1b[?25l');
   // Serial sessions have no SSH disconnect diagnostic endpoint; the reason is
   // already visible (device unplugged, port closed, or the tab was closed).
-  if (!state.serial) showDisconnectDiagnostic(state);
+  if (!state.serial && !state.localShell && !state.telnet) showDisconnectDiagnostic(state);
   renderTabs();
   if (activeID === state.id) { renderSessionInfo(); renderFiles(); $('#command-input').focus(); }
 }
@@ -533,7 +689,7 @@ async function disconnectSession(state = current()) {
   state.disconnecting = true;
   if (activeID === state.id) $('#disconnect').disabled = true;
   try {
-    await remove(state.serial ? `/api/serial/sessions/${state.id}` : `/api/sessions/${state.id}`);
+    await remove(state.telnet ? `/api/tcp-sessions/${state.id}` : state.localShell ? `/api/local-shell/sessions/${state.id}` : state.serial ? `/api/serial/sessions/${state.id}` : `/api/sessions/${state.id}`);
     markSessionDisconnected(state); state.ws?.close();
   } finally {
     state.disconnecting = false;
@@ -550,9 +706,11 @@ async function sessionLocalCommand(state, raw) {
   if (/^reconnect$/i.test(command)) { echo(); await connect(state.profileId, true, { sessionId: state.id }); return; }
   if (/^help$/i.test(command)) {
     echo();
-    for (const hint of ['ssh 用户@主机 —— 在本标签连接新地址（支持 ssh -p 端口 用户@主机、ssh -vvv 连接诊断、IPv6）', 'reconnect —— 用原地址重新连接本标签', 'ping 主机 [-t] —— 本机探测，Ctrl+C 停止', 'traceroute 主机 —— 本机路由追踪，逐跳实时输出', 'nslookup / dig 主机 —— 本机 DNS 解析与查询', 'curl [-I] 网址 —— 本机 http/https 请求', '运行中的本机命令随时按 Ctrl+C 停止', 'exit —— 关闭本标签']) state.term.writeln(`\x1b[38;5;245m  ${hint}\x1b[0m`);
+    for (const hint of ['ssh 用户@主机 —— 在本标签连接新地址（支持 ssh -p 端口 用户@主机、ssh -vvv 连接诊断、IPv6）', 'reconnect —— 用原地址重新连接本标签', 'ping 主机 [-t] —— 本机探测，Ctrl+C 停止', 'traceroute 主机 —— 本机路由追踪，逐跳实时输出', 'nslookup / dig 主机 —— 本机 DNS 解析与查询', 'curl [-I] 网址 —— 本机 http/https 请求', 'tcping 主机 端口 [-t] —— 本机 TCP 握手探测，Ctrl+C 停止', 'telnet 主机 [端口] —— 在本标签拨出 TCP 会话（默认 23）', '运行中的本机命令随时按 Ctrl+C 停止', 'exit —— 关闭本标签']) state.term.writeln(`\x1b[38;5;245m  ${hint}\x1b[0m`);
     return;
   }
+  const telnetTarget = /^telnet(\s|$)/i.test(command) ? window.DengTcpSession.parse(command) : null;
+  if (telnetTarget) { await window.DengTcpSession.open({ ...telnetTarget, previousID: state.id }); return; }
   if (window.DengLocalPrompt.commands.test(command)) { await window.DengLocalPrompt.run(command, window.DengLocalPrompt.termSink(state.term)); return; }
   echo();
   const profile = await post('/api/quick-connect', { command, auth: 'password', keyId: '' });
@@ -577,6 +735,8 @@ async function closeSession(id) {
   if (window.DengStartTabs?.has(id)) return window.DengStartTabs.close(id);
   if (window.DengRDP?.has(id)) return window.DengRDP.close(id);
   if (window.DengSerial?.has(id)) return window.DengSerial.close(id);
+  if (window.DengLocalShell?.has(id)) return window.DengLocalShell.close(id);
+  if (window.DengTcpSession?.has(id)) return window.DengTcpSession.close(id);
   const state = sessions.get(id); if (!state || state.detaching || state.handoffProvisional) return;
   dropSessionView(id);
   if (state.ownershipUncertain || state.localOnly) return;
@@ -593,14 +753,16 @@ function renderTabs() {
     tab.dataset.failed = String(!!state.connectionFailed);
     const label = node('span', 'session-tab-text');
     label.append(node('span', 'session-tab-label', profile ? sessionDisplayName(state) : '已删除配置'));
-    const button = node('button'); button.type = 'button'; button.append(node('span', `status-dot ${state.connected ? 'green' : state.pendingConnection ? 'blue' : 'red'}`), label); button.onclick = () => activate(state.id); button.setAttribute('role', 'tab'); button.setAttribute('aria-selected', String(selected)); button.setAttribute('aria-current', selected ? 'page' : 'false'); button.title = profile ? (profile.protocol === 'serial' ? `${profile.name} · ${window.DengSerial.label(profile)}` : `${profile.name} · ${profile.user}@${profile.host}:${profile.port}`) : '已删除配置';
+    const baseName = (state.sessionName || '').trim() || profile?.name;
+    const button = node('button'); button.type = 'button'; button.append(node('span', `status-dot ${state.connected ? 'green' : state.pendingConnection ? 'blue' : 'red'}`), label); button.onclick = () => activate(state.id); button.setAttribute('role', 'tab'); button.setAttribute('aria-selected', String(selected)); button.setAttribute('aria-current', selected ? 'page' : 'false'); button.title = profile ? (profile.protocol === 'serial' ? `${baseName} · ${window.DengSerial.label(profile)}` : profile.protocol === 'local' ? `${baseName} · 本机` : profile.protocol === 'tcp' ? `${baseName} · 本机拨出` : `${baseName} · ${profile.user}@${profile.host}:${profile.port}`) : '已删除配置';
     if (selected && state.connected) tab.classList.add('current-session');
     button.setAttribute('aria-busy', String(!!state.pendingConnection));
     if (state.localOnly) button.title += ` · ${state.connectionMessage}`;
     const close = node('button', 'tab-close'); close.append(icon('close')); close.title = state.pendingConnection ? '取消连接' : '关闭连接'; close.setAttribute('aria-label', `${state.pendingConnection ? '取消' : '关闭'} ${profile?.name || '会话'}`); close.onclick = safe(() => closeSession(state.id)); close.disabled = !!(state.detaching || state.handoffProvisional); tab.dataset.detaching = String(!!state.detaching); tab.append(button, close);
-    // 已断开的标签双击即用原地址在本标签重连；
+    // 已断开的标签双击即用原地址在本标签重连；已连接的 SSH 标签双击默认打开
+    // 同服务器会话（复用同一条 SSH 连接再开一条终端渠道，不再拨号或认证）；
     // 连接中、交接中或已删除配置的标签不响应，关闭按钮上的双击不触发。
-    tab.ondblclick = event => { if (event.target.closest('.tab-close')) return; if (profile && !state.connected && !state.pendingConnection && !state.disconnecting && !state.detaching && !state.handoffProvisional && !state.ownershipUncertain) safe(() => connect(state.profileId, true, { sessionId: state.id }))(); };
+    tab.ondblclick = event => { if (event.target.closest('.tab-close')) return; if (!profile || state.pendingConnection || state.disconnecting || state.detaching || state.handoffProvisional || state.ownershipUncertain) return; if (state.connected) { if (!state.localShell && !state.telnet && !state.serial) safe(() => cloneSessionChannel(state))(); return; } safe(() => connect(state.profileId, true, { sessionId: state.id }))(); };
     window.DengSessionWindows.bindTab(tab, state); return [tab, ...(window.DengProcessView?.tabs(state) || [])];
   })); window.DengStartTabs?.appendTabs($('#session-tabs')); window.DengRDP?.appendTabs($('#session-tabs')); window.DengTabOrder.apply($('#session-tabs')); updateStatus(); window.DengTextEditors?.reflect(); window.DengCommandComposer?.reflect(); window.DengPinnedNav?.render();
 }
@@ -622,8 +784,9 @@ function activate(id, view = 'terminal') {
 function updateStatus() { $('#connection-button').setAttribute('aria-label', '管理服务器'); window.DengSessionWindows.reflect(); }
 function renderSessionInfo() {
   const state = current(), profile = profileFor(state);
+  syncTerminalBackground(state);
   $('#welcome-state').hidden = !!state; window.DengLocalPrompt?.reflect();
-  $('#terminal-meta-host').textContent = profile ? (profile.protocol === 'serial' ? window.DengSerial.label(profile) : `${profile.user}@${sessionDisplayName(state)}`) : 'SSH 终端'; $('#terminal-state').textContent = state?.handoffProvisional ? '正在接收标签…' : state?.pendingConnection ? '正在连接…' : state?.connectionFailed ? '连接未完成' : state?.connected ? '已连接' : state?.disconnectDiagnostic ? `已断开 · ${state.disconnectDiagnostic.code}` : '';
+  $('#terminal-meta-host').textContent = profile ? (profile.protocol === 'serial' ? window.DengSerial.label(profile) : profile.protocol === 'tcp' ? `${profile.host}:${profile.port}` : `${profile.user}@${sessionDisplayName(state)}`) : 'SSH 终端'; $('#terminal-state').textContent = state?.handoffProvisional ? '正在接收标签…' : state?.pendingConnection ? '正在连接…' : state?.connectionFailed ? '连接未完成' : state?.connected ? '已连接' : state?.disconnectDiagnostic ? `已断开 · ${state.disconnectDiagnostic.code}` : '';
   $('#terminal-state').title = state?.disconnectDiagnostic?.message || '';
   $('#terminal-status-dot').className = `status-dot ${state?.connected ? 'green' : state?.pendingConnection ? 'blue' : 'red'}`;
   // The "当前连接" badge lives in the session header, merged with the connected
@@ -631,10 +794,10 @@ function renderSessionInfo() {
   const currentConnected = !!state?.connected && !state?.handoffProvisional;
   $('#terminal-state').hidden = currentConnected || !$('#terminal-state').textContent; $('#terminal-current-badge').hidden = !currentConnected;
   const localPrompt = !!state && !state.connected && !state.pendingConnection && !state.disconnecting && !state.detaching && !state.handoffProvisional && !state.ownershipUncertain;
-  $('#command-history').disabled = false; $('#command-input').disabled = !!state && !(state.connected || localPrompt); $('#command-input').placeholder = state ? (state.connected ? '输入命令并回车发送 · ↑↓ 历史' : localPrompt ? '本机提示符：ssh · reconnect · ping/traceroute/nslookup/dig/curl · exit · ↑↓ 本机历史' : '输入命令并回车发送 · ↑↓ 历史') : '本机：输入 ssh 用户@主机 或 ping/traceroute/nslookup/dig/curl · ↑↓ 本机历史'; $('#command-input').value = ''; resizeCommandInput(); $('#disconnect').disabled = !state?.connected || !!(state.disconnecting || state.detaching || state.handoffProvisional || state.ownershipUncertain);
+  $('#command-history').disabled = false; $('#command-input').disabled = !!state && !(state.connected || localPrompt); $('#command-input').placeholder = state ? (state.connected ? '输入命令并回车发送 · ↑↓ 历史' : localPrompt ? '本机提示符：ssh · reconnect · ping/tcping/traceroute/nslookup/dig/curl · telnet 主机 端口 · exit · ↑↓ 本机历史' : '输入命令并回车发送 · ↑↓ 历史') : '本机：输入 ssh 用户@主机 或 ping/tcping 主机 端口 · telnet 主机 端口 · ↑↓ 本机历史'; $('#command-input').value = ''; resizeCommandInput(); $('#disconnect').disabled = !state?.connected || !!(state.disconnecting || state.detaching || state.handoffProvisional || state.ownershipUncertain);
   renderMonitor(state?.connected ? state.stats : null); renderLatency(); renderCommands(); window.DengCommonApps?.render(); window.DengProcessView?.reflect(); window.DengPinnedNav?.reflect(); updateStatus(); reflectCommandBar();
 }
-$('#command-form').onsubmit = event => { event.preventDefault(); const state = current(); const input = $('#command-input'); if (!state && input.value.trim()) { const command = input.value; input.value = ''; window.DengCommandHistory.recordLocal(command); if (window.DengLocalPrompt.commands.test(command.trim())) safe(() => window.DengLocalPrompt.run(command))(); else safe(() => window.DengQuickConnect.run(command))(); return; } if (state && !state.connected && !state.pendingConnection && !state.detaching && !state.handoffProvisional && !state.ownershipUncertain && input.value.trim()) { const command = input.value; input.value = ''; window.DengCommandHistory.recordLocal(command); safe(() => sessionLocalCommand(state, command))(); return; } if (!state?.ready || !input.value) return; if (!pasteTerminalText(state, input.value, { execute: true })) return; input.value = ''; resizeCommandInput(); };
+$('#command-form').onsubmit = event => { event.preventDefault(); const state = current(); const input = $('#command-input'); if (!state && input.value.trim()) { const command = input.value; input.value = ''; window.DengCommandHistory.recordLocal(command); const telnetTarget = /^telnet(\s|$)/i.test(command.trim()) ? window.DengTcpSession.parse(command) : null; if (telnetTarget) safe(() => window.DengTcpSession.open(telnetTarget))(); else if (window.DengLocalPrompt.commands.test(command.trim())) safe(() => window.DengLocalPrompt.run(command))(); else safe(() => window.DengQuickConnect.run(command))(); return; } if (state && !state.connected && !state.pendingConnection && !state.detaching && !state.handoffProvisional && !state.ownershipUncertain && input.value.trim()) { const command = input.value; input.value = ''; window.DengCommandHistory.recordLocal(command); safe(() => sessionLocalCommand(state, command))(); return; } if (!state?.ready || !input.value) return; if (!pasteTerminalText(state, input.value, { execute: true })) return; input.value = ''; resizeCommandInput(); };
 $('#command-input').onkeydown = event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); $('#command-form').requestSubmit(); return; } if (!['ArrowUp', 'ArrowDown'].includes(event.key)) return; const state = current(); event.preventDefault(); const direction = event.key === 'ArrowUp' ? -1 : 1; if (state?.connected) { state.historyIndex = Math.max(0, Math.min(state.history.length, state.historyIndex + direction)); event.target.value = state.history[state.historyIndex] || ''; } else { event.target.value = window.DengCommandHistory.recallLocal(event.target.value, direction); } resizeCommandInput(); };
 $('#disconnect').onclick = safe(() => disconnectSession());
 $('#clear-terminal').onclick = () => { if (window.DengLocalPrompt?.handleClear()) return; current()?.term.clear(); current()?.term.focus(); };
@@ -865,7 +1028,7 @@ function monitorVisible() { return !document.hidden && !window.DevShellWindowHid
 function monitorPollDelay(value, interval) { return Number.isFinite(value) ? Math.max(0, Math.min(interval, value)) + 5 : interval; }
 async function pollNetwork() {
   if(window.DengSecurityLock?.isLocked())return;
-  const state = current(); if (!state?.connected || state.serial || (!state.terminalOutputStarted && !state.terminalBackgroundReady) || networkRequests.has(state) || !monitorVisible()) return;
+  const state = current(); if (!state?.connected || state.serial || state.localShell || state.telnet || (!state.terminalOutputStarted && !state.terminalBackgroundReady) || networkRequests.has(state) || !monitorVisible()) return;
   clearTimeout(networkTimer); networkTimer = 0; networkRequests.add(state); networkPolledSession = state.id;
   let delay = 1000;
   try {
@@ -890,7 +1053,7 @@ async function pollNetwork() {
   }
 }
 async function pollStats() {
-  const state = current(); if (!state?.connected || state.serial || (!state.terminalOutputStarted && !state.terminalBackgroundReady) || statsRequests.has(state) || !monitorVisible()) return;
+  const state = current(); if (!state?.connected || state.serial || state.localShell || state.telnet || (!state.terminalOutputStarted && !state.terminalBackgroundReady) || statsRequests.has(state) || !monitorVisible()) return;
   if ((!networkTimer && !networkRequests.has(state)) || networkPolledSession !== state.id) pollNetwork();
   clearTimeout(statsTimer); statsTimer = 0; statsRequests.add(state); const includeProcesses = true;
   let delay = 5000;
@@ -958,7 +1121,7 @@ function drawCharts(samples) {
 }
 const latencyRequests = new Set();
 async function pollLatency() {
-  const state = current(); if (!state?.connected || state.serial || (!state.terminalOutputStarted && !state.terminalBackgroundReady) || latencyRequests.has(state) || !monitorVisible()) return;
+  const state = current(); if (!state?.connected || state.serial || state.localShell || state.telnet || (!state.terminalOutputStarted && !state.terminalBackgroundReady) || latencyRequests.has(state) || !monitorVisible()) return;
   latencyRequests.add(state);
   try {
     const sample = await api(`/api/sessions/${state.id}/latency`); if (sessions.get(state.id) !== state || !state.connected) return;
@@ -970,7 +1133,7 @@ function renderLatency() { renderLatencyDetails(); }
 setInterval(pollLatency, 1000);
 setInterval(() => {
   if (!monitorVisible()) { clearTimeout(networkTimer); clearTimeout(statsTimer); networkTimer = statsTimer = 0; return; }
-  if (!current()?.connected || current().serial) return;
+  if (!current()?.connected || current().serial || current().localShell || current().telnet) return;
   if (!networkRequests.has(current()) && !networkTimer) pollNetwork();
   if (!statsRequests.has(current()) && !statsTimer) pollStats();
   renderNetwork(current().stats);
@@ -979,9 +1142,12 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) { po
 
 // Connection groups and credentials are persisted by Go, never in browser storage.
 let drawerTrigger;
-function setDrawer(open) { if (open) drawerTrigger = document.activeElement; $('#connections-drawer').hidden = !open; $('#drawer-backdrop').hidden = !open; if (open) { renderConnections(); $('#connection-search').focus(); safe(refreshServerManagerHistory)(); } else { closeServerGroupMenu(); drawerTrigger?.focus(); } }
+function setDrawer(open) { if (open) drawerTrigger = document.activeElement; $('#connections-drawer').hidden = !open; $('#drawer-backdrop').hidden = !open; if (open) { renderConnections(); $('#connection-search').focus(); } else { closeServerGroupMenu(); drawerTrigger?.focus(); } }
 for (const id of ['connection-button', 'welcome-connect']) $(`#${id}`).onclick = () => setDrawer(true);
-$('#add-session').onclick = () => window.DengStartTabs.create();
+// “+”：本地 Shell 开关（设置 → 其他功能，仅支持的平台可见）打开时直接新开本机
+// 终端标签，关闭时保持原有的新选项卡页行为。Windows 上功能已移除，恒走新会话页。
+function createNewSessionTab() { return (typeof appearance !== 'undefined' && appearance.localShellEnabled && window.DEVSHELL?.localShellSupported !== false) ? window.DengLocalShell.reconnect() : window.DengStartTabs.create(); }
+$('#add-session').onclick = () => createNewSessionTab();
 $('#close-connections').onclick = () => setDrawer(false); $('#drawer-backdrop').onclick = () => setDrawer(false);
 $('#connection-search').oninput = renderConnections;
 function renderConnections() { renderServerManager(); }
@@ -991,6 +1157,9 @@ function showConnectionForm(profile = null, groupID = '') {
   renderKeyChoices(); renderProxyChoices(); form.elements.proxyId.value = profile?.proxyId || '';
   for (const key of ['name', 'notes', 'host', 'user', 'port', 'auth', 'keyPath', 'keyId', 'protocol', 'domain', 'serialPort', 'baudRate', 'dataBits', 'parity', 'stopBits', 'flowControl']) if (profile?.[key] != null) form.elements[key].value = profile[key];
   form.elements.rdpClipboard.checked = !!profile?.rdpClipboard;
+  form.elements.autoRun.checked = !!profile?.autoRun;
+  form.elements.autoCommands.value = (profile?.autoCommands || []).join('\n');
+  $('#auto-command-settings').open = !!profile?.autoCommands?.length; updateAutoCommandSummary();
   window.DengProfileNotes.init(form.elements.notes, profile?.notes || '');
   form.elements.proxyType.value = profile?.proxy?.type || 'direct';
   for (const [field, key] of [['proxyHost', 'host'], ['proxyPort', 'port'], ['proxyUser', 'user']]) form.elements[field].value = profile?.proxy?.[key] || '';
@@ -1010,6 +1179,8 @@ function updateAuthFields() {
   // Serial profiles carry no address, login, or proxy fields; normalizeSerialProfile
   // clears them in Go, so hide the inputs and drop their required flags.
   $('#connection-address-row').hidden = serial; $('#connection-login-section').hidden = serial; $('#proxy-settings').hidden = serial;
+  // Connect-time command lists belong to SSH sessions only.
+  $('#auto-command-settings').hidden = rdp || serial;
   $('#serial-settings').hidden = !serial; $('#serial-params').hidden = !serial;
   form.elements.host.required = !serial; form.elements.port.required = !serial; form.elements.user.required = !serial; form.elements.serialPort.required = serial;
   $('#connection-auth-field').hidden = rdp; $('#rdp-domain-field').hidden = !rdp; $('#rdp-clipboard-field').hidden = !rdp; $('#rdp-connection-note').hidden = !rdp;
@@ -1022,6 +1193,11 @@ function updateAuthFields() {
   $('#secret-label').textContent = auth === 'key' ? '私钥口令' : '密码'; $('#choose-key').hidden = !native();
 }
 $('#connection-form').elements.auth.onchange = updateAuthFields;
+function updateAutoCommandSummary() {
+  const lines = String($('#connection-auto-commands').value || '').split(/\r?\n/).filter(line => line.trim());
+  $('#auto-command-summary').textContent = lines.length ? `已配置 ${lines.length} 条` : '未配置';
+}
+$('#connection-auto-commands').oninput = updateAutoCommandSummary;
 $('#connection-protocol').onchange = () => {
   const form = $('#connection-form'), protocol = form.elements.protocol.value, rdp = protocol === 'rdp', serial = protocol === 'serial';
   if (rdp) form.elements.auth.value = 'password';
@@ -1047,6 +1223,11 @@ $('#connection-form').onsubmit = safe(async event => {
   const serial = values.protocol === 'serial';
   if (serial) values.host = String(values.serialPort || '').trim();
   else for (const name of ['serialPort', 'baudRate', 'dataBits', 'parity', 'stopBits', 'flowControl']) delete values[name];
+  // Connect-time command list (issue #5): the textarea is one command per
+  // line; blank lines never reach the store. An empty list disables the run
+  // flag too, matching the Go normalizer's contract.
+  values.autoCommands = String(values.autoCommands || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  values.autoRun = form.elements.autoRun.checked && values.autoCommands.length > 0;
   const saved = await post('/api/profiles', { ...values, rdpClipboard: form.elements.rdpClipboard.checked, port: serial ? 0 : Number(values.port), baudRate: Number(values.baudRate) || 0, dataBits: Number(values.dataBits) || 0, stopBits: Number(values.stopBits) || 0, secret: remember ? secret : '', clearSecret: !remember, proxy });
   credentials.delete(saved.id);
   if (secret) credentials.set(saved.id, secret); else if (!remember) credentials.delete(saved.id);

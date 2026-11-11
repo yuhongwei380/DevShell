@@ -1,15 +1,15 @@
 'use strict';
 
-let appearance = { uiFontId: 'builtin:ui-alibaba-puhuiti-3-55', uiTextColors: {}, fontId: 'builtin:jetbrains-mono', fontColors: {}, fontBold: {}, chartStyles: {}, backgroundId: 'builtin:none', backgroundOpacity: .42, backgroundVersion: 2, uiScale: Number(window.DEVSHELL?.uiScale) || 1, terminalFontSize: 14, ansiPalette: '' };
+let appearance = { uiStyle: window.DEVSHELL?.uiStyle === 'frosted' ? 'frosted' : 'classic', uiFontId: 'builtin:ui-alibaba-puhuiti-3-55', uiTextColors: {}, fontId: 'builtin:jetbrains-mono', fontColors: {}, fontBold: {}, chartStyles: {}, uiScale: Number(window.DEVSHELL?.uiScale) || 1, terminalFontSize: 14, ansiPalette: '', autoCommandsEnabled: true, localShellEnabled: false, tcpToolsEnabled: true };
 const appearanceMapFields = new Set(['fontColors', 'fontBold', 'chartStyles', 'uiTextColors']);
 const appearanceOwnedElsewhere = new Set(['layout', 'windowWidth', 'windowHeight', 'windowMaximised', 'terminalBold']);
 let appearanceSaved = appearanceSnapshot(appearance);
-let managedAssets = [], managedProxies = [], fontCatalog = null, backgroundCatalog = [], assetKind = 'background';
+let managedAssets = [], managedProxies = [], fontCatalog = null, assetKind = 'font';
 let terminalFontFamily = 'monospace', appearanceReady, appearanceSave = Promise.resolve(), mediaGeneration = 0;
 const fontLoads = new Map(), assetData = new Map();
 const proportionalTerminalFonts = new Set();
 const terminalFallbackFaces = new Map();
-let activeFontID = '', activeBackgroundID = '', effectiveScale = 1, appearanceOperation = 0;
+let activeFontID = '', effectiveScale = 1, appearanceOperation = 0;
 const logicalWidth = () => innerWidth / effectiveScale;
 const logicalHeight = () => innerHeight / effectiveScale;
 const terminalDefaultColor = '#d3e0e8';
@@ -19,7 +19,9 @@ const fontColorPresets = [
   { name: '淡紫', color: '#d9b8ff' }, { name: '珊瑚', color: '#f1b7ac' },
   { name: '石墨', color: '#243447' }, { name: '纯白', color: '#ffffff' },
 ];
-const validFontColor = color => typeof color === 'string' && /^#[\da-f]{6}$/i.test(color);
+const validFontColor = color => typeof color === 'string' && /^#(?:[\da-f]{6}|[\da-f]{8})$/i.test(color);
+// Frosted glass paints a dark reading base even in light mode, so its default
+// 液态玻璃沿用经典终端墨色（不改色板，只加玻璃材质）；每款字体的自定义色始终优先。
 const colorForFont = (id = appearance.fontId) => validFontColor(appearance.fontColors?.[id]) ? appearance.fontColors[id].toLowerCase() : terminalDefaultColor;
 const boldForFont = (id = appearance.fontId) => appearance.fontBold?.[id] === true;
 function normalizeTerminalFontSize(value) { const number=Number(value); return Number.isFinite(number) ? Math.max(8,Math.min(40,Math.round(number*2)/2)) : 14; }
@@ -31,47 +33,82 @@ const ansiPalettes = {
   vivid: { black: '#233846', red: '#d4726a', green: '#57b77f', yellow: '#d9b45e', blue: '#4e97d9', magenta: '#b183d4', cyan: '#4fb9c9', white: '#cfdce5', brightBlack: '#7d99ab', brightRed: '#ef8d7f', brightGreen: '#55d190', brightYellow: '#f0cb68', brightBlue: '#69b1f0', brightMagenta: '#cf95e8', brightCyan: '#66d2df', brightWhite: '#edf5f9' },
   bright: { black: '#233846', red: '#e4614f', green: '#37c26e', yellow: '#e3c14d', blue: '#3d90e8', magenta: '#c56fe6', cyan: '#33c4d8', white: '#d3e0e8', brightBlack: '#86a2b4', brightRed: '#ff8f76', brightGreen: '#48dc85', brightYellow: '#ffd75e', brightBlue: '#54aef8', brightMagenta: '#e28dff', brightCyan: '#4adceb', brightWhite: '#f2f8fb' },
 };
+// 与后端 ansiColorKeys 对应；custom 预设仅当 16 色齐全时生效，否则回落柔和。
+const ansiColorKeys = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white', 'brightBlack', 'brightRed', 'brightGreen', 'brightYellow', 'brightBlue', 'brightMagenta', 'brightCyan', 'brightWhite'];
+const completeAnsiColors = colors => !!colors && ansiColorKeys.every(key => validFontColor(colors[key]));
+function colorsForAnsiScheme(scheme) {
+  const variant = document.documentElement.dataset.theme === 'light' ? scheme?.lightColors : scheme?.darkColors;
+  return completeAnsiColors(variant) ? variant : scheme?.colors;
+}
+// 当前应用的导入方案（16 色齐全才算生效，缺失或残缺回落预设）。
+function activeAnsiScheme() {
+  if (appearance.ansiPalette !== 'custom') return null;
+  const scheme = (appearance.ansiSchemes || []).find(item => item.name === appearance.ansiScheme);
+  return scheme && completeAnsiColors(colorsForAnsiScheme(scheme)) ? scheme : null;
+}
+// xterm's theme properties plus iTerm colors handled by the DOM adapter.
+// Imported background colors are retained as metadata; the terminal stays transparent.
 function terminalTheme() {
-  const palette = ansiPalettes[appearance.ansiPalette] || ansiPalettes.soft;
+  // custom 表示应用了导入的配色方案：按名称在方案库里找色板，缺失或残缺回落柔和。
+  const scheme = activeAnsiScheme();
+  const colors = scheme ? colorsForAnsiScheme(scheme) : (ansiPalettes[appearance.ansiPalette] || ansiPalettes.soft);
+  const palette = {};
+  // iTerm-only decoration colors are rendered separately, never passed as
+  // unknown properties to xterm's theme API.
+  for (const key of [...ansiColorKeys, 'foreground', 'cursor', 'cursorAccent', 'selectionBackground', 'selectionForeground']) {
+    if (validFontColor(colors[key])) palette[key] = colors[key];
+  }
   return { background: '#00000000', foreground: colorForFont(), cursor: colorForFont(), selectionBackground: '#7195aa66', ...palette };
 }
 function applyTerminalAppearanceColors() {
-  const color = colorForFont();
+  // 方案含前景色键时终端文字色随方案（本机提示符回显区同色），否则仍随字体颜色。
+  const scheme = activeAnsiScheme();
+  const colors = colorsForAnsiScheme(scheme), theme = terminalTheme();
+  const color = theme.foreground;
   document.documentElement.style.setProperty('--terminal-foreground', color);
-  for (const state of sessions.values()) state.term.options.theme = terminalTheme();
+  // Paint the default background once, including padding and unused rows.
+  // The scrollable xterm layer stays transparent (also for translucent themes).
+  document.documentElement.style.setProperty('--terminal-background', theme.background);
+  for (const key of ['bold', 'link', 'underline']) {
+    if (validFontColor(colors?.[key])) document.documentElement.style.setProperty(`--terminal-${key}`, colors[key]);
+    else document.documentElement.style.removeProperty(`--terminal-${key}`);
+  }
+  for (const state of sessions.values()) state.term.options.theme = theme;
   const preview = document.getElementById('font-preview-text');
-  if (preview) preview.style.color = color;
+  if (preview) preview.style.color = colorForFont();
+}
+window.addEventListener('cloudshell:theme', () => applyTerminalAppearanceColors());
+function syncTerminalBackground(state = current()) {
+  // OSC 11/111 may change/reset an individual session's background. Keep the
+  // full-area fill in sync with xterm, including when switching between tabs.
+  const color = state?.term?._core?._themeService?.colors?.background?.css || terminalTheme().background;
+  document.documentElement.style.setProperty('--terminal-background', color);
+}
+function installTerminalBackground(state) {
+  state.term?._core?._themeService?.onChangeColors?.(() => {
+    if (current() === state) syncTerminalBackground(state);
+  });
 }
 
 async function staticJSON(path) {
   const response = await fetch(path); if (!response.ok) throw new Error('无法读取内置资源'); return response.json();
 }
 function initializeAppearanceCatalogs() {
-  if (!appearanceReady) appearanceReady = Promise.all([staticJSON('assets/fonts/catalog.json'), staticJSON('assets/backgrounds/catalog.json')]).then(([fonts, backgrounds]) => {
-    fontCatalog = fonts; backgroundCatalog = backgrounds.backgrounds; return fonts;
+  if (!appearanceReady) appearanceReady = staticJSON('assets/fonts/catalog.json').then(fonts => {
+    fontCatalog = fonts; return fonts;
   }).catch(error => { appearanceReady = null; throw error; });
   return appearanceReady;
 }
 function allFonts() { return [...(fontCatalog?.fonts || []).map(font => ({ ...font, id: `builtin:${font.id}` })), ...managedAssets.filter(asset => asset.kind === 'font').map(asset => ({ ...asset, family: `Deng custom ${asset.id}` }))]; }
-function allBackgrounds() { return [{ id: 'builtin:none', name: '纯色 · 专注', kind: 'builtin' }, { id: 'builtin:black', name: '纯色 · 全黑', kind: 'builtin' }, ...backgroundCatalog.map(background => ({ ...background, id: `builtin:${background.id}`, kind: 'builtin' })), ...managedAssets.filter(asset => asset.kind === 'background')]; }
 async function assetURL(asset) {
   if (asset.file) return new URL(asset.file, location.href).href;
   if (!assetData.has(asset.id)) {
-    const pending = api(`/api/assets/${asset.id}/data`).then(async data => {
-      // Large base64 images exceed CSS custom-property size limits. Keep the
-      // image in a Blob and put only its short local URL in --terminal-background.
-      if (asset.kind === 'background') return URL.createObjectURL(await (await fetch(data.dataUrl)).blob());
-      return data.dataUrl;
-    }).catch(error => { if (assetData.get(asset.id) === pending) assetData.delete(asset.id); throw error; });
+    const pending = api(`/api/assets/${asset.id}/data`).then(data => data.dataUrl).catch(error => { if (assetData.get(asset.id) === pending) assetData.delete(asset.id); throw error; });
     assetData.set(asset.id, pending);
   }
   return assetData.get(asset.id);
 }
-function forgetAssetURL(id) {
-  const pending = assetData.get(id); assetData.delete(id);
-  // This also releases an image deleted while its data request was pending.
-  pending?.then(url => { if (url.startsWith('blob:')) URL.revokeObjectURL(url); }, () => {});
-}
+function forgetAssetURL(id) { assetData.delete(id); }
 async function loadFace(font) {
   if (!fontLoads.has(font.id)) fontLoads.set(font.id, (async () => {
     const url = await assetURL(font), face = new FontFace(font.family, `url(${JSON.stringify(url)})`, { weight: font.weightRange || '400', style: 'normal', display: 'block' });
@@ -138,15 +175,25 @@ function installTerminalFontMetrics(state) {
   factory.createRow = function (...args) {
     const spans = createRow.apply(this,args), line = args[0], cellWidth = args[7], pieces = [];
     if (!line?.loadCell || !Number.isFinite(cellWidth) || cellWidth <= 0) return spans;
+    const colors = colorsForAnsiScheme(activeAnsiScheme());
     let column = 0;
     for (const span of spans) {
       const text = span.textContent, cells = []; let length = 0;
+      const selected = span.classList.contains('xterm-decoration-top'), cursor = span.classList.contains('xterm-cursor');
       while (length < text.length && column < line.length) {
         const cell = line.loadCell(column,this._workCell), width = cell.getWidth();
         if (!width) { column++; continue; }
         let chars = cell.isInvisible() ? ' ' : cell.getChars() || ' ';
         if (chars === ' ' && (cell.isUnderline() || cell.isOverline())) chars = '\u00a0';
-        cells.push({ text:chars, column, width }); length += chars.length; column += width;
+        // Keep explicit ANSI/truecolor, reverse video, selection and cursor
+        // colors intact. iTerm's Bold Color only affects default foreground.
+        // loadCell reuses its work cell and leaves extended data stale when the
+        // next cell has no extended attributes; check its flag before urlId.
+        const link = colors?.link && !cell.isInvisible() && ((cell.hasExtendedAttrs() && cell.extended?.urlId) || (args[9] >= 0 && column >= args[9] && column <= args[10]));
+        const role = colors && !selected && !cursor && !cell.isInverse() && !cell.isInvisible()
+          ? (link && colors?.link ? 'link' : cell.isBold() && cell.isFgDefault() && colors?.bold ? 'bold' : '') : '';
+        const underline = !!colors?.underline && !!cell.isUnderline();
+        cells.push({ text:chars, column, width, role, underline }); length += chars.length; column += width;
       }
       // Leave unexpected future renderer forms intact rather than guessing at
       // Unicode width or splitting combining/supplementary characters.
@@ -155,19 +202,18 @@ function installTerminalFontMetrics(state) {
     }
     const output = [], height = renderer.dimensions.css.cell.height;
     for (const {span,cells} of pieces) {
-      const hasLines = cells.some(cell => terminalBoxGlyph(cell.text));
       const runs = [];
-      if (hasLines) {
-        for (const cell of cells) {
-          const previous = runs.at(-1), box = terminalBoxGlyph(cell.text);
-          if (previous && !!previous.box === !!box) { previous.text += cell.text; previous.width += cell.width; if (box) previous.box.push({glyph:box,width:cell.width}); }
-          else runs.push({...cell,box:box?[{glyph:box,width:cell.width}]:null});
-        }
-      } else if (cells.length) runs.push({text:span.textContent,column:cells[0].column,width:cells.reduce((n,cell)=>n+cell.width,0)});
+      for (const cell of cells) {
+        const previous = runs.at(-1), box = terminalBoxGlyph(cell.text);
+        if (previous && !!previous.box === !!box && previous.role === cell.role && previous.underline === cell.underline) { previous.text += cell.text; previous.width += cell.width; if (box) previous.box.push({glyph:box,width:cell.width}); }
+        else runs.push({...cell,box:box?[{glyph:box,width:cell.width}]:null});
+      }
       for (const run of runs) {
         const element = runs.length === 1 ? span : span.cloneNode(false);
         element.textContent = run.text; element.style.position = 'absolute'; element.style.left = `${run.column*cellWidth}px`; element.style.width = `${run.width*cellWidth}px`;
         element.dataset.terminalColumn = run.column;
+        if (run.role) element.style.color = `var(--terminal-${run.role})`;
+        if (run.underline) element.style.textDecorationColor = 'var(--terminal-underline)';
         if (run.box) {
           element.classList.add('terminal-box-glyph');
           element.append(drawTerminalBoxGlyph(run.box,run.width*cellWidth,height));
@@ -205,11 +251,11 @@ function drawTerminalBoxGlyph(glyphs,width,height) {
   for(const [thickness,d]of paths){const stroke=path.cloneNode(false);stroke.setAttribute('d',d);stroke.setAttribute('stroke-width',thickness);svg.append(stroke);}return svg;
 }
 async function applyAppearance() {
+  window.DevShellTheme.setStyle(appearance.uiStyle);
   const uiApplying = window.DengUIAppearance?.apply(appearance);
   window.DengChartStyles?.apply(appearance.chartStyles);
   const generation = ++mediaGeneration, next = { ...appearance };
   applyUIScale();
-  document.documentElement.style.setProperty('--background-opacity', String(next.backgroundOpacity));
   applyTerminalAppearanceColors();
   await Promise.all([initializeAppearanceCatalogs(), uiApplying]);
   if (generation !== mediaGeneration) return;
@@ -227,14 +273,6 @@ async function applyAppearance() {
   terminalFont = normalizeTerminalFontSize(next.terminalFontSize);
   document.documentElement.style.setProperty('--terminal-font-size', `${terminalFont}px`);
   for (const state of sessions.values()) { state.term.options.fontSize = terminalFont; state.term.options.fontWeight = boldForFont(next.fontId) ? '700' : '400'; }
-  const background = allBackgrounds().find(item => item.id === next.backgroundId) || allBackgrounds()[0];
-  if (activeBackgroundID !== background.id) {
-    // Only the two solid built-ins have no image. Built-in catalogue entries
-    // carry a file and resolve through assetURL like imported backgrounds.
-    const url = background.id === 'builtin:none' || background.id === 'builtin:black' ? '' : await assetURL(background);
-    if (generation !== mediaGeneration) return;
-    document.documentElement.style.setProperty('--terminal-background', url ? `url(${JSON.stringify(url)})` : 'none'); activeBackgroundID = background.id; const panel = $('.terminal-panel'); panel.classList.toggle('has-background', !!url); panel.classList.toggle('solid-black', background.id === 'builtin:black');
-  }
   if (generation !== mediaGeneration) return;
   renderAppearanceControls(); clampAppearancePalette(); requestAnimationFrame(fitActive);
 }
@@ -250,12 +288,11 @@ async function acceptAppearanceConfig(config) {
     appearanceSaved = appearanceSnapshot(appearance);
     appearance = mergeAppearanceChanges(appearance, pending);
   }
-  if ((appearance.backgroundVersion || 0) < 2) { if (Math.abs(appearance.backgroundOpacity - .18) < .000001) appearance.backgroundOpacity = .42; appearance.backgroundVersion = 2; }
   await window.DengUIAppearance?.acceptConfig(config);
   try { await applyAppearance(); } catch (error) {
     toast(`外观资源暂时无法加载，已保留选择：${error.message}`);
     const selected = appearance;
-    appearance = { ...appearance, fontId: 'builtin:jetbrains-mono', backgroundId: 'builtin:none' };
+    appearance = { ...appearance, fontId: 'builtin:jetbrains-mono' };
     await applyAppearance().catch(() => {});
     appearance = selected;
   }
@@ -351,10 +388,10 @@ function applyUIScale() {
   requestAnimationFrame(fitActive);
 }
 function renderAppearanceControls() {
-  $('#background-opacity').value = Math.round(appearance.backgroundOpacity * 100);
-  $('#background-opacity-value').value = `${Math.round(appearance.backgroundOpacity * 100)}%`;
   $('#terminal-size').value = appearance.terminalFontSize;
-  $('#ansi-palette').value = ansiPalettes[appearance.ansiPalette] ? appearance.ansiPalette : 'soft';
+  window.DengAnsiSchemes?.syncOptions();
+  const activeScheme = appearance.ansiPalette === 'custom' ? (appearance.ansiSchemes || []).find(item => item.name === appearance.ansiScheme) : null;
+  $('#ansi-palette').value = activeScheme && completeAnsiColors(activeScheme.colors) ? `scheme:${activeScheme.name}` : (ansiPalettes[appearance.ansiPalette] ? appearance.ansiPalette : 'soft');
   $('#font-preview-text').style.fontFamily = terminalFontFamily;
   $('#font-preview-text').style.fontSize = `${appearance.terminalFontSize}px`;
   $('#font-preview-text').style.fontWeight = boldForFont() ? '700' : '400';
@@ -363,80 +400,73 @@ function renderAppearanceControls() {
 }
 function setSettingsMenu(open) {
   if (open) showSettingsMenuView('main');
-  else $('#manage-appearance-config').setAttribute('aria-expanded', 'false');
+  else { $('#manage-appearance-config').setAttribute('aria-expanded', 'false'); $('#manage-other-features').setAttribute('aria-expanded', 'false'); }
   $('#settings-menu').hidden = !open; $('#settings-button').setAttribute('aria-expanded', String(open));
-  if (open) { positionSettings(); $('#manage-keys').focus(); }
+  if (open) { positionSettings(); $('#feature-auto-commands').value = appearance.autoCommandsEnabled !== false ? 'true' : 'false'; $('#feature-local-shell').value = appearance.localShellEnabled === true ? 'true' : 'false'; $('#feature-tcp-tools').value = appearance.tcpToolsEnabled !== false ? 'true' : 'false'; $('#manage-keys').focus(); }
 }
 function showSettingsMenuView(view) {
-  const appearanceView = view === 'appearance';
-  $('#settings-main-view').hidden = appearanceView;
+  const appearanceView = view === 'appearance', otherView = view === 'other';
+  $('#settings-main-view').hidden = appearanceView || otherView;
   $('#settings-appearance-view').hidden = !appearanceView;
+  $('#settings-other-view').hidden = !otherView;
   $('#manage-appearance-config').setAttribute('aria-expanded', String(appearanceView));
-  (appearanceView ? $('#manage-ui-appearance') : $('#manage-appearance-config')).focus();
+  $('#manage-other-features').setAttribute('aria-expanded', String(otherView));
+  (appearanceView ? $('#manage-ui-appearance') : otherView ? $('#feature-auto-commands') : $('#manage-appearance-config')).focus();
 }
 function positionSettings() {
   const menu = $('#settings-menu'), rect = $('#settings-button').getBoundingClientRect();
   menu.style.left = `${Math.max(8, Math.min(rect.left / effectiveScale, logicalWidth() - menu.offsetWidth - 8))}px`;
   menu.style.top = `${rect.bottom / effectiveScale + 6}px`;
 }
-async function openAppearance(kind) {
-  setSettingsMenu(false); assetKind = kind;
+async function openAppearance() {
+  setSettingsMenu(false); assetKind = 'font';
   await initializeAppearanceCatalogs();
-  const isFont = kind === 'font';
-  if (isFont) document.getElementById('ui-appearance-dialog')?.close();
-  $('#appearance-title').textContent = isFont ? '字体设置 · Shell 字体' : '背景管理器';
-  $('#appearance-description').textContent = isFont ? '每款字体单独设置加粗和颜色，点击字体即可应用。' : '背景立即生效，可拖动此面板观察终端。';
-  $('#import-asset span').textContent = isFont ? '导入字体' : '导入背景';
-  $('#asset-picker').accept = isFont ? '.ttf,.otf,.woff,.woff2' : '.png,.jpg,.jpeg,.webp';
-  $('#background-strength').hidden = isFont; $('#font-preview').hidden = !isFont;
-  $('#asset-list').classList.toggle('font-list', isFont);
-  $('#appearance-dialog').dataset.kind = kind;
-  $('#shell-font-navigation').hidden = !isFont; $('#shell-font-online-entry').hidden = !isFont;
+  document.getElementById('ui-appearance-dialog')?.close();
+  $('#appearance-title').textContent = '字体设置 · Shell 字体';
+  $('#appearance-description').textContent = '每款字体单独设置加粗和颜色，点击字体即可应用。';
+  $('#asset-picker').accept = '.ttf,.otf,.woff,.woff2';
+  $('#font-preview').hidden = false;
+  $('#asset-list').classList.add('font-list');
+  $('#appearance-dialog').dataset.kind = 'font';
+  $('#shell-font-navigation').hidden = false; $('#shell-font-online-entry').hidden = false;
   renderAppearanceControls(); renderAssets();
   if (!$('#appearance-dialog').open) $('#appearance-dialog').show();
   positionAppearancePalette();
 }
 function renderAssets() {
-  const isFont = assetKind === 'font', assets = isFont ? allFonts() : allBackgrounds(), list = $('#asset-list');
-  $('#asset-count').textContent = isFont ? '已安装字体' : `${assets.length} 种背景 · 支持 PNG / JPG / WebP`;
+  const assets = allFonts(), list = $('#asset-list');
+  $('#asset-count').textContent = '已安装字体';
   if (list.dataset.kind !== assetKind) { list.replaceChildren(); list.dataset.kind = assetKind; }
   const existing = new Map([...list.children].map(card => [card.dataset.assetId, card]));
   const wanted = new Set(assets.map(asset => asset.id));
   for (const [id, card] of existing) if (!wanted.has(id)) card.remove();
   assets.forEach((asset, index) => {
-    const card = existing.get(asset.id) || createAssetCard(asset, isFont);
+    const card = existing.get(asset.id) || createAssetCard(asset);
     card._asset = asset;
-    const selected = (isFont ? appearance.fontId : appearance.backgroundId) === asset.id;
+    const selected = appearance.fontId === asset.id;
     card.classList.toggle('selected', selected);
     const choose = card.querySelector('.asset-choice'); choose.setAttribute('aria-pressed', String(selected)); choose.title = `使用 ${asset.name}`;
     card.querySelector('.asset-caption strong').textContent = asset.name;
-    card.querySelector('.asset-caption span').textContent = isFont && proportionalTerminalFonts.has(asset.id) ? `${selected ? '使用中 · ' : ''}英文采用等宽回退` : selected ? '正在使用 ✓' : asset.id.startsWith('builtin:') ? '内置' : asset.libraryId ? '已下载 · 可离线使用' : '自定义';
-    if (isFont) reflectFontCardControls(card);
+    card.querySelector('.asset-caption span').textContent = proportionalTerminalFonts.has(asset.id) ? `${selected ? '使用中 · ' : ''}英文采用等宽回退` : selected ? '正在使用 ✓' : asset.id.startsWith('builtin:') ? '内置' : asset.libraryId ? '已下载 · 可离线使用' : '自定义';
+    reflectFontCardControls(card);
     // Existing cards retain their inputs, disclosure state, keyboard focus and scroll position.
     if (list.children[index] !== card) list.insertBefore(card, list.children[index] || null);
   });
 }
-function createAssetCard(asset, isFont) {
-  const card = node('article', 'asset-card'); card.dataset.assetId = asset.id; card._asset = asset;
+function createAssetCard(asset) {
+  const card = node('article', 'asset-card'); card.dataset.assetId = asset.id; card._asset = asset; card.dataset.fontId = asset.id;
   const choose = node('button', 'asset-choice'); choose.type = 'button';
-  const thumb = node('div', isFont ? 'font-sample' : 'background-thumb');
-  if (isFont) {
-    thumb.textContent = 'Aa 012 中文'; card.dataset.fontId = asset.id;
-    thumb.style.fontFamily = `"${asset.family}", "Deng CJK", monospace`;
-    loadFace(asset).catch(error => { if (thumb.isConnected) thumb.textContent = '预览不可用'; console.warn(error.message); });
-  } else if (asset.id === 'builtin:black') thumb.classList.add('solid-black-thumb');
-  else if (asset.id !== 'builtin:none') {
-    assetURL(asset).then(url => { if (thumb.isConnected) thumb.style.backgroundImage = `url(${JSON.stringify(url)})`; }).catch(() => { if (thumb.isConnected) thumb.textContent = '无法读取'; });
-  } else thumb.append(icon('terminal'));
+  const thumb = node('div', 'font-sample');
+  thumb.textContent = 'Aa 012 中文';
+  thumb.style.fontFamily = `"${asset.family}", "Deng CJK", monospace`;
+  loadFace(asset).catch(error => { if (thumb.isConnected) thumb.textContent = '预览不可用'; console.warn(error.message); });
   const caption = node('div', 'asset-caption'); caption.append(node('strong'), node('span'));
-  choose.append(...(isFont ? [caption] : [thumb, caption])); choose.onclick = safe(() => chooseAppearance(isFont ? { fontId: asset.id } : { backgroundId: asset.id }));
+  choose.append(caption); choose.onclick = safe(() => chooseAppearance({ fontId: asset.id }));
   card.append(choose);
-  if (isFont) {
-    createFontCardControls(card, asset);
-    const sampleChoice = node('button', 'font-sample-choice'); sampleChoice.type = 'button';
-    sampleChoice.setAttribute('aria-label', `使用 ${asset.name}`); sampleChoice.onclick = choose.onclick;
-    sampleChoice.append(thumb); card.querySelector('.font-card-toolbar').prepend(sampleChoice);
-  }
+  createFontCardControls(card, asset);
+  const sampleChoice = node('button', 'font-sample-choice'); sampleChoice.type = 'button';
+  sampleChoice.setAttribute('aria-label', `使用 ${asset.name}`); sampleChoice.onclick = choose.onclick;
+  sampleChoice.append(thumb); card.querySelector('.font-card-toolbar').prepend(sampleChoice);
   if (!asset.id.startsWith('builtin:')) {
     const actions = node('div', 'asset-actions'), rename = node('button', '', '改名'), del = node('button', 'danger-button', '删除'); rename.type = del.type = 'button';
     rename.onclick = safe(async () => { const name = await ask({ title: '修改名称', input: true, value: card._asset.name }); if (!name?.trim()) return; await flushFontStyleSave(); await post(`/api/assets/${asset.id}`, { name }); await loadProfiles(); });
@@ -583,7 +613,7 @@ async function importAsset() {
   const kind = assetKind, button = $('#import-asset');
   if (!native()?.ChooseAsset) { $('#asset-picker').click(); return; }
   button.disabled = true;
-  try { await flushFontStyleSave(); const asset = await native().ChooseAsset(kind); if (!asset) return; await loadProfiles(); await chooseAppearance(kind === 'font' ? { fontId: asset.id } : { backgroundId: asset.id }); toast('已导入并应用'); }
+  try { await flushFontStyleSave(); const asset = await native().ChooseAsset(kind); if (!asset) return; await loadProfiles(); await chooseAppearance({ fontId: asset.id }); toast('已导入并应用'); }
   finally { button.disabled = false; }
 }
 function renderProxyChoices() {
@@ -663,32 +693,51 @@ function initializeAppearance() {
     if (event.key === 'Escape' && !$('#monitor-backdrop').hidden) $('#monitor-backdrop').click();
     if (event.key === 'Escape' && !$('#settings-menu').hidden) {
       event.preventDefault();
-      if (!$('#settings-appearance-view').hidden) showSettingsMenuView('main');
+      if (!$('#settings-appearance-view').hidden || !$('#settings-other-view').hidden) showSettingsMenuView('main');
       else { setSettingsMenu(false); $('#settings-button').focus(); }
     }
   });
-  $('#manage-backgrounds').onclick = safe(() => openAppearance('background'));
-  $('#manage-shell-fonts').onclick = safe(() => openAppearance('font'));
+  $('#manage-shell-fonts').onclick = safe(() => openAppearance());
   $('#switch-ui-fonts').onclick = safe(() => window.DengUIAppearance.open());
   $('#online-shell-fonts').onclick = safe(() => window.DengFontLibrary.open('font'));
   $('#manage-proxies').onclick = showProxies; $('#manage-profile-proxies').onclick = showProxies;
+  // 本地终端按平台支持位显示：Windows 仅在装有 WSL 时为 true；不支持时整行不显示，开关无法打开。
+  if (window.DEVSHELL?.localShellSupported === false) $('#feature-local-shell')?.closest('.placement-setting')?.setAttribute('hidden', '');
+  $('#feature-auto-commands').onchange = safe(async event => {
+    const enabled = event.target.value === 'true';
+    try { await chooseAppearance({ autoCommandsEnabled: enabled }); }
+    catch (error) { event.target.value = enabled ? 'false' : 'true'; toast(error?.message || String(error)); }
+  });
+  $('#feature-local-shell').onchange = safe(async event => {
+    const enabled = event.target.value === 'true';
+    try { await chooseAppearance({ localShellEnabled: enabled }); }
+    catch (error) { event.target.value = enabled ? 'false' : 'true'; toast(error?.message || String(error)); }
+  });
+  $('#feature-tcp-tools').onchange = safe(async event => {
+    const enabled = event.target.value === 'true';
+    try { await chooseAppearance({ tcpToolsEnabled: enabled }); }
+    catch (error) { event.target.value = enabled ? 'false' : 'true'; toast(error?.message || String(error)); }
+  });
   $('#close-appearance').onclick = () => $('#appearance-dialog').close(); $('#import-asset').onclick = safe(importAsset);
   $('#asset-picker').onchange = safe(async event => {
     const file = event.target.files[0], kind = assetKind; event.target.value = ''; if (!file) return;
-    if (file.size > (kind === 'font' ? 64 : 32) * 1024 * 1024) throw new Error('文件太大，请选择更小的文件');
+    if (file.size > 64 * 1024 * 1024) throw new Error('文件太大，请选择更小的文件');
     const button = $('#import-asset'); button.disabled = true;
     try {
       const dataURL = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error('无法读取文件')); reader.readAsDataURL(file); });
       await flushFontStyleSave();
       const asset = await post('/api/assets', { kind, name: file.name.replace(/\.[^.]+$/, ''), filename: file.name, data: dataURL.split(',')[1] });
-      await loadProfiles(); await chooseAppearance(kind === 'font' ? { fontId: asset.id } : { backgroundId: asset.id }); toast('已导入并应用');
+      await loadProfiles(); await chooseAppearance({ fontId: asset.id }); toast('已导入并应用');
     } finally { button.disabled = false; }
   });
-  $('#background-opacity').oninput = event => { appearance.backgroundOpacity = Number(event.target.value) / 100; document.documentElement.style.setProperty('--background-opacity', appearance.backgroundOpacity); renderAppearanceControls(); };
-  $('#background-opacity').onchange = safe(() => persistAppearance({}));
   $('#terminal-size').onchange = safe(event => chooseAppearance({ terminalFontSize: Number(event.target.value) }));
   $('#ui-scale').onchange = safe(event => chooseAppearance({ uiScale: Number(event.target.value) }));
-  $('#ansi-palette').onchange = safe(event => chooseAppearance({ ansiPalette: event.target.value }));
+  $('#ansi-palette').onchange = safe(async event => {
+    // 导入的方案由配色方案页维护，值前缀 scheme:；选中即应用该方案。
+    const value = event.target.value;
+    if (value.startsWith('scheme:')) { await chooseAppearance({ ansiPalette: 'custom', ansiScheme: value.slice(7) }); return; }
+    await chooseAppearance({ ansiPalette: value });
+  });
   $('#profile-proxy').onchange = updateProxyFields;
   $('#close-proxies').onclick = () => $('#proxies-dialog').close(); $('#new-proxy').onclick = () => editProxy();
   $('#close-proxy-editor').onclick = () => $('#proxy-editor-dialog').close();

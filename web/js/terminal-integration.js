@@ -75,7 +75,7 @@ function bindShellIntegration(state) {
     if (!integration.nonce || parts[2] !== integration.nonce) return true;
     switch (parts[1]) {
       case 'ready': integration.ready = true; integration.shell = parts[3] || integration.shell; if (typeof applyPendingFollow === 'function') applyPendingFollow(state); break;
-      case 'prompt': integration.atPrompt = true; window.DengZmodemBridge?.clear(state); break;
+      case 'prompt': integration.atPrompt = true; window.DengZmodemBridge?.clear(state); if (typeof advanceAutoCommands === 'function') advanceAutoCommands(state); break;
       case 'busy': integration.atPrompt = false; break;
       case 'command':
       case 'cwd':

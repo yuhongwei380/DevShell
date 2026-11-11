@@ -36,7 +36,7 @@ def build(stage, output):
         files = sorted(p for p in stage.rglob('*') if p.is_file())
         # Hard guard: the uninstall list must stay inside the distribution
         # layout (program file, docs, licenses, support entries). Personal
-        # configuration, connection credentials, keys, fonts and backgrounds
+        # configuration, connection credentials, keys and fonts
         # under data\ must never be deletable by the uninstaller, and the
         # recursive delete form is banned outright.
         def program_owned(relative: str) -> bool:

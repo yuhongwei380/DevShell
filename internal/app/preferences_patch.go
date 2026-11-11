@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"runtime"
 	"strings"
 )
 
@@ -22,26 +23,48 @@ func (s *Store) PatchAppearance(patch map[string]json.RawMessage) (Appearance, e
 		return value, nil
 	}
 	fields := map[string]any{
-		"uiFontId": &value.UIFontID, "fontId": &value.FontID, "backgroundId": &value.BackgroundID,
-		"backgroundOpacity": &value.BackgroundOpacity, "backgroundVersion": &value.BackgroundVersion,
+		"uiFontId": &value.UIFontID, "fontId": &value.FontID,
 		"uiScale": &value.UIScale, "terminalFontSize": &value.TerminalFontSize,
-		"theme":               &value.Theme,
+		"theme": &value.Theme, "uiStyle": &value.UIStyle,
 		"onboardingCompleted": &value.OnboardingCompleted, "monitorVisible": &value.MonitorVisible,
 		"filesPosition": &value.FilesPosition, "followTerminal": &value.FollowTerminal, "promptUsernameColor": &value.PromptUsernameColor,
 		"promptHostnameColor": &value.PromptHostnameColor, "minimizeAction": &value.MinimizeAction,
 		"externalEditor": &value.ExternalEditor, "updateMirror": &value.UpdateMirror,
+		"autoCommandsEnabled": &value.AutoCommandsEnabled, "tcpToolsEnabled": &value.TcpToolsEnabled,
+		"ansiScheme": &value.AnsiScheme,
 	}
 	for key, raw := range patch {
 		var err error
 		switch key {
 		case "chartStyles":
 			err = mergePreferenceMap(value.ChartStyles, raw)
+		case "ansiSchemes":
+			// 配色方案列表整体替换（null 清空）：命名与色板校验在
+			// saveAppearanceLocked 的 normalizeAnsiSchemes 内完成。
+			var schemes []AnsiScheme
+			if err = json.Unmarshal(raw, &schemes); err == nil {
+				value.AnsiSchemes = schemes
+			}
 		case "uiTextColors":
 			err = mergePreferenceMap(value.UITextColors, raw)
 		case "fontColors":
 			err = mergePreferenceMap(value.FontColors, raw)
 		case "fontBold":
 			err = mergePreferenceMap(value.FontBold, raw)
+		case "localShellEnabled":
+			// 本地终端平台门槛：macOS 直接支持；Windows 仅在装有 WSL 发行版时
+			// 支持，否则保持默认（关闭且开关行隐藏），开启请求拒绝。
+			var enabled bool
+			if json.Unmarshal(raw, &enabled) != nil {
+				return Appearance{}, errors.New("本地终端开关必须是布尔值")
+			}
+			if enabled && !localShellSupported() {
+				if runtime.GOOS == "windows" {
+					return Appearance{}, errors.New("未检测到 WSL 发行版，Windows 本地终端需要先安装 WSL")
+				}
+				return Appearance{}, errors.New("当前平台不支持本地终端")
+			}
+			value.LocalShellEnabled = enabled
 		case "layout":
 			var changes map[string]json.RawMessage
 			if json.Unmarshal(raw, &changes) == nil {
@@ -54,8 +77,8 @@ func (s *Store) PatchAppearance(patch map[string]json.RawMessage) (Appearance, e
 			err = mergePreferenceMap(value.Layout, raw)
 		case "ansiPalette":
 			var preset string
-			if json.Unmarshal(raw, &preset) != nil || (preset != "soft" && preset != "vivid" && preset != "bright") {
-				return Appearance{}, errors.New("终端 ANSI 颜色预设只能是 soft、vivid 或 bright")
+			if json.Unmarshal(raw, &preset) != nil || (preset != "soft" && preset != "vivid" && preset != "bright" && preset != "custom") {
+				return Appearance{}, errors.New("终端 ANSI 颜色预设只能是 soft、vivid、bright 或 custom")
 			}
 			value.AnsiPalette = preset
 		case "windowWidth", "windowHeight", "windowMaximised":
