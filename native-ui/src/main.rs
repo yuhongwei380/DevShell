@@ -1236,7 +1236,19 @@ fn transfer_panel(transfers: Vec<TransferState>, view: Entity<DevShellWindow>) -
         .flex()
         .flex_col()
         .gap_2()
-        .child(Paragraph::new("传输队列"))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .child(Paragraph::new("传输队列"))
+                .child(
+                    KitButton::new("transfer-clear-completed")
+                        .secondary()
+                        .label("清理已完成")
+                        .on_click(move |_, _, cx| clear_completed_transfers(view.clone(), cx)),
+                ),
+        )
         .children(transfers.into_iter().map(|transfer| {
             let transfer_id = transfer.id.clone();
             let retryable = transfer.retryable;
@@ -1501,6 +1513,41 @@ fn retry_transfer(view: Entity<DevShellWindow>, transfer_id: String, cx: &mut Ap
 
 fn cancel_transfer(view: Entity<DevShellWindow>, transfer_id: String, cx: &mut App) {
     transfer_action(view, transfer_id, "DELETE", "cancel", cx);
+}
+
+fn clear_completed_transfers(view: Entity<DevShellWindow>, cx: &mut App) {
+    let _ = view.update(cx, |state, cx| {
+        let base = state.snapshot.base.clone();
+        let token = state.token.clone();
+        state.feedback = Some("正在清理已完成传输…".into());
+        let view = cx.entity();
+        cx.spawn(async move |this, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    post_json(
+                        &base,
+                        &token,
+                        "/api/transfers/clear-completed",
+                        serde_json::json!({}),
+                    )
+                })
+                .await;
+            let _ = this.update(cx, |state, cx| {
+                match result {
+                    Ok(_) => {
+                        state.transfers.retain(|transfer| {
+                            matches!(transfer.status.as_str(), "queued" | "uploading")
+                        });
+                        state.feedback = Some("已清理完成传输。".into());
+                    }
+                    Err(error) => state.feedback = Some(error),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    });
 }
 
 fn transfer_action(
