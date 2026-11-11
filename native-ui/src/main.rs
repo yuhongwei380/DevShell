@@ -80,6 +80,8 @@ struct DevShellWindow {
     snapshot: BackendSnapshot,
     token: String,
     settings_visible: bool,
+    update_status: Option<String>,
+    update_checking: bool,
     connecting: Option<String>,
     feedback: Option<String>,
     terminal: Option<TerminalState>,
@@ -257,6 +259,8 @@ impl Render for DevShellWindow {
                                         workspace.child(settings_panel(
                                             snapshot.clone(),
                                             view.clone(),
+                                            self.update_status.clone(),
+                                            self.update_checking,
                                         ))
                                     })
                                     .when_some(pending_host_key, |workspace, pending| {
@@ -436,7 +440,12 @@ fn stat_card(label: &'static str, value: usize) -> impl IntoElement {
         .child(Heading::h2(value.to_string()))
 }
 
-fn settings_panel(snapshot: BackendSnapshot, view: Entity<DevShellWindow>) -> impl IntoElement {
+fn settings_panel(
+    snapshot: BackendSnapshot,
+    view: Entity<DevShellWindow>,
+    update_status: Option<String>,
+    update_checking: bool,
+) -> impl IntoElement {
     let config_dir = snapshot
         .config_dir
         .unwrap_or_else(|| "当前锁定或不可读取".into());
@@ -446,6 +455,11 @@ fn settings_panel(snapshot: BackendSnapshot, view: Entity<DevShellWindow>) -> im
     let security = snapshot
         .security_summary
         .unwrap_or_else(|| "当前锁定或不可读取".into());
+    let update_label = if update_checking {
+        "正在检查更新…"
+    } else {
+        "检查更新"
+    };
     div()
         .p_5()
         .rounded_lg()
@@ -463,9 +477,47 @@ fn settings_panel(snapshot: BackendSnapshot, view: Entity<DevShellWindow>) -> im
         .child(Paragraph::new(format!("配置目录：{config_dir}")))
         .child(Paragraph::new(format!("存储格式：{config_format}")))
         .child(Paragraph::new(format!("安全锁定：{security}")))
+        .when_some(update_status, |card, status| {
+            card.child(Paragraph::new(format!("更新状态：{status}")))
+        })
         .child(Paragraph::new(
             "配置、密钥和安全锁定仍由 Go 本地 API 管理，原生窗口不复制写入逻辑。",
         ))
+        .child(
+            KitButton::new("check-updates")
+                .secondary()
+                .label(update_label)
+                .disabled(update_checking)
+                .on_click({
+                    let view = view.clone();
+                    move |_, _, cx| {
+                        let view = view.clone();
+                        view.update(cx, |state, cx| {
+                            let base = state.snapshot.base.clone();
+                            let token = state.token.clone();
+                            state.update_checking = true;
+                            state.feedback = Some("正在检查 release 更新…".into());
+                            cx.notify();
+                            cx.spawn(async move |this, cx| {
+                                let result = cx
+                                    .background_executor()
+                                    .spawn(async move { check_updates(&base, &token) })
+                                    .await;
+                                let _ = this.update(cx, |state, cx| {
+                                    state.update_checking = false;
+                                    state.update_status = Some(match result {
+                                        Ok(status) => status,
+                                        Err(error) => format!("检查失败：{error}"),
+                                    });
+                                    state.feedback = Some("更新检查完成。".into());
+                                    cx.notify();
+                                });
+                            })
+                            .detach();
+                        });
+                    }
+                }),
+        )
         .child(
             KitButton::new("close-settings")
                 .secondary()
@@ -1546,6 +1598,8 @@ fn main() {
                         snapshot,
                         token: args.token.clone(),
                         settings_visible: false,
+                        update_status: None,
+                        update_checking: false,
                         connecting: None,
                         feedback: None,
                         terminal: None,
@@ -2351,6 +2405,88 @@ fn write_ws_control(stream: &mut TcpStream, opcode: u8, payload: &[u8]) -> Resul
     stream
         .write_all(&frame)
         .map_err(|error| format!("发送终端控制帧失败：{error}"))
+}
+
+fn check_updates(base: &str, token: &str) -> Result<String, String> {
+    let value = post_json(
+        base,
+        token,
+        "/api/updates/check",
+        serde_json::json!({"channel": "release"}),
+    )?;
+    let status = value
+        .get("status")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+    if status == "available" {
+        let version = value
+            .get("latestVersion")
+            .and_then(Value::as_str)
+            .unwrap_or("新版本");
+        let build = value
+            .get("latestBuild")
+            .and_then(Value::as_u64)
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "未知构建".into());
+        return Ok(format!(
+            "发现 {version}（构建 {build}），可通过旧版界面完成下载和安装。"
+        ));
+    }
+    if status == "none" {
+        return Ok(format!(
+            "当前已是最新版本（{}），{}。",
+            value
+                .get("currentVersion")
+                .and_then(Value::as_str)
+                .unwrap_or("当前版本"),
+            value
+                .get("reason")
+                .and_then(Value::as_str)
+                .unwrap_or("没有可用更新")
+        ));
+    }
+    Err(value
+        .get("reason")
+        .and_then(Value::as_str)
+        .unwrap_or("更新服务返回未知状态")
+        .to_string())
+}
+
+fn post_json(base: &str, token: &str, path: &str, body: Value) -> Result<Value, String> {
+    let authority = base
+        .strip_prefix("http://")
+        .ok_or_else(|| "后端地址必须使用 http://".to_string())?;
+    let mut stream = TcpStream::connect(authority).map_err(|error| format!("连接失败：{error}"))?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(12)))
+        .map_err(|error| format!("设置超时失败：{error}"))?;
+    let body = body.to_string();
+    let request = format!(
+        "POST {path} HTTP/1.1\r\nHost: {authority}\r\nX-CloudShell-Token: {token}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        body.len(),
+        body
+    );
+    stream
+        .write_all(request.as_bytes())
+        .map_err(|error| format!("发送请求失败：{error}"))?;
+    let mut response = Vec::new();
+    stream
+        .read_to_end(&mut response)
+        .map_err(|error| format!("读取响应失败：{error}"))?;
+    let text = String::from_utf8_lossy(&response);
+    let (headers, body) = text
+        .split_once("\r\n\r\n")
+        .ok_or_else(|| "后端响应格式无效".to_string())?;
+    let status = headers.lines().next().unwrap_or_default();
+    let value: Value = serde_json::from_str(body.trim()).unwrap_or(Value::Null);
+    if !status.contains(" 200 ") {
+        return Err(value
+            .get("error")
+            .and_then(Value::as_str)
+            .unwrap_or(status)
+            .to_string());
+    }
+    Ok(value)
 }
 
 fn get_json(base: &str, token: &str, path: &str) -> Result<Value, String> {
