@@ -53,6 +53,7 @@ struct DevShellWindow {
     feedback: Option<String>,
     terminal: Option<TerminalState>,
     command_input: Entity<InputState>,
+    file_name_input: Entity<InputState>,
     files: Option<FileListState>,
 }
 
@@ -190,7 +191,11 @@ impl Render for DevShellWindow {
                                         ))
                                     })
                                     .when_some(self.files.clone(), |workspace, files| {
-                                        workspace.child(file_panel(files, view.clone()))
+                                        workspace.child(file_panel(
+                                            files,
+                                            view.clone(),
+                                            self.file_name_input.clone(),
+                                        ))
                                     })
                                     .child(
                                         div()
@@ -312,7 +317,11 @@ fn terminal_panel(
         );
 }
 
-fn file_panel(files: FileListState, view: Entity<DevShellWindow>) -> impl IntoElement {
+fn file_panel(
+    files: FileListState,
+    view: Entity<DevShellWindow>,
+    file_name_input: Entity<InputState>,
+) -> impl IntoElement {
     let current_path = files.path.clone();
     let parent = parent_remote_path(&current_path);
     div()
@@ -343,6 +352,27 @@ fn file_panel(files: FileListState, view: Entity<DevShellWindow>) -> impl IntoEl
                                 navigate_files(view.clone(), parent.clone(), cx)
                             }),
                     )
+                }),
+        )
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap_2()
+                .child(Input::new(&file_name_input))
+                .child({
+                    let view = view.clone();
+                    let file_name_input = file_name_input.clone();
+                    let path = current_path.clone();
+                    KitButton::new("file-mkdir")
+                        .secondary()
+                        .label("新建目录")
+                        .on_click(move |_, _, cx| {
+                            let name = file_name_input.read(cx).value(cx).to_string();
+                            if !name.trim().is_empty() {
+                                create_directory(view.clone(), path.clone(), name, cx);
+                            }
+                        })
                 }),
         )
         .children(files.entries.into_iter().take(12).map(|entry| {
@@ -395,6 +425,42 @@ fn navigate_files(view: Entity<DevShellWindow>, path: String, cx: &mut App) {
                         status: error,
                     },
                 });
+                cx.notify();
+            });
+        })
+        .detach();
+    });
+}
+
+fn create_directory(view: Entity<DevShellWindow>, path: String, name: String, cx: &mut App) {
+    let _ = view.update(cx, |state, cx| {
+        let Some(session_id) = state
+            .terminal
+            .as_ref()
+            .map(|terminal| terminal.session_id.clone())
+        else {
+            return;
+        };
+        let base = state.snapshot.base.clone();
+        let token = state.token.clone();
+        state.feedback = Some(format!("正在创建目录 {}…", name));
+        let view = cx.entity();
+        cx.spawn(async move |_, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    post_file_action(&base, &token, &session_id, "mkdir", &path, &name)?;
+                    load_files(&base, &token, &session_id, &path)
+                })
+                .await;
+            let _ = view.update(cx, |state, cx| {
+                match result {
+                    Ok(files) => {
+                        state.files = Some(files);
+                        state.feedback = Some("目录已创建".into());
+                    }
+                    Err(error) => state.feedback = Some(error),
+                }
                 cx.notify();
             });
         })
@@ -611,6 +677,8 @@ fn main() {
                     window.focus(&focus, cx);
                     let command_input = cx
                         .new(|cx| InputState::new(window, cx).placeholder("终端输入，Enter 发送"));
+                    let file_name_input =
+                        cx.new(|cx| InputState::new(window, cx).placeholder("目录名称"));
                     DevShellWindow {
                         focus,
                         snapshot,
@@ -619,6 +687,7 @@ fn main() {
                         feedback: None,
                         terminal: None,
                         command_input,
+                        file_name_input,
                         files: None,
                     }
                 })
@@ -811,6 +880,55 @@ fn load_files(
         entries,
         status: "已加载".into(),
     })
+}
+
+fn post_file_action(
+    base: &str,
+    token: &str,
+    session_id: &str,
+    action: &str,
+    path: &str,
+    name: &str,
+) -> Result<(), String> {
+    let authority = base
+        .strip_prefix("http://")
+        .ok_or_else(|| "后端地址必须使用 http://".to_string())?;
+    let mut stream =
+        TcpStream::connect(authority).map_err(|error| format!("连接文件服务失败：{error}"))?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(20)))
+        .map_err(|error| format!("设置文件请求超时失败：{error}"))?;
+    let body = serde_json::json!({
+        "action": action,
+        "path": path,
+        "name": name,
+    })
+    .to_string();
+    let request = format!(
+        "POST /api/sessions/{session_id}/file-action HTTP/1.1\r\nHost: {authority}\r\nX-CloudShell-Token: {token}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        body.len(),
+        body
+    );
+    stream
+        .write_all(request.as_bytes())
+        .map_err(|error| format!("发送文件操作失败：{error}"))?;
+    let mut response = Vec::new();
+    stream
+        .read_to_end(&mut response)
+        .map_err(|error| format!("读取文件操作响应失败：{error}"))?;
+    let text = String::from_utf8_lossy(&response);
+    let (headers, body) = text
+        .split_once("\r\n\r\n")
+        .ok_or_else(|| "文件操作响应格式无效".to_string())?;
+    if !headers.lines().next().unwrap_or_default().contains(" 200 ") {
+        let value: Value = serde_json::from_str(body.trim()).unwrap_or(Value::Null);
+        return Err(value
+            .get("error")
+            .and_then(Value::as_str)
+            .unwrap_or("文件操作失败")
+            .to_string());
+    }
+    Ok(())
 }
 
 fn query_escape(value: &str) -> String {
