@@ -39,6 +39,7 @@ struct BackendSnapshot {
     config_dir: Option<String>,
     config_format: Option<String>,
     security_summary: Option<String>,
+    proxies: Vec<ProxySummary>,
 }
 
 #[derive(Clone, Debug)]
@@ -50,6 +51,15 @@ struct ServerSummary {
     user: String,
     auth: String,
     proxy_id: String,
+}
+
+#[derive(Clone, Debug)]
+struct ProxySummary {
+    id: String,
+    name: String,
+    kind: String,
+    host: String,
+    port: u16,
 }
 
 #[derive(Clone, Debug)]
@@ -104,6 +114,7 @@ struct DevShellWindow {
     profile_port_input: Entity<InputState>,
     profile_key_path_input: Entity<InputState>,
     profile_auth: String,
+    profile_proxy_id: Option<String>,
     pending_host_key: Option<PendingHostKey>,
     files: Option<FileListState>,
     monitor: Option<MonitorState>,
@@ -388,6 +399,7 @@ impl Render for DevShellWindow {
                                                                                 input.set_value("", window, cx)
                                                                             });
                                                                             state.profile_auth = "password".into();
+                                                                            state.profile_proxy_id = None;
                                                                         }
                                                                         cx.notify();
                                                                     });
@@ -405,6 +417,8 @@ impl Render for DevShellWindow {
                                                     self.profile_key_path_input.clone(),
                                                     self.profile_editing_id.clone(),
                                                     self.profile_auth.clone(),
+                                                    self.profile_proxy_id.clone(),
+                                                    snapshot.proxies.clone(),
                                                     self.profile_saving,
                                                 ))
                                             })
@@ -711,6 +725,8 @@ fn profile_form(
     key_path_input: Entity<InputState>,
     editing_id: Option<String>,
     auth: String,
+    proxy_id: Option<String>,
+    proxies: Vec<ProxySummary>,
     saving: bool,
 ) -> impl IntoElement {
     let editing = editing_id.is_some();
@@ -770,6 +786,27 @@ fn profile_form(
         .when(auth == "agent", |form| {
             form.child(Paragraph::new("连接时使用本机 SSH Agent，不保存密码。"))
         })
+        .child(Paragraph::new("连接代理"))
+        .child(
+            div()
+                .flex()
+                .gap_2()
+                .child(proxy_choice_button(
+                    view.clone(),
+                    None,
+                    "直连".into(),
+                    proxy_id.is_none(),
+                ))
+                .children(proxies.into_iter().map(|proxy| {
+                    let id = proxy.id.clone();
+                    let label = format!(
+                        "{} · {} {}:{}",
+                        proxy.name, proxy.kind, proxy.host, proxy.port
+                    );
+                    let selected = proxy_id.as_deref() == Some(id.as_str());
+                    proxy_choice_button(view.clone(), Some(id), label, selected)
+                })),
+        )
         .child(
             KitButton::new("save-server")
                 .secondary()
@@ -814,6 +851,7 @@ fn profile_form(
                             .value(cx)
                             .trim()
                             .to_string();
+                        let proxy_id = state.profile_proxy_id.clone();
                         let secret = state.secret_input.read(cx).value(cx).to_string();
                         if name.is_empty() || host.is_empty() || user.is_empty() {
                             state.feedback = Some("请填写服务器名称、地址和用户名。".into());
@@ -848,6 +886,7 @@ fn profile_form(
                                         editing_id.as_deref(),
                                         &auth,
                                         &key_path,
+                                        proxy_id.as_deref(),
                                         &name,
                                         &host,
                                         port,
@@ -891,6 +930,29 @@ fn auth_choice_button(
     button.label(label).on_click(move |_, _, cx| {
         view.update(cx, |state, cx| {
             state.profile_auth = auth.into();
+            cx.notify();
+        });
+    })
+}
+
+fn proxy_choice_button(
+    view: Entity<DevShellWindow>,
+    proxy_id: Option<String>,
+    label: String,
+    selected: bool,
+) -> impl IntoElement {
+    let button = KitButton::new(format!(
+        "profile-proxy-{}",
+        proxy_id.as_deref().unwrap_or("direct")
+    ));
+    let button = if selected {
+        button.primary()
+    } else {
+        button.secondary()
+    };
+    button.label(label).on_click(move |_, _, cx| {
+        view.update(cx, |state, cx| {
+            state.profile_proxy_id = proxy_id.clone();
             cx.notify();
         });
     })
@@ -2072,6 +2134,7 @@ fn server_row(
                                     input.set_value("", window, cx)
                                 });
                                 state.profile_auth = server.auth.clone();
+                                state.profile_proxy_id = None;
                                 state.feedback = Some("已载入服务器配置，可修改后保存。".into());
                                 cx.notify();
                             });
@@ -2194,6 +2257,7 @@ fn main() {
                         profile_port_input,
                         profile_key_path_input,
                         profile_auth: "password".into(),
+                        profile_proxy_id: None,
                         pending_host_key: None,
                         files: None,
                         monitor: None,
@@ -2253,6 +2317,7 @@ impl BackendSnapshot {
             config_dir: None,
             config_format: None,
             security_summary: None,
+            proxies: Vec::new(),
         };
         match get_json(base, token, "/boot.js") {
             Ok(value) => {
@@ -2317,6 +2382,43 @@ impl BackendSnapshot {
                     .get("groupNodes")
                     .and_then(Value::as_array)
                     .map_or(0, Vec::len);
+                snapshot.proxies = value
+                    .get("proxies")
+                    .and_then(Value::as_array)
+                    .map(|proxies| {
+                        proxies
+                            .iter()
+                            .filter_map(|proxy| {
+                                Some(ProxySummary {
+                                    id: proxy.get("id")?.as_str()?.to_string(),
+                                    name: proxy
+                                        .get("name")
+                                        .and_then(Value::as_str)
+                                        .unwrap_or("代理")
+                                        .to_string(),
+                                    kind: proxy
+                                        .get("proxy")
+                                        .and_then(|value| value.get("type"))
+                                        .and_then(Value::as_str)
+                                        .unwrap_or("direct")
+                                        .to_string(),
+                                    host: proxy
+                                        .get("proxy")
+                                        .and_then(|value| value.get("host"))
+                                        .and_then(Value::as_str)
+                                        .unwrap_or_default()
+                                        .to_string(),
+                                    port: proxy
+                                        .get("proxy")
+                                        .and_then(|value| value.get("port"))
+                                        .and_then(Value::as_u64)
+                                        .unwrap_or(0)
+                                        as u16,
+                                })
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
             }
             Err(error) if error.contains("423") => snapshot.locked = true,
             Err(error) if snapshot.error.is_none() => snapshot.error = Some(error),
@@ -3261,6 +3363,7 @@ fn save_profile_and_reload(
     profile_id: Option<&str>,
     auth: &str,
     key_path: &str,
+    proxy_id: Option<&str>,
     name: &str,
     host: &str,
     port: u16,
@@ -3279,6 +3382,9 @@ fn save_profile_and_reload(
     });
     if auth == "key" {
         profile["keyPath"] = Value::String(key_path.to_string());
+    }
+    if let Some(proxy_id) = proxy_id {
+        profile["proxyId"] = Value::String(proxy_id.to_string());
     }
     if auth == "password" && !secret.is_empty() {
         profile["secret"] = Value::String(secret.to_string());
