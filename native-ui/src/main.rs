@@ -115,6 +115,14 @@ struct DevShellWindow {
     profile_key_path_input: Entity<InputState>,
     profile_auth: String,
     profile_proxy_id: Option<String>,
+    proxy_form_open: bool,
+    proxy_saving: bool,
+    proxy_name_input: Entity<InputState>,
+    proxy_host_input: Entity<InputState>,
+    proxy_port_input: Entity<InputState>,
+    proxy_user_input: Entity<InputState>,
+    proxy_password_input: Entity<InputState>,
+    proxy_kind: String,
     pending_host_key: Option<PendingHostKey>,
     files: Option<FileListState>,
     monitor: Option<MonitorState>,
@@ -311,6 +319,14 @@ impl Render for DevShellWindow {
                                             self.update_hash.clone(),
                                             self.update_checking,
                                             self.update_download.clone(),
+                                            self.proxy_form_open,
+                                            self.proxy_saving,
+                                            self.proxy_name_input.clone(),
+                                            self.proxy_host_input.clone(),
+                                            self.proxy_port_input.clone(),
+                                            self.proxy_user_input.clone(),
+                                            self.proxy_password_input.clone(),
+                                            self.proxy_kind.clone(),
                                         ))
                                     })
                                     .when_some(pending_host_key, |workspace, pending| {
@@ -562,6 +578,14 @@ fn settings_panel(
     update_hash: Option<String>,
     update_checking: bool,
     update_download: Option<UpdateDownloadState>,
+    proxy_form_open: bool,
+    proxy_saving: bool,
+    proxy_name_input: Entity<InputState>,
+    proxy_host_input: Entity<InputState>,
+    proxy_port_input: Entity<InputState>,
+    proxy_user_input: Entity<InputState>,
+    proxy_password_input: Entity<InputState>,
+    proxy_kind: String,
 ) -> impl IntoElement {
     let config_dir = snapshot
         .config_dir
@@ -598,16 +622,68 @@ fn settings_panel(
         .child(Paragraph::new(format!("配置目录：{config_dir}")))
         .child(Paragraph::new(format!("存储格式：{config_format}")))
         .child(Paragraph::new(format!("安全锁定：{security}")))
-        .when(!snapshot.proxies.is_empty(), |panel| {
-            panel
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
                 .child(Paragraph::new("已保存代理"))
-                .children(snapshot.proxies.iter().map(|proxy| {
-                    Paragraph::new(format!(
-                        "{} · {} {}:{}",
-                        proxy.name, proxy.kind, proxy.host, proxy.port
-                    ))
-                }))
+                .child(
+                    KitButton::new("new-proxy")
+                        .secondary()
+                        .label(if proxy_form_open {
+                            "收起新增"
+                        } else {
+                            "新增代理"
+                        })
+                        .on_click({
+                            let view = view.clone();
+                            move |_, window, cx| {
+                                view.update(cx, |state, cx| {
+                                    let opening = !state.proxy_form_open;
+                                    state.proxy_form_open = opening;
+                                    if opening {
+                                        state.proxy_name_input.update(cx, |input, cx| {
+                                            input.set_value("", window, cx)
+                                        });
+                                        state.proxy_host_input.update(cx, |input, cx| {
+                                            input.set_value("", window, cx)
+                                        });
+                                        state.proxy_port_input.update(cx, |input, cx| {
+                                            input.set_value("1080", window, cx)
+                                        });
+                                        state.proxy_user_input.update(cx, |input, cx| {
+                                            input.set_value("", window, cx)
+                                        });
+                                        state.proxy_password_input.update(cx, |input, cx| {
+                                            input.set_value("", window, cx)
+                                        });
+                                        state.proxy_kind = "socks5".into();
+                                    }
+                                    cx.notify();
+                                });
+                            }
+                        }),
+                ),
+        )
+        .when(proxy_form_open, |panel| {
+            panel.child(proxy_form(
+                view.clone(),
+                proxy_name_input.clone(),
+                proxy_host_input.clone(),
+                proxy_port_input.clone(),
+                proxy_user_input.clone(),
+                proxy_password_input.clone(),
+                proxy_kind.clone(),
+                proxy_saving,
+            ))
         })
+        .children(snapshot.proxies.iter().map(|proxy| {
+            Paragraph::new(format!(
+                "{} · {} {}:{}",
+                proxy.name, proxy.kind, proxy.host, proxy.port
+            ))
+        }))
         .when_some(update_status, |card, status| {
             card.child(Paragraph::new(format!("更新状态：{status}")))
         })
@@ -721,6 +797,130 @@ fn settings_panel(
                     view.update(cx, |state, cx| {
                         state.settings_visible = false;
                         cx.notify();
+                    });
+                }),
+        )
+}
+
+fn proxy_form(
+    view: Entity<DevShellWindow>,
+    name_input: Entity<InputState>,
+    host_input: Entity<InputState>,
+    port_input: Entity<InputState>,
+    user_input: Entity<InputState>,
+    password_input: Entity<InputState>,
+    kind: String,
+    saving: bool,
+) -> impl IntoElement {
+    let socks_button = KitButton::new("proxy-kind-socks5");
+    let socks_button = if kind == "socks5" {
+        socks_button.primary()
+    } else {
+        socks_button.secondary()
+    };
+    let http_button = KitButton::new("proxy-kind-http");
+    let http_button = if kind == "http" {
+        http_button.primary()
+    } else {
+        http_button.secondary()
+    };
+    div()
+        .p_4()
+        .rounded_md()
+        .bg(gpui_kit::rgb(0x171c23))
+        .border_1()
+        .border_color(gpui_kit::rgb(0x2b313b))
+        .flex()
+        .flex_col()
+        .gap_2()
+        .child(Paragraph::new("新增连接代理"))
+        .child(Input::new(&name_input))
+        .child(
+            div()
+                .flex()
+                .gap_2()
+                .child(socks_button.label("SOCKS5").on_click({
+                    let view = view.clone();
+                    move |_, _, cx| {
+                        view.update(cx, |state, cx| {
+                            state.proxy_kind = "socks5".into();
+                            cx.notify();
+                        });
+                    }
+                }))
+                .child(http_button.label("HTTP CONNECT").on_click({
+                    let view = view.clone();
+                    move |_, _, cx| {
+                        view.update(cx, |state, cx| {
+                            state.proxy_kind = "http".into();
+                            cx.notify();
+                        });
+                    }
+                })),
+        )
+        .child(Input::new(&host_input))
+        .child(Input::new(&port_input))
+        .child(Input::new(&user_input))
+        .child(Input::new(&password_input).mask_toggle())
+        .child(
+            KitButton::new("save-proxy")
+                .secondary()
+                .label(if saving {
+                    "保存中…"
+                } else {
+                    "保存代理"
+                })
+                .disabled(saving)
+                .on_click(move |_, _, cx| {
+                    view.update(cx, |state, cx| {
+                        let name = state.proxy_name_input.read(cx).value(cx).trim().to_string();
+                        let host = state.proxy_host_input.read(cx).value(cx).trim().to_string();
+                        let port_text =
+                            state.proxy_port_input.read(cx).value(cx).trim().to_string();
+                        let user = state.proxy_user_input.read(cx).value(cx).trim().to_string();
+                        let password = state.proxy_password_input.read(cx).value(cx).to_string();
+                        if name.is_empty() || host.is_empty() {
+                            state.feedback = Some("请填写代理名称和地址。".into());
+                            cx.notify();
+                            return;
+                        }
+                        let port = match port_text.parse::<u16>() {
+                            Ok(port) if port > 0 => port,
+                            _ => {
+                                state.feedback = Some("代理端口必须是 1–65535 的数字。".into());
+                                cx.notify();
+                                return;
+                            }
+                        };
+                        let base = state.snapshot.base.clone();
+                        let token = state.token.clone();
+                        let kind = state.proxy_kind.clone();
+                        state.proxy_saving = true;
+                        state.feedback = Some("正在保存代理配置…".into());
+                        cx.notify();
+                        cx.spawn(async move |this, cx| {
+                            let result = cx
+                                .background_executor()
+                                .spawn(async move {
+                                    save_proxy_and_reload(
+                                        &base, &token, &name, &kind, &host, port, &user, &password,
+                                    )
+                                })
+                                .await;
+                            let _ = this.update(cx, |state, cx| {
+                                state.proxy_saving = false;
+                                match result {
+                                    Ok(snapshot) => {
+                                        state.snapshot = snapshot;
+                                        state.proxy_form_open = false;
+                                        state.feedback = Some("代理配置已保存。".into());
+                                    }
+                                    Err(error) => state.feedback = Some(error),
+                                }
+                                cx.notify();
+                            });
+                        })
+                        .detach();
                     });
                 }),
         )
@@ -2238,6 +2438,22 @@ fn main() {
                     });
                     let profile_key_path_input =
                         cx.new(|cx| InputState::new(window, cx).placeholder("私钥文件路径"));
+                    let proxy_name_input =
+                        cx.new(|cx| InputState::new(window, cx).placeholder("代理名称"));
+                    let proxy_host_input =
+                        cx.new(|cx| InputState::new(window, cx).placeholder("代理地址"));
+                    let proxy_port_input = cx.new(|cx| {
+                        InputState::new(window, cx)
+                            .default_value("1080")
+                            .placeholder("代理端口")
+                    });
+                    let proxy_user_input =
+                        cx.new(|cx| InputState::new(window, cx).placeholder("代理用户名"));
+                    let proxy_password_input = cx.new(|cx| {
+                        InputState::new(window, cx)
+                            .placeholder("代理密码")
+                            .masked(true)
+                    });
                     let preview_input =
                         cx.new(|cx| TextareaState::new(window, cx).auto_grow(8, 24));
                     DevShellWindow {
@@ -2268,6 +2484,14 @@ fn main() {
                         profile_key_path_input,
                         profile_auth: "password".into(),
                         profile_proxy_id: None,
+                        proxy_form_open: false,
+                        proxy_saving: false,
+                        proxy_name_input,
+                        proxy_host_input,
+                        proxy_port_input,
+                        proxy_user_input,
+                        proxy_password_input,
+                        proxy_kind: "socks5".into(),
                         pending_host_key: None,
                         files: None,
                         monitor: None,
@@ -3400,6 +3624,35 @@ fn save_profile_and_reload(
         profile["secret"] = Value::String(secret.to_string());
     }
     post_json(base, token, "/api/profiles", profile)?;
+    Ok(BackendSnapshot::load(base, token))
+}
+
+fn save_proxy_and_reload(
+    base: &str,
+    token: &str,
+    name: &str,
+    kind: &str,
+    host: &str,
+    port: u16,
+    user: &str,
+    password: &str,
+) -> Result<BackendSnapshot, String> {
+    post_json(
+        base,
+        token,
+        "/api/proxies",
+        serde_json::json!({
+            "id": "",
+            "name": name,
+            "proxy": {
+                "type": kind,
+                "host": host,
+                "port": port,
+                "user": user,
+                "password": password,
+            },
+        }),
+    )?;
     Ok(BackendSnapshot::load(base, token))
 }
 
