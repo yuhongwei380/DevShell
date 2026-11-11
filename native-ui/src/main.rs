@@ -84,6 +84,7 @@ struct DevShellWindow {
     update_checking: bool,
     profile_form_open: bool,
     profile_saving: bool,
+    pending_profile_delete: Option<String>,
     connecting: Option<String>,
     feedback: Option<String>,
     terminal: Option<TerminalState>,
@@ -361,6 +362,7 @@ impl Render for DevShellWindow {
                                                             server,
                                                             self.connecting.as_deref(),
                                                             pending_profile,
+                                                            self.pending_profile_delete.as_deref(),
                                                         )
                                                     },
                                                 ),
@@ -1436,10 +1438,14 @@ fn server_row(
     server: ServerSummary,
     connecting: Option<&str>,
     pending_profile: Option<&str>,
+    pending_delete: Option<&str>,
 ) -> impl IntoElement {
     let server_id = server.id.clone();
     let is_connecting = connecting == Some(server.id.as_str());
     let is_host_key_pending = pending_profile == Some(server.id.as_str());
+    let is_delete_pending = pending_delete == Some(server.id.as_str());
+    let delete_profile_id = server.id.clone();
+    let delete_view = view.clone();
     let label = if is_connecting {
         "连接中…"
     } else if is_host_key_pending {
@@ -1712,6 +1718,53 @@ fn server_row(
                                 .detach();
                             });
                         }),
+                )
+                .child(
+                    KitButton::new(format!("delete-{delete_profile_id}"))
+                        .ghost()
+                        .label(if is_delete_pending { "确认删除" } else { "删除" })
+                        .on_click({
+                            let view = delete_view;
+                            move |_, _, cx| {
+                                let profile_id = delete_profile_id.clone();
+                                view.update(cx, |state, cx| {
+                                    if is_delete_pending {
+                                        let base = state.snapshot.base.clone();
+                                        let token = state.token.clone();
+                                        state.feedback = Some("正在回收服务器配置…".into());
+                                        cx.notify();
+                                        cx.spawn(async move |this, cx| {
+                                            let result = cx
+                                                .background_executor()
+                                                .spawn(async move {
+                                                    delete_profile_and_reload(
+                                                        &base, &token, &profile_id,
+                                                    )
+                                                })
+                                                .await;
+                                            let _ = this.update(cx, |state, cx| {
+                                                match result {
+                                                    Ok(snapshot) => {
+                                                        state.snapshot = snapshot;
+                                                        state.pending_profile_delete = None;
+                                                        state.feedback =
+                                                            Some("服务器配置已移入回收站。".into());
+                                                    }
+                                                    Err(error) => state.feedback = Some(error),
+                                                }
+                                                cx.notify();
+                                            });
+                                        })
+                                        .detach();
+                                    } else {
+                                        state.pending_profile_delete = Some(profile_id);
+                                        state.feedback =
+                                            Some("再次点击删除按钮确认移入回收站。".into());
+                                        cx.notify();
+                                    }
+                                });
+                            }
+                        }),
                 ),
         )
 }
@@ -1761,6 +1814,7 @@ fn main() {
                         update_checking: false,
                         profile_form_open: false,
                         profile_saving: false,
+                        pending_profile_delete: None,
                         connecting: None,
                         feedback: None,
                         terminal: None,
@@ -2643,6 +2697,15 @@ fn save_profile_and_reload(
     Ok(BackendSnapshot::load(base, token))
 }
 
+fn delete_profile_and_reload(
+    base: &str,
+    token: &str,
+    profile_id: &str,
+) -> Result<BackendSnapshot, String> {
+    delete_json(base, token, &format!("/api/profiles/{profile_id}"))?;
+    Ok(BackendSnapshot::load(base, token))
+}
+
 fn post_json(base: &str, token: &str, path: &str, body: Value) -> Result<Value, String> {
     let authority = base
         .strip_prefix("http://")
@@ -2668,6 +2731,40 @@ fn post_json(base: &str, token: &str, path: &str, body: Value) -> Result<Value, 
     let (headers, body) = text
         .split_once("\r\n\r\n")
         .ok_or_else(|| "后端响应格式无效".to_string())?;
+    let status = headers.lines().next().unwrap_or_default();
+    let value: Value = serde_json::from_str(body.trim()).unwrap_or(Value::Null);
+    if !status.contains(" 200 ") {
+        return Err(value
+            .get("error")
+            .and_then(Value::as_str)
+            .unwrap_or(status)
+            .to_string());
+    }
+    Ok(value)
+}
+
+fn delete_json(base: &str, token: &str, path: &str) -> Result<Value, String> {
+    let authority = base
+        .strip_prefix("http://")
+        .ok_or_else(|| "后端地址必须使用 http://".to_string())?;
+    let mut stream = TcpStream::connect(authority).map_err(|error| format!("连接失败：{error}"))?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(12)))
+        .map_err(|error| format!("设置超时失败：{error}"))?;
+    let request = format!(
+        "DELETE {path} HTTP/1.1\r\nHost: {authority}\r\nX-CloudShell-Token: {token}\r\nConnection: close\r\n\r\n"
+    );
+    stream
+        .write_all(request.as_bytes())
+        .map_err(|error| format!("发送删除请求失败：{error}"))?;
+    let mut response = Vec::new();
+    stream
+        .read_to_end(&mut response)
+        .map_err(|error| format!("读取删除响应失败：{error}"))?;
+    let text = String::from_utf8_lossy(&response);
+    let (headers, body) = text
+        .split_once("\r\n\r\n")
+        .ok_or_else(|| "删除响应格式无效".to_string())?;
     let status = headers.lines().next().unwrap_or_default();
     let value: Value = serde_json::from_str(body.trim()).unwrap_or(Value::Null);
     if !status.contains(" 200 ") {
