@@ -18,7 +18,10 @@ use ely_gpui_component::{
 use gpui_kit::{
     App, AppContext, Context, Disableable, Entity, FocusHandle, IntoElement, ParentElement, Render,
     Styled, Window, WindowOptions,
-    component::button::{Button as KitButton, ButtonVariants},
+    component::{
+        button::{Button as KitButton, ButtonVariants},
+        input::{Input, InputState},
+    },
     div, px,
 };
 use serde_json::Value;
@@ -49,6 +52,7 @@ struct DevShellWindow {
     connecting: Option<String>,
     feedback: Option<String>,
     terminal: Option<TerminalState>,
+    command_input: Entity<InputState>,
 }
 
 #[derive(Clone, Debug)]
@@ -56,6 +60,7 @@ struct TerminalState {
     session_id: String,
     output: String,
     status: String,
+    input_tx: Option<mpsc::Sender<String>>,
 }
 
 enum TerminalEvent {
@@ -162,7 +167,11 @@ impl Render for DevShellWindow {
                                             ),
                                     )
                                     .when_some(self.terminal.clone(), |workspace, terminal| {
-                                        workspace.child(terminal_panel(terminal))
+                                        workspace.child(terminal_panel(
+                                            terminal,
+                                            self.command_input.clone(),
+                                            view.clone(),
+                                        ))
                                     })
                                     .child(
                                         div()
@@ -231,7 +240,11 @@ fn stat_card(label: &'static str, value: usize) -> impl IntoElement {
         .child(Heading::h2(value.to_string()))
 }
 
-fn terminal_panel(terminal: TerminalState) -> impl IntoElement {
+fn terminal_panel(
+    terminal: TerminalState,
+    command_input: Entity<InputState>,
+    view: Entity<DevShellWindow>,
+) -> impl IntoElement {
     let output = if terminal.output.is_empty() {
         "等待远端终端输出…".to_string()
     } else {
@@ -250,7 +263,34 @@ fn terminal_panel(terminal: TerminalState) -> impl IntoElement {
             "终端 · {} · {}",
             terminal.session_id, terminal.status
         )))
-        .child(Paragraph::new(output));
+        .child(Paragraph::new(output))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap_2()
+                .child(Input::new(&command_input))
+                .child(
+                    KitButton::new("terminal-send")
+                        .primary()
+                        .label("发送")
+                        .on_click(move |_, _, cx| {
+                            let text = command_input.read(cx).value(cx).to_string();
+                            if text.is_empty() {
+                                return;
+                            }
+                            view.update(cx, |state, _| {
+                                if let Some(sender) = state
+                                    .terminal
+                                    .as_ref()
+                                    .and_then(|terminal| terminal.input_tx.clone())
+                                {
+                                    let _ = sender.send(format!("{text}\n"));
+                                }
+                            });
+                        }),
+                ),
+        );
 }
 
 fn server_row(
@@ -311,6 +351,7 @@ fn server_row(
                                                     session_id
                                                 ));
                                                 let (sender, receiver) = mpsc::channel();
+                                                let (input_tx, input_rx) = mpsc::channel();
                                                 let base = state.snapshot.base.clone();
                                                 let token = state.token.clone();
                                                 let terminal_id = session_id.clone();
@@ -320,6 +361,7 @@ fn server_row(
                                                         &token,
                                                         &terminal_id,
                                                         &sender,
+                                                        input_rx,
                                                     ) {
                                                         Ok(()) => TerminalEvent::Closed(
                                                             "终端连接已关闭".into(),
@@ -334,6 +376,7 @@ fn server_row(
                                                     session_id,
                                                     output: String::new(),
                                                     status: "连接中".into(),
+                                                    input_tx: Some(input_tx),
                                                 });
                                                 let view = cx.entity();
                                                 cx.spawn(async move |_, cx| {
@@ -405,6 +448,8 @@ fn main() {
                 cx.new(|cx| {
                     let focus = cx.focus_handle();
                     window.focus(&focus, cx);
+                    let command_input = cx
+                        .new(|cx| InputState::new(window, cx).placeholder("终端输入，Enter 发送"));
                     DevShellWindow {
                         focus,
                         snapshot,
@@ -412,6 +457,7 @@ fn main() {
                         connecting: None,
                         feedback: None,
                         terminal: None,
+                        command_input,
                     }
                 })
             })
@@ -564,6 +610,7 @@ fn terminal_reader(
     token: &str,
     session_id: &str,
     sender: &mpsc::Sender<TerminalEvent>,
+    input_rx: mpsc::Receiver<String>,
 ) -> Result<(), String> {
     let authority = base
         .strip_prefix("http://")
@@ -589,6 +636,17 @@ fn terminal_reader(
             headers.lines().next().unwrap_or_default()
         ));
     }
+    let mut writer = stream
+        .try_clone()
+        .map_err(|error| format!("复制终端通道失败：{error}"))?;
+    thread::spawn(move || {
+        while let Ok(text) = input_rx.recv() {
+            let payload = serde_json::json!({"type":"input","data":text}).to_string();
+            if write_ws_text(&mut writer, &payload).is_err() {
+                break;
+            }
+        }
+    });
     write_ws_text(&mut stream, r#"{"type":"resize","cols":120,"rows":30}"#)?;
     let _ = sender.send(TerminalEvent::Info("终端已连接".into()));
 
