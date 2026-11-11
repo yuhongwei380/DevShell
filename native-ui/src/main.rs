@@ -3,9 +3,12 @@ use std::{
     io::{Read, Write},
     net::TcpStream,
     process,
+    sync::mpsc,
+    thread,
     time::Duration,
 };
 
+use base64::Engine;
 use ely_gpui_component::{
     Assets as ElyAssets,
     buttons::Button as ElyButton,
@@ -45,6 +48,20 @@ struct DevShellWindow {
     token: String,
     connecting: Option<String>,
     feedback: Option<String>,
+    terminal: Option<TerminalState>,
+}
+
+#[derive(Clone, Debug)]
+struct TerminalState {
+    session_id: String,
+    output: String,
+    status: String,
+}
+
+enum TerminalEvent {
+    Output(String),
+    Info(String),
+    Closed(String),
 }
 
 impl Render for DevShellWindow {
@@ -144,6 +161,9 @@ impl Render for DevShellWindow {
                                                 ),
                                             ),
                                     )
+                                    .when_some(self.terminal.clone(), |workspace, terminal| {
+                                        workspace.child(terminal_panel(terminal))
+                                    })
                                     .child(
                                         div()
                                             .p_5()
@@ -211,6 +231,28 @@ fn stat_card(label: &'static str, value: usize) -> impl IntoElement {
         .child(Heading::h2(value.to_string()))
 }
 
+fn terminal_panel(terminal: TerminalState) -> impl IntoElement {
+    let output = if terminal.output.is_empty() {
+        "等待远端终端输出…".to_string()
+    } else {
+        terminal.output
+    };
+    div()
+        .p_4()
+        .rounded_lg()
+        .bg(gpui_kit::rgb(0x080b0f))
+        .border_1()
+        .border_color(gpui_kit::rgb(0x2b313b))
+        .flex()
+        .flex_col()
+        .gap_2()
+        .child(Paragraph::new(format!(
+            "终端 · {} · {}",
+            terminal.session_id, terminal.status
+        )))
+        .child(Paragraph::new(output));
+}
+
 fn server_row(
     view: Entity<DevShellWindow>,
     server: ServerSummary,
@@ -262,13 +304,81 @@ fn server_row(
                                         .await;
                                     let _ = this.update(cx, |state, cx| {
                                         state.connecting = None;
-                                        state.feedback = Some(match result {
-                                            Ok(session_id) => format!(
-                                                "连接已建立，会话 {}；终端视图正在迁移。",
-                                                session_id
-                                            ),
-                                            Err(error) => error,
-                                        });
+                                        match result {
+                                            Ok(session_id) => {
+                                                state.feedback = Some(format!(
+                                                    "连接已建立，会话 {}；正在打开终端。",
+                                                    session_id
+                                                ));
+                                                let (sender, receiver) = mpsc::channel();
+                                                let base = state.snapshot.base.clone();
+                                                let token = state.token.clone();
+                                                let terminal_id = session_id.clone();
+                                                thread::spawn(move || {
+                                                    let event = match terminal_reader(
+                                                        &base,
+                                                        &token,
+                                                        &terminal_id,
+                                                        &sender,
+                                                    ) {
+                                                        Ok(()) => TerminalEvent::Closed(
+                                                            "终端连接已关闭".into(),
+                                                        ),
+                                                        Err(error) => TerminalEvent::Closed(
+                                                            format!("终端错误：{error}"),
+                                                        ),
+                                                    };
+                                                    let _ = sender.send(event);
+                                                });
+                                                state.terminal = Some(TerminalState {
+                                                    session_id,
+                                                    output: String::new(),
+                                                    status: "连接中".into(),
+                                                });
+                                                let view = cx.entity();
+                                                cx.spawn(async move |_, cx| {
+                                                    let mut closed = false;
+                                                    while !closed {
+                                                        while let Ok(event) = receiver.try_recv() {
+                                                            let _ = view.update(cx, |state, cx| {
+                                                                if let Some(terminal) =
+                                                                    state.terminal.as_mut()
+                                                                {
+                                                                    match event {
+                                                                        TerminalEvent::Output(text) => {
+                                                                            terminal.output.push_str(&text);
+                                                                            let count = terminal.output.chars().count();
+                                                                            if count > 12000 {
+                                                                                terminal.output = terminal
+                                                                                    .output
+                                                                                    .chars()
+                                                                                    .skip(count - 12000)
+                                                                                    .collect();
+                                                                            }
+                                                                        }
+                                                                        TerminalEvent::Info(message) => {
+                                                                            terminal.status = message;
+                                                                        }
+                                                                        TerminalEvent::Closed(message) => {
+                                                                            terminal.status = message;
+                                                                            closed = true;
+                                                                        }
+                                                                    }
+                                                                }
+                                                                cx.notify();
+                                                            });
+                                                        }
+                                                        if !closed {
+                                                            cx.background_executor()
+                                                                .timer(Duration::from_millis(50))
+                                                                .await;
+                                                        }
+                                                    }
+                                                })
+                                                .detach();
+                                            }
+                                            Err(error) => state.feedback = Some(error),
+                                        }
                                         cx.notify();
                                     });
                                 })
@@ -301,6 +411,7 @@ fn main() {
                         token: args.token.clone(),
                         connecting: None,
                         feedback: None,
+                        terminal: None,
                     }
                 })
             })
@@ -446,6 +557,160 @@ fn post_session(base: &str, token: &str, profile_id: &str) -> Result<String, Str
         .and_then(Value::as_str)
         .map(ToString::to_string)
         .ok_or_else(|| "连接成功但后端没有返回会话 ID".into())
+}
+
+fn terminal_reader(
+    base: &str,
+    token: &str,
+    session_id: &str,
+    sender: &mpsc::Sender<TerminalEvent>,
+) -> Result<(), String> {
+    let authority = base
+        .strip_prefix("http://")
+        .ok_or_else(|| "后端地址必须使用 http://".to_string())?;
+    let mut stream =
+        TcpStream::connect(authority).map_err(|error| format!("连接终端失败：{error}"))?;
+    let mut key = [0u8; 16];
+    for (index, byte) in session_id.bytes().chain(token.bytes()).enumerate() {
+        key[index % key.len()] ^= byte.wrapping_add(index as u8);
+    }
+    let websocket_key = base64::engine::general_purpose::STANDARD.encode(key);
+    let path = format!("/api/sessions/{session_id}/terminal?token={token}&cols=120&rows=30");
+    let request = format!(
+        "GET {path} HTTP/1.1\r\nHost: {authority}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {websocket_key}\r\nSec-WebSocket-Version: 13\r\n\r\n"
+    );
+    stream
+        .write_all(request.as_bytes())
+        .map_err(|error| format!("发送终端握手失败：{error}"))?;
+    let headers = read_http_headers(&mut stream)?;
+    if !headers.starts_with("HTTP/1.1 101") {
+        return Err(format!(
+            "终端握手失败：{}",
+            headers.lines().next().unwrap_or_default()
+        ));
+    }
+    write_ws_text(&mut stream, r#"{"type":"resize","cols":120,"rows":30}"#)?;
+    let _ = sender.send(TerminalEvent::Info("终端已连接".into()));
+
+    loop {
+        let (opcode, payload) = read_ws_frame(&mut stream)?;
+        match opcode {
+            0x1 => {
+                if let Ok(value) = serde_json::from_slice::<Value>(&payload) {
+                    match value.get("type").and_then(Value::as_str) {
+                        Some("ready") => {
+                            let _ = sender.send(TerminalEvent::Info("远端 Shell 已就绪".into()));
+                        }
+                        Some("error") => {
+                            let message = value
+                                .get("message")
+                                .and_then(Value::as_str)
+                                .unwrap_or("终端启动失败");
+                            let _ = sender.send(TerminalEvent::Info(message.to_string()));
+                        }
+                        Some("exit") => {
+                            let message = value
+                                .get("message")
+                                .and_then(Value::as_str)
+                                .unwrap_or("远端 Shell 已退出");
+                            let _ = sender.send(TerminalEvent::Info(message.to_string()));
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            0x2 => {
+                let _ = sender.send(TerminalEvent::Output(
+                    String::from_utf8_lossy(&payload).into_owned(),
+                ));
+                write_ws_text(&mut stream, r#"{"type":"ack"}"#)?;
+            }
+            0x8 => return Ok(()),
+            0x9 => write_ws_control(&mut stream, 0xA, &payload)?,
+            _ => {}
+        }
+    }
+}
+
+fn read_http_headers(stream: &mut TcpStream) -> Result<String, String> {
+    let mut bytes = Vec::new();
+    let mut byte = [0u8; 1];
+    while bytes.len() < 64 * 1024 {
+        stream
+            .read_exact(&mut byte)
+            .map_err(|error| format!("读取终端握手失败：{error}"))?;
+        bytes.push(byte[0]);
+        if bytes.ends_with(b"\r\n\r\n") {
+            return String::from_utf8(bytes).map_err(|error| format!("终端握手响应无效：{error}"));
+        }
+    }
+    Err("终端握手响应过大".into())
+}
+
+fn read_ws_frame(stream: &mut TcpStream) -> Result<(u8, Vec<u8>), String> {
+    let mut header = [0u8; 2];
+    stream
+        .read_exact(&mut header)
+        .map_err(|error| format!("读取终端帧失败：{error}"))?;
+    let opcode = header[0] & 0x0f;
+    let masked = header[1] & 0x80 != 0;
+    let mut length = u64::from(header[1] & 0x7f);
+    if length == 126 {
+        let mut bytes = [0u8; 2];
+        stream
+            .read_exact(&mut bytes)
+            .map_err(|error| error.to_string())?;
+        length = u64::from(u16::from_be_bytes(bytes));
+    } else if length == 127 {
+        let mut bytes = [0u8; 8];
+        stream
+            .read_exact(&mut bytes)
+            .map_err(|error| error.to_string())?;
+        length = u64::from_be_bytes(bytes);
+    }
+    if length > 2 * 1024 * 1024 {
+        return Err("终端帧过大".into());
+    }
+    let mut mask = [0u8; 4];
+    if masked {
+        stream
+            .read_exact(&mut mask)
+            .map_err(|error| error.to_string())?;
+    }
+    let mut payload = vec![0u8; length as usize];
+    stream
+        .read_exact(&mut payload)
+        .map_err(|error| format!("读取终端帧内容失败：{error}"))?;
+    if masked {
+        for (index, byte) in payload.iter_mut().enumerate() {
+            *byte ^= mask[index % 4];
+        }
+    }
+    Ok((opcode, payload))
+}
+
+fn write_ws_text(stream: &mut TcpStream, text: &str) -> Result<(), String> {
+    write_ws_control(stream, 0x1, text.as_bytes())
+}
+
+fn write_ws_control(stream: &mut TcpStream, opcode: u8, payload: &[u8]) -> Result<(), String> {
+    if payload.len() >= 126 {
+        return Err("终端控制帧过大".into());
+    }
+    let mask = [0x52, 0x41, 0x57, 0x01];
+    let mut frame = Vec::with_capacity(payload.len() + 6);
+    frame.push(0x80 | opcode);
+    frame.push(0x80 | payload.len() as u8);
+    frame.extend_from_slice(&mask);
+    frame.extend(
+        payload
+            .iter()
+            .enumerate()
+            .map(|(index, byte)| byte ^ mask[index % 4]),
+    );
+    stream
+        .write_all(&frame)
+        .map_err(|error| format!("发送终端控制帧失败：{error}"))
 }
 
 fn get_json(base: &str, token: &str, path: &str) -> Result<Value, String> {

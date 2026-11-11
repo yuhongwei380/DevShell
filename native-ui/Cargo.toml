@@ -10,5 +10,6 @@ description = "Native GPUI frontend for DevShell"
 gpui-kit = "=0.9.0"
 ely-gpui-component = { git = "https://github.com/ELY-Open-Source/Ely-GPUI-Components", rev = "69a62b10168eed5b011b978497c2fdca644cb81f" }
 serde_json = "1"
+base64 = "0.22"
 
 
