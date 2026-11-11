@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"devshell/internal/updatetrust"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -51,6 +52,10 @@ func TestUpdateInstallHTTPDelegatesToHost(t *testing.T) {
 	}
 	if received != "job-1" {
 		t.Fatalf("host handler received %q, want job-1", received)
+	}
+	a.SetInstallUpdateHandler(func(string) error { return errors.New("更新助手被拒绝") })
+	if response := request(); response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "更新助手被拒绝") {
+		t.Fatalf("host handler error was not propagated: %d %s", response.Code, response.Body.String())
 	}
 }
 
