@@ -53,6 +53,7 @@ struct DevShellWindow {
     feedback: Option<String>,
     terminal: Option<TerminalState>,
     command_input: Entity<InputState>,
+    files: Option<FileListState>,
 }
 
 #[derive(Clone, Debug)]
@@ -61,6 +62,21 @@ struct TerminalState {
     output: String,
     status: String,
     input_tx: Option<mpsc::Sender<String>>,
+}
+
+#[derive(Clone, Debug)]
+struct FileListState {
+    path: String,
+    entries: Vec<RemoteEntry>,
+    status: String,
+}
+
+#[derive(Clone, Debug)]
+struct RemoteEntry {
+    name: String,
+    kind: String,
+    bytes: i64,
+    owner: String,
 }
 
 enum TerminalEvent {
@@ -172,6 +188,9 @@ impl Render for DevShellWindow {
                                             self.command_input.clone(),
                                             view.clone(),
                                         ))
+                                    })
+                                    .when_some(self.files.clone(), |workspace, files| {
+                                        workspace.child(file_panel(files))
                                     })
                                     .child(
                                         div()
@@ -293,6 +312,35 @@ fn terminal_panel(
         );
 }
 
+fn file_panel(files: FileListState) -> impl IntoElement {
+    div()
+        .p_4()
+        .rounded_lg()
+        .bg(gpui_kit::rgb(0x191f27))
+        .border_1()
+        .border_color(gpui_kit::rgb(0x2b313b))
+        .flex()
+        .flex_col()
+        .gap_2()
+        .child(Paragraph::new(format!(
+            "文件 · {} · {}",
+            files.path, files.status
+        )))
+        .children(files.entries.into_iter().take(12).map(|entry| {
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .child(Paragraph::new(format!(
+                    "{} {} · {} bytes",
+                    if entry.kind == "folder" { "▸" } else { "·" },
+                    entry.name,
+                    entry.bytes
+                )))
+                .child(Paragraph::new(entry.owner))
+        }))
+}
+
 fn server_row(
     view: Entity<DevShellWindow>,
     server: ServerSummary,
@@ -373,7 +421,7 @@ fn server_row(
                                                     let _ = sender.send(event);
                                                 });
                                                 state.terminal = Some(TerminalState {
-                                                    session_id,
+                                                    session_id: session_id.clone(),
                                                     output: String::new(),
                                                     status: "连接中".into(),
                                                     input_tx: Some(input_tx),
@@ -419,6 +467,35 @@ fn server_row(
                                                     }
                                                 })
                                                 .detach();
+                                                let files_base = state.snapshot.base.clone();
+                                                let files_token = state.token.clone();
+                                                let files_session = session_id;
+                                                let files_view = cx.entity();
+                                                cx.spawn(async move |_, cx| {
+                                                    let result = cx
+                                                        .background_executor()
+                                                        .spawn(async move {
+                                                            load_files(
+                                                                &files_base,
+                                                                &files_token,
+                                                                &files_session,
+                                                                "/",
+                                                            )
+                                                        })
+                                                        .await;
+                                                    let _ = files_view.update(cx, |state, cx| {
+                                                        state.files = Some(match result {
+                                                            Ok(files) => files,
+                                                            Err(error) => FileListState {
+                                                                path: "/".into(),
+                                                                entries: Vec::new(),
+                                                                status: error,
+                                                            },
+                                                        });
+                                                        cx.notify();
+                                                    });
+                                                })
+                                                .detach();
                                             }
                                             Err(error) => state.feedback = Some(error),
                                         }
@@ -458,6 +535,7 @@ fn main() {
                         feedback: None,
                         terminal: None,
                         command_input,
+                        files: None,
                     }
                 })
             })
@@ -603,6 +681,49 @@ fn post_session(base: &str, token: &str, profile_id: &str) -> Result<String, Str
         .and_then(Value::as_str)
         .map(ToString::to_string)
         .ok_or_else(|| "连接成功但后端没有返回会话 ID".into())
+}
+
+fn load_files(
+    base: &str,
+    token: &str,
+    session_id: &str,
+    path: &str,
+) -> Result<FileListState, String> {
+    let value = get_json(
+        base,
+        token,
+        &format!("/api/sessions/{session_id}/files?path={path}"),
+    )?;
+    let entries = value
+        .get("entries")
+        .and_then(Value::as_array)
+        .map(|entries| {
+            entries
+                .iter()
+                .filter_map(|entry| {
+                    Some(RemoteEntry {
+                        name: entry.get("name")?.as_str()?.to_string(),
+                        kind: entry.get("kind")?.as_str()?.to_string(),
+                        bytes: entry.get("bytes").and_then(Value::as_i64).unwrap_or(0),
+                        owner: entry
+                            .get("owner")
+                            .and_then(Value::as_str)
+                            .unwrap_or("未知属主")
+                            .to_string(),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok(FileListState {
+        path: value
+            .get("path")
+            .and_then(Value::as_str)
+            .unwrap_or(path)
+            .to_string(),
+        entries,
+        status: "已加载".into(),
+    })
 }
 
 fn terminal_reader(
