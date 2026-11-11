@@ -123,6 +123,7 @@ struct DevShellWindow {
     proxy_user_input: Entity<InputState>,
     proxy_password_input: Entity<InputState>,
     proxy_kind: String,
+    pending_proxy_delete: Option<String>,
     pending_host_key: Option<PendingHostKey>,
     files: Option<FileListState>,
     monitor: Option<MonitorState>,
@@ -327,6 +328,7 @@ impl Render for DevShellWindow {
                                             self.proxy_user_input.clone(),
                                             self.proxy_password_input.clone(),
                                             self.proxy_kind.clone(),
+                                            self.pending_proxy_delete.clone(),
                                         ))
                                     })
                                     .when_some(pending_host_key, |workspace, pending| {
@@ -586,6 +588,7 @@ fn settings_panel(
     proxy_user_input: Entity<InputState>,
     proxy_password_input: Entity<InputState>,
     proxy_kind: String,
+    pending_proxy_delete: Option<String>,
 ) -> impl IntoElement {
     let config_dir = snapshot
         .config_dir
@@ -679,10 +682,33 @@ fn settings_panel(
             ))
         })
         .children(snapshot.proxies.iter().map(|proxy| {
-            Paragraph::new(format!(
-                "{} · {} {}:{}",
-                proxy.name, proxy.kind, proxy.host, proxy.port
-            ))
+            let proxy_id = proxy.id.clone();
+            let is_pending = pending_proxy_delete.as_deref() == Some(proxy.id.as_str());
+            let delete_view = view.clone();
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .child(Paragraph::new(format!(
+                    "{} · {} {}:{}",
+                    proxy.name, proxy.kind, proxy.host, proxy.port
+                )))
+                .child(
+                    KitButton::new(format!("delete-proxy-{proxy_id}"))
+                        .danger()
+                        .label(if is_pending { "确认删除" } else { "删除" })
+                        .on_click(move |_, _, cx| {
+                            if is_pending {
+                                delete_proxy_and_reload(delete_view.clone(), proxy_id.clone(), cx);
+                            } else {
+                                let _ = delete_view.update(cx, |state, cx| {
+                                    state.pending_proxy_delete = Some(proxy_id.clone());
+                                    state.feedback = Some("再次点击删除按钮确认移除代理。".into());
+                                    cx.notify();
+                                });
+                            }
+                        }),
+                )
         }))
         .when_some(update_status, |card, status| {
             card.child(Paragraph::new(format!("更新状态：{status}")))
@@ -2492,6 +2518,7 @@ fn main() {
                         proxy_user_input,
                         proxy_password_input,
                         proxy_kind: "socks5".into(),
+                        pending_proxy_delete: None,
                         pending_host_key: None,
                         files: None,
                         monitor: None,
@@ -3654,6 +3681,36 @@ fn save_proxy_and_reload(
         }),
     )?;
     Ok(BackendSnapshot::load(base, token))
+}
+
+fn delete_proxy_and_reload(view: Entity<DevShellWindow>, proxy_id: String, cx: &mut App) {
+    let _ = view.update(cx, |state, cx| {
+        let base = state.snapshot.base.clone();
+        let token = state.token.clone();
+        state.feedback = Some("正在删除代理配置…".into());
+        let view = cx.entity();
+        cx.spawn(async move |this, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    delete_json(&base, &token, &format!("/api/proxies/{proxy_id}"))?;
+                    Ok::<BackendSnapshot, String>(BackendSnapshot::load(&base, &token))
+                })
+                .await;
+            let _ = this.update(cx, |state, cx| {
+                match result {
+                    Ok(snapshot) => {
+                        state.snapshot = snapshot;
+                        state.pending_proxy_delete = None;
+                        state.feedback = Some("代理配置已删除。".into());
+                    }
+                    Err(error) => state.feedback = Some(error),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    });
 }
 
 fn delete_profile_and_reload(
