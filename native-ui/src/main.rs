@@ -1601,6 +1601,7 @@ fn file_preview_panel(
     view: Entity<DevShellWindow>,
 ) -> impl IntoElement {
     let save_view = view.clone();
+    let close_view = view.clone();
     div()
         .p_4()
         .rounded_lg()
@@ -1627,6 +1628,19 @@ fn file_preview_panel(
                         .primary()
                         .label("保存文件")
                         .on_click(move |_, _, cx| save_preview(save_view.clone(), cx)),
+                )
+                .child(
+                    KitButton::new("preview-close")
+                        .ghost()
+                        .label("关闭预览")
+                        .on_click(move |_, _, cx| {
+                            close_view.update(cx, |state, cx| {
+                                state.preview = None;
+                                state.preview_sync = None;
+                                state.feedback = Some("已关闭文件预览。".into());
+                                cx.notify();
+                            });
+                        }),
                 ),
         )
         .child(Textarea::new(&preview_input).h(px(280.)));
