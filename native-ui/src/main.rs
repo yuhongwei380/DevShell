@@ -84,7 +84,9 @@ struct DevShellWindow {
     token: String,
     settings_visible: bool,
     update_status: Option<String>,
+    update_hash: Option<String>,
     update_checking: bool,
+    update_download: Option<UpdateDownloadState>,
     profile_form_open: bool,
     profile_saving: bool,
     pending_profile_delete: Option<String>,
@@ -162,6 +164,21 @@ struct MonitorState {
     load: String,
     sampled_at: String,
     status: String,
+}
+
+#[derive(Clone, Debug)]
+struct UpdateDownloadState {
+    id: String,
+    status: String,
+    received: i64,
+    total: i64,
+    error: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+struct UpdateCheckResult {
+    summary: String,
+    hash: Option<String>,
 }
 
 enum TerminalEvent {
@@ -278,7 +295,9 @@ impl Render for DevShellWindow {
                                             snapshot.clone(),
                                             view.clone(),
                                             self.update_status.clone(),
+                                            self.update_hash.clone(),
                                             self.update_checking,
+                                            self.update_download.clone(),
                                         ))
                                     })
                                     .when_some(pending_host_key, |workspace, pending| {
@@ -518,7 +537,9 @@ fn settings_panel(
     snapshot: BackendSnapshot,
     view: Entity<DevShellWindow>,
     update_status: Option<String>,
+    update_hash: Option<String>,
     update_checking: bool,
+    update_download: Option<UpdateDownloadState>,
 ) -> impl IntoElement {
     let config_dir = snapshot
         .config_dir
@@ -534,6 +555,10 @@ fn settings_panel(
     } else {
         "检查更新"
     };
+    let download_active = update_download
+        .as_ref()
+        .map(|job| matches!(job.status.as_str(), "downloading" | "queued"))
+        .unwrap_or(false);
     div()
         .p_5()
         .rounded_lg()
@@ -579,10 +604,18 @@ fn settings_panel(
                                     .await;
                                 let _ = this.update(cx, |state, cx| {
                                     state.update_checking = false;
-                                    state.update_status = Some(match result {
-                                        Ok(status) => status,
-                                        Err(error) => format!("检查失败：{error}"),
-                                    });
+                                    match result {
+                                        Ok(result) => {
+                                            state.update_status = Some(result.summary);
+                                            state.update_hash = result.hash;
+                                            state.update_download = None;
+                                        }
+                                        Err(error) => {
+                                            state.update_status =
+                                                Some(format!("检查失败：{error}"));
+                                            state.update_hash = None;
+                                        }
+                                    }
                                     state.feedback = Some("更新检查完成。".into());
                                     cx.notify();
                                 });
@@ -592,6 +625,44 @@ fn settings_panel(
                     }
                 }),
         )
+        .when_some(update_hash, |panel, hash| {
+            panel.child(
+                KitButton::new("download-update")
+                    .secondary()
+                    .label(if download_active {
+                        "正在下载更新…"
+                    } else {
+                        "下载更新"
+                    })
+                    .disabled(download_active)
+                    .on_click({
+                        let view = view.clone();
+                        move |_, _, cx| start_update_download(view.clone(), hash.clone(), cx)
+                    }),
+            )
+        })
+        .when_some(update_download, |panel, download| {
+            let progress = if download.total > 0 {
+                format!(
+                    "{:.0}% ({}/{})",
+                    download.received as f64 / download.total as f64 * 100.0,
+                    download.received,
+                    download.total
+                )
+            } else {
+                format!("{} / {}", download.received, download.total)
+            };
+            panel.child(Paragraph::new(format!(
+                "更新下载 · {} · {}{}",
+                download.status,
+                progress,
+                download
+                    .error
+                    .as_deref()
+                    .map(|error| format!(" · {error}"))
+                    .unwrap_or_default()
+            )))
+        })
         .child(
             KitButton::new("close-settings")
                 .secondary()
@@ -1952,7 +2023,9 @@ fn main() {
                         token: args.token.clone(),
                         settings_visible: false,
                         update_status: None,
+                        update_hash: None,
                         update_checking: false,
+                        update_download: None,
                         profile_form_open: false,
                         profile_saving: false,
                         pending_profile_delete: None,
@@ -2840,7 +2913,7 @@ fn write_ws_control(stream: &mut TcpStream, opcode: u8, payload: &[u8]) -> Resul
         .map_err(|error| format!("发送终端控制帧失败：{error}"))
 }
 
-fn check_updates(base: &str, token: &str) -> Result<String, String> {
+fn check_updates(base: &str, token: &str) -> Result<UpdateCheckResult, String> {
     let value = post_json(
         base,
         token,
@@ -2861,28 +2934,143 @@ fn check_updates(base: &str, token: &str) -> Result<String, String> {
             .and_then(Value::as_u64)
             .map(|value| value.to_string())
             .unwrap_or_else(|| "未知构建".into());
-        return Ok(format!(
-            "发现 {version}（构建 {build}），可通过旧版界面完成下载和安装。"
-        ));
+        return Ok(UpdateCheckResult {
+            summary: format!("发现 {version}（构建 {build}）。"),
+            hash: value
+                .get("package")
+                .and_then(|package| package.get("sha256"))
+                .and_then(Value::as_str)
+                .map(ToString::to_string),
+        });
     }
     if status == "none" {
-        return Ok(format!(
-            "当前已是最新版本（{}），{}。",
-            value
-                .get("currentVersion")
-                .and_then(Value::as_str)
-                .unwrap_or("当前版本"),
-            value
-                .get("reason")
-                .and_then(Value::as_str)
-                .unwrap_or("没有可用更新")
-        ));
+        return Ok(UpdateCheckResult {
+            summary: format!(
+                "当前已是最新版本（{}），{}。",
+                value
+                    .get("currentVersion")
+                    .and_then(Value::as_str)
+                    .unwrap_or("当前版本"),
+                value
+                    .get("reason")
+                    .and_then(Value::as_str)
+                    .unwrap_or("没有可用更新")
+            ),
+            hash: None,
+        });
     }
     Err(value
         .get("reason")
         .and_then(Value::as_str)
         .unwrap_or("更新服务返回未知状态")
         .to_string())
+}
+
+fn parse_update_download(value: &Value) -> UpdateDownloadState {
+    UpdateDownloadState {
+        id: value
+            .get("id")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        status: value
+            .get("status")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown")
+            .to_string(),
+        received: value.get("received").and_then(Value::as_i64).unwrap_or(0),
+        total: value.get("total").and_then(Value::as_i64).unwrap_or(0),
+        error: value
+            .get("error")
+            .and_then(Value::as_str)
+            .map(ToString::to_string),
+    }
+}
+
+fn start_update_download(view: Entity<DevShellWindow>, hash: String, cx: &mut App) {
+    let _ = view.update(cx, |state, cx| {
+        let base = state.snapshot.base.clone();
+        let token = state.token.clone();
+        state.feedback = Some("正在启动更新下载…".into());
+        let view = cx.entity();
+        cx.spawn(async move |this, cx| {
+            let request_base = base.clone();
+            let request_token = token.clone();
+            let request_hash = hash.clone();
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    post_json(
+                        &request_base,
+                        &request_token,
+                        "/api/updates/download",
+                        serde_json::json!({"sha256": request_hash}),
+                    )
+                })
+                .await;
+            let value = match result {
+                Ok(value) => value,
+                Err(error) => {
+                    let _ = this.update(cx, |state, cx| {
+                        state.feedback = Some(error);
+                        cx.notify();
+                    });
+                    return;
+                }
+            };
+            let job = parse_update_download(&value);
+            let job_id = job.id.clone();
+            let active = matches!(job.status.as_str(), "downloading" | "queued");
+            let _ = this.update(cx, |state, cx| {
+                state.update_download = Some(job.clone());
+                state.feedback = Some("更新下载已启动。".into());
+                cx.notify();
+            });
+            if !active {
+                return;
+            }
+            loop {
+                cx.background_executor().timer(Duration::from_secs(1)).await;
+                let poll = {
+                    let base = base.clone();
+                    let token = token.clone();
+                    let job_id = job_id.clone();
+                    cx.background_executor()
+                        .spawn(async move {
+                            get_json(&base, &token, &format!("/api/updates/download/{job_id}"))
+                        })
+                        .await
+                };
+                let value = match poll {
+                    Ok(value) => value,
+                    Err(error) => {
+                        let _ = this.update(cx, |state, cx| {
+                            state.feedback = Some(error);
+                            cx.notify();
+                        });
+                        break;
+                    }
+                };
+                let job = parse_update_download(&value);
+                let done = !matches!(job.status.as_str(), "downloading" | "queued");
+                let _ = this.update(cx, |state, cx| {
+                    state.update_download = Some(job.clone());
+                    if done {
+                        state.feedback = Some(if job.status == "ready" {
+                            "更新已下载完成。".into()
+                        } else {
+                            "更新下载已结束。".into()
+                        });
+                    }
+                    cx.notify();
+                });
+                if done {
+                    break;
+                }
+            }
+        })
+        .detach();
+    });
 }
 
 fn save_profile_and_reload(
