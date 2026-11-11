@@ -59,6 +59,7 @@ struct DevShellWindow {
     monitor: Option<MonitorState>,
     pending_delete: Option<String>,
     pending_rename: Option<String>,
+    preview: Option<FilePreviewState>,
 }
 
 #[derive(Clone, Debug)]
@@ -82,6 +83,14 @@ struct RemoteEntry {
     kind: String,
     bytes: i64,
     owner: String,
+}
+
+#[derive(Clone, Debug)]
+struct FilePreviewState {
+    path: String,
+    encoding: String,
+    text: String,
+    status: String,
 }
 
 #[derive(Clone, Debug)]
@@ -215,6 +224,9 @@ impl Render for DevShellWindow {
                                     })
                                     .when_some(self.monitor.clone(), |workspace, monitor| {
                                         workspace.child(monitor_panel(monitor))
+                                    })
+                                    .when_some(self.preview.clone(), |workspace, preview| {
+                                        workspace.child(file_preview_panel(preview))
                                     })
                                     .child(
                                         div()
@@ -442,6 +454,8 @@ fn file_panel(
             let download_view = view.clone();
             let download_target = target.clone();
             let download_name = name.clone();
+            let preview_view = view.clone();
+            let preview_target = target.clone();
             div()
                 .flex()
                 .items_center()
@@ -455,6 +469,9 @@ fn file_panel(
                     KitButton::new(format!("file-entry-{}", name))
                         .text()
                         .label(format!("· {} · {} bytes", name, entry.bytes))
+                        .on_click(move |_, _, cx| {
+                            preview_remote(preview_view.clone(), preview_target.clone(), cx);
+                        })
                 })
                 .child(Paragraph::new(entry.owner))
                 .child(
@@ -555,6 +572,28 @@ fn monitor_panel(monitor: MonitorState) -> impl IntoElement {
         )));
 }
 
+fn file_preview_panel(preview: FilePreviewState) -> impl IntoElement {
+    let text = if preview.text.chars().count() > 12000 {
+        preview.text.chars().take(12000).collect()
+    } else {
+        preview.text
+    };
+    div()
+        .p_4()
+        .rounded_lg()
+        .bg(gpui_kit::rgb(0x080b0f))
+        .border_1()
+        .border_color(gpui_kit::rgb(0x2b313b))
+        .flex()
+        .flex_col()
+        .gap_2()
+        .child(Paragraph::new(format!(
+            "预览 · {} · 编码 {} · {}",
+            preview.path, preview.encoding, preview.status
+        )))
+        .child(Paragraph::new(text));
+}
+
 fn navigate_files(view: Entity<DevShellWindow>, path: String, cx: &mut App) {
     let _ = view.update(cx, |state, cx| {
         let Some(session_id) = state
@@ -582,6 +621,39 @@ fn navigate_files(view: Entity<DevShellWindow>, path: String, cx: &mut App) {
                         status: error,
                     },
                 });
+                cx.notify();
+            });
+        })
+        .detach();
+    });
+}
+
+fn preview_remote(view: Entity<DevShellWindow>, path: String, cx: &mut App) {
+    let _ = view.update(cx, |state, cx| {
+        let Some(session_id) = state
+            .terminal
+            .as_ref()
+            .map(|terminal| terminal.session_id.clone())
+        else {
+            return;
+        };
+        let base = state.snapshot.base.clone();
+        let token = state.token.clone();
+        state.feedback = Some(format!("正在读取文件 {}…", path));
+        let view = cx.entity();
+        cx.spawn(async move |_, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move { load_preview(&base, &token, &session_id, &path) })
+                .await;
+            let _ = view.update(cx, |state, cx| {
+                match result {
+                    Ok(preview) => {
+                        state.preview = Some(preview);
+                        state.feedback = Some("文件已加载".into());
+                    }
+                    Err(error) => state.feedback = Some(error),
+                }
                 cx.notify();
             });
         })
@@ -788,6 +860,7 @@ fn disconnect_session(view: Entity<DevShellWindow>, session_id: String, cx: &mut
                         state.terminal = None;
                         state.files = None;
                         state.monitor = None;
+                        state.preview = None;
                         state.feedback = Some("会话已断开".into());
                     }
                     Err(error) => state.feedback = Some(error),
@@ -1069,6 +1142,7 @@ fn main() {
                         monitor: None,
                         pending_delete: None,
                         pending_rename: None,
+                        preview: None,
                     }
                 })
             })
@@ -1259,6 +1333,40 @@ fn load_files(
             .to_string(),
         entries,
         status: "已加载".into(),
+    })
+}
+
+fn load_preview(
+    base: &str,
+    token: &str,
+    session_id: &str,
+    path: &str,
+) -> Result<FilePreviewState, String> {
+    let value = get_json(
+        base,
+        token,
+        &format!(
+            "/api/sessions/{session_id}/file-content?path={}&encoding=auto",
+            query_escape(path)
+        ),
+    )?;
+    Ok(FilePreviewState {
+        path: value
+            .get("path")
+            .and_then(Value::as_str)
+            .unwrap_or(path)
+            .to_string(),
+        encoding: value
+            .get("encoding")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown")
+            .to_string(),
+        text: value
+            .get("text")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string(),
+        status: "只读预览".into(),
     })
 }
 
