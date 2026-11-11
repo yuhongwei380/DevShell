@@ -598,6 +598,16 @@ fn settings_panel(
         .child(Paragraph::new(format!("配置目录：{config_dir}")))
         .child(Paragraph::new(format!("存储格式：{config_format}")))
         .child(Paragraph::new(format!("安全锁定：{security}")))
+        .when(!snapshot.proxies.is_empty(), |panel| {
+            panel
+                .child(Paragraph::new("已保存代理"))
+                .children(snapshot.proxies.iter().map(|proxy| {
+                    Paragraph::new(format!(
+                        "{} · {} {}:{}",
+                        proxy.name, proxy.kind, proxy.host, proxy.port
+                    ))
+                }))
+        })
         .when_some(update_status, |card, status| {
             card.child(Paragraph::new(format!("更新状态：{status}")))
         })
