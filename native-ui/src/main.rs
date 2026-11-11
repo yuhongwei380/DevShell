@@ -47,6 +47,7 @@ struct ServerSummary {
     name: String,
     host: String,
     port: u16,
+    user: String,
 }
 
 #[derive(Clone, Debug)]
@@ -85,6 +86,7 @@ struct DevShellWindow {
     profile_form_open: bool,
     profile_saving: bool,
     pending_profile_delete: Option<String>,
+    profile_editing_id: Option<String>,
     connecting: Option<String>,
     feedback: Option<String>,
     terminal: Option<TerminalState>,
@@ -334,10 +336,25 @@ impl Render for DevShellWindow {
                                                             })
                                                             .on_click({
                                                                 let view = view.clone();
-                                                                move |_, _, cx| {
+                                                                move |_, window, cx| {
                                                                     view.update(cx, |state, cx| {
-                                                                        state.profile_form_open =
-                                                                            !state.profile_form_open;
+                                                                        let opening = !state.profile_form_open;
+                                                                        state.profile_form_open = opening;
+                                                                        if opening {
+                                                                            state.profile_editing_id = None;
+                                                                            state.profile_name_input.update(cx, |input, cx| {
+                                                                                input.set_value("", window, cx)
+                                                                            });
+                                                                            state.profile_host_input.update(cx, |input, cx| {
+                                                                                input.set_value("", window, cx)
+                                                                            });
+                                                                            state.profile_user_input.update(cx, |input, cx| {
+                                                                                input.set_value("", window, cx)
+                                                                            });
+                                                                            state.profile_port_input.update(cx, |input, cx| {
+                                                                                input.set_value("22", window, cx)
+                                                                            });
+                                                                        }
                                                                         cx.notify();
                                                                     });
                                                                 }
@@ -351,6 +368,7 @@ impl Render for DevShellWindow {
                                                     self.profile_host_input.clone(),
                                                     self.profile_user_input.clone(),
                                                     self.profile_port_input.clone(),
+                                                    self.profile_editing_id.clone(),
                                                     self.profile_saving,
                                                 ))
                                             })
@@ -580,8 +598,10 @@ fn profile_form(
     host_input: Entity<InputState>,
     user_input: Entity<InputState>,
     port_input: Entity<InputState>,
+    editing_id: Option<String>,
     saving: bool,
 ) -> impl IntoElement {
+    let editing = editing_id.is_some();
     div()
         .p_4()
         .rounded_md()
@@ -591,7 +611,11 @@ fn profile_form(
         .flex()
         .flex_col()
         .gap_2()
-        .child(Paragraph::new("新增 SSH 服务器"))
+        .child(Paragraph::new(if editing {
+            "编辑 SSH 服务器"
+        } else {
+            "新增 SSH 服务器"
+        }))
         .child(Input::new(&name_input))
         .child(Input::new(&host_input))
         .child(Input::new(&port_input))
@@ -604,6 +628,8 @@ fn profile_form(
                 .secondary()
                 .label(if saving {
                     "保存中…"
+                } else if editing {
+                    "保存修改"
                 } else {
                     "保存服务器"
                 })
@@ -658,7 +684,14 @@ fn profile_form(
                                 .background_executor()
                                 .spawn(async move {
                                     save_profile_and_reload(
-                                        &base, &token, &name, &host, port, &user, &secret,
+                                        &base,
+                                        &token,
+                                        editing_id.as_deref(),
+                                        &name,
+                                        &host,
+                                        port,
+                                        &user,
+                                        &secret,
                                     )
                                 })
                                 .await;
@@ -668,6 +701,7 @@ fn profile_form(
                                     Ok(snapshot) => {
                                         state.snapshot = snapshot;
                                         state.profile_form_open = false;
+                                        state.profile_editing_id = None;
                                         state.feedback = Some("服务器配置已保存。".into());
                                     }
                                     Err(error) => state.feedback = Some(error),
@@ -1446,6 +1480,8 @@ fn server_row(
     let is_delete_pending = pending_delete == Some(server.id.as_str());
     let delete_profile_id = server.id.clone();
     let delete_view = view.clone();
+    let edit_server = server.clone();
+    let edit_view = view.clone();
     let label = if is_connecting {
         "连接中…"
     } else if is_host_key_pending {
@@ -1720,6 +1756,32 @@ fn server_row(
                         }),
                 )
                 .child(
+                    KitButton::new(format!("edit-{delete_profile_id}"))
+                        .ghost()
+                        .label("编辑")
+                        .on_click(move |_, window, cx| {
+                            let server = edit_server.clone();
+                            edit_view.update(cx, |state, cx| {
+                                state.profile_form_open = true;
+                                state.profile_editing_id = Some(server.id.clone());
+                                state.profile_name_input.update(cx, |input, cx| {
+                                    input.set_value(server.name.clone(), window, cx)
+                                });
+                                state.profile_host_input.update(cx, |input, cx| {
+                                    input.set_value(server.host.clone(), window, cx)
+                                });
+                                state.profile_user_input.update(cx, |input, cx| {
+                                    input.set_value(server.user.clone(), window, cx)
+                                });
+                                state.profile_port_input.update(cx, |input, cx| {
+                                    input.set_value(server.port.to_string(), window, cx)
+                                });
+                                state.feedback = Some("已载入服务器配置，可修改后保存。".into());
+                                cx.notify();
+                            });
+                        }),
+                )
+                .child(
                     KitButton::new(format!("delete-{delete_profile_id}"))
                         .ghost()
                         .label(if is_delete_pending { "确认删除" } else { "删除" })
@@ -1815,6 +1877,7 @@ fn main() {
                         profile_form_open: false,
                         profile_saving: false,
                         pending_profile_delete: None,
+                        profile_editing_id: None,
                         connecting: None,
                         feedback: None,
                         terminal: None,
@@ -1917,6 +1980,11 @@ impl BackendSnapshot {
                                     host: server.get("host")?.as_str()?.to_string(),
                                     port: server.get("port").and_then(Value::as_u64).unwrap_or(22)
                                         as u16,
+                                    user: server
+                                        .get("user")
+                                        .and_then(Value::as_str)
+                                        .unwrap_or_default()
+                                        .to_string(),
                                 })
                             })
                             .collect()
@@ -2674,6 +2742,7 @@ fn check_updates(base: &str, token: &str) -> Result<String, String> {
 fn save_profile_and_reload(
     base: &str,
     token: &str,
+    profile_id: Option<&str>,
     name: &str,
     host: &str,
     port: u16,
@@ -2681,7 +2750,7 @@ fn save_profile_and_reload(
     secret: &str,
 ) -> Result<BackendSnapshot, String> {
     let mut profile = serde_json::json!({
-        "id": "",
+        "id": profile_id.unwrap_or_default(),
         "name": name,
         "host": host,
         "port": port,
