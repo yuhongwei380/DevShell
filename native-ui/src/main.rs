@@ -102,6 +102,8 @@ struct DevShellWindow {
     profile_host_input: Entity<InputState>,
     profile_user_input: Entity<InputState>,
     profile_port_input: Entity<InputState>,
+    profile_key_path_input: Entity<InputState>,
+    profile_auth: String,
     pending_host_key: Option<PendingHostKey>,
     files: Option<FileListState>,
     monitor: Option<MonitorState>,
@@ -382,6 +384,10 @@ impl Render for DevShellWindow {
                                                                             state.profile_port_input.update(cx, |input, cx| {
                                                                                 input.set_value("22", window, cx)
                                                                             });
+                                                                            state.profile_key_path_input.update(cx, |input, cx| {
+                                                                                input.set_value("", window, cx)
+                                                                            });
+                                                                            state.profile_auth = "password".into();
                                                                         }
                                                                         cx.notify();
                                                                     });
@@ -396,7 +402,9 @@ impl Render for DevShellWindow {
                                                     self.profile_host_input.clone(),
                                                     self.profile_user_input.clone(),
                                                     self.profile_port_input.clone(),
+                                                    self.profile_key_path_input.clone(),
                                                     self.profile_editing_id.clone(),
+                                                    self.profile_auth.clone(),
                                                     self.profile_saving,
                                                 ))
                                             })
@@ -682,7 +690,9 @@ fn profile_form(
     host_input: Entity<InputState>,
     user_input: Entity<InputState>,
     port_input: Entity<InputState>,
+    key_path_input: Entity<InputState>,
     editing_id: Option<String>,
+    auth: String,
     saving: bool,
 ) -> impl IntoElement {
     let editing = editing_id.is_some();
@@ -704,9 +714,44 @@ fn profile_form(
         .child(Input::new(&host_input))
         .child(Input::new(&port_input))
         .child(Input::new(&user_input))
-        .child(Paragraph::new(
-            "密码沿用上方的 SSH 凭据输入；留空则保存后连接时再输入。",
-        ))
+        .child(Paragraph::new("认证方式"))
+        .child(
+            div()
+                .flex()
+                .gap_2()
+                .child(auth_choice_button(
+                    view.clone(),
+                    "password",
+                    "密码",
+                    auth == "password",
+                ))
+                .child(auth_choice_button(
+                    view.clone(),
+                    "key",
+                    "私钥",
+                    auth == "key",
+                ))
+                .child(auth_choice_button(
+                    view.clone(),
+                    "agent",
+                    "Agent",
+                    auth == "agent",
+                )),
+        )
+        .when(auth == "key", |form| {
+            form.child(Input::new(&key_path_input))
+                .child(Paragraph::new(
+                    "填写私钥文件路径；私钥口令沿用上方的凭据输入。",
+                ))
+        })
+        .when(auth == "password", |form| {
+            form.child(Paragraph::new(
+                "密码沿用上方的 SSH 凭据输入；留空则保存后连接时再输入。",
+            ))
+        })
+        .when(auth == "agent", |form| {
+            form.child(Paragraph::new("连接时使用本机 SSH Agent，不保存密码。"))
+        })
         .child(
             KitButton::new("save-server")
                 .secondary()
@@ -744,6 +789,13 @@ fn profile_form(
                             .value(cx)
                             .trim()
                             .to_string();
+                        let auth = state.profile_auth.clone();
+                        let key_path = state
+                            .profile_key_path_input
+                            .read(cx)
+                            .value(cx)
+                            .trim()
+                            .to_string();
                         let secret = state.secret_input.read(cx).value(cx).to_string();
                         if name.is_empty() || host.is_empty() || user.is_empty() {
                             state.feedback = Some("请填写服务器名称、地址和用户名。".into());
@@ -758,6 +810,11 @@ fn profile_form(
                                 return;
                             }
                         };
+                        if auth == "key" && key_path.is_empty() {
+                            state.feedback = Some("私钥认证需要填写私钥文件路径。".into());
+                            cx.notify();
+                            return;
+                        }
                         let base = state.snapshot.base.clone();
                         let token = state.token.clone();
                         state.profile_saving = true;
@@ -771,6 +828,8 @@ fn profile_form(
                                         &base,
                                         &token,
                                         editing_id.as_deref(),
+                                        &auth,
+                                        &key_path,
                                         &name,
                                         &host,
                                         port,
@@ -797,6 +856,26 @@ fn profile_form(
                     });
                 }),
         )
+}
+
+fn auth_choice_button(
+    view: Entity<DevShellWindow>,
+    auth: &'static str,
+    label: &'static str,
+    selected: bool,
+) -> impl IntoElement {
+    let button = KitButton::new(format!("profile-auth-{auth}"));
+    let button = if selected {
+        button.primary()
+    } else {
+        button.secondary()
+    };
+    button.label(label).on_click(move |_, _, cx| {
+        view.update(cx, |state, cx| {
+            state.profile_auth = auth.into();
+            cx.notify();
+        });
+    })
 }
 
 fn terminal_panel(
@@ -1924,6 +2003,10 @@ fn server_row(
                                 state.profile_port_input.update(cx, |input, cx| {
                                     input.set_value(server.port.to_string(), window, cx)
                                 });
+                                state.profile_key_path_input.update(cx, |input, cx| {
+                                    input.set_value("", window, cx)
+                                });
+                                state.profile_auth = server.auth.clone();
                                 state.feedback = Some("已载入服务器配置，可修改后保存。".into());
                                 cx.notify();
                             });
@@ -2015,6 +2098,8 @@ fn main() {
                             .default_value("22")
                             .placeholder("端口")
                     });
+                    let profile_key_path_input =
+                        cx.new(|cx| InputState::new(window, cx).placeholder("私钥文件路径"));
                     let preview_input =
                         cx.new(|cx| TextareaState::new(window, cx).auto_grow(8, 24));
                     DevShellWindow {
@@ -2042,6 +2127,8 @@ fn main() {
                         profile_host_input,
                         profile_user_input,
                         profile_port_input,
+                        profile_key_path_input,
+                        profile_auth: "password".into(),
                         pending_host_key: None,
                         files: None,
                         monitor: None,
@@ -3077,6 +3164,8 @@ fn save_profile_and_reload(
     base: &str,
     token: &str,
     profile_id: Option<&str>,
+    auth: &str,
+    key_path: &str,
     name: &str,
     host: &str,
     port: u16,
@@ -3090,10 +3179,13 @@ fn save_profile_and_reload(
         "port": port,
         "user": user,
         "protocol": "ssh",
-        "auth": "password",
+        "auth": auth,
         "groupId": "",
     });
-    if !secret.is_empty() {
+    if auth == "key" {
+        profile["keyPath"] = Value::String(key_path.to_string());
+    }
+    if auth == "password" && !secret.is_empty() {
         profile["secret"] = Value::String(secret.to_string());
     }
     post_json(base, token, "/api/profiles", profile)?;
