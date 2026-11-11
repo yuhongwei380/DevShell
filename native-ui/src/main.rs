@@ -56,6 +56,7 @@ struct DevShellWindow {
     file_name_input: Entity<InputState>,
     files: Option<FileListState>,
     monitor: Option<MonitorState>,
+    pending_delete: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -206,6 +207,7 @@ impl Render for DevShellWindow {
                                             files,
                                             view.clone(),
                                             self.file_name_input.clone(),
+                                            self.pending_delete.clone(),
                                         ))
                                     })
                                     .when_some(self.monitor.clone(), |workspace, monitor| {
@@ -351,6 +353,7 @@ fn file_panel(
     files: FileListState,
     view: Entity<DevShellWindow>,
     file_name_input: Entity<InputState>,
+    pending_delete: Option<String>,
 ) -> impl IntoElement {
     let current_path = files.path.clone();
     let parent = parent_remote_path(&current_path);
@@ -424,6 +427,10 @@ fn file_panel(
             let name = entry.name.clone();
             let target = join_remote_path(&current_path, &name);
             let view = view.clone();
+            let is_pending = pending_delete.as_deref() == Some(target.as_str());
+            let delete_view = view.clone();
+            let delete_target = target.clone();
+            let delete_parent = current_path.clone();
             div()
                 .flex()
                 .items_center()
@@ -439,6 +446,27 @@ fn file_panel(
                         .label(format!("· {} · {} bytes", name, entry.bytes))
                 })
                 .child(Paragraph::new(entry.owner))
+                .child(
+                    KitButton::new(format!("file-delete-{}", name))
+                        .danger()
+                        .label(if is_pending { "确认删除" } else { "删除" })
+                        .on_click(move |_, _, cx| {
+                            if is_pending {
+                                delete_remote(
+                                    delete_view.clone(),
+                                    delete_target.clone(),
+                                    delete_parent.clone(),
+                                    cx,
+                                );
+                            } else {
+                                let _ = delete_view.update(cx, |state, cx| {
+                                    state.pending_delete = Some(delete_target.clone());
+                                    state.feedback = Some("再次点击“确认删除”以继续".into());
+                                    cx.notify();
+                                });
+                            }
+                        }),
+                )
         }))
 }
 
@@ -566,6 +594,43 @@ fn create_empty_file(view: Entity<DevShellWindow>, path: String, name: String, c
                     Ok(files) => {
                         state.files = Some(files);
                         state.feedback = Some("文件已创建".into());
+                    }
+                    Err(error) => state.feedback = Some(error),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    });
+}
+
+fn delete_remote(view: Entity<DevShellWindow>, target: String, parent: String, cx: &mut App) {
+    let _ = view.update(cx, |state, cx| {
+        let Some(session_id) = state
+            .terminal
+            .as_ref()
+            .map(|terminal| terminal.session_id.clone())
+        else {
+            return;
+        };
+        let base = state.snapshot.base.clone();
+        let token = state.token.clone();
+        state.pending_delete = None;
+        state.feedback = Some(format!("正在删除 {}…", target));
+        let view = cx.entity();
+        cx.spawn(async move |_, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    post_file_action(&base, &token, &session_id, "delete", &target, "")?;
+                    load_files(&base, &token, &session_id, &parent)
+                })
+                .await;
+            let _ = view.update(cx, |state, cx| {
+                match result {
+                    Ok(files) => {
+                        state.files = Some(files);
+                        state.feedback = Some("已删除".into());
                     }
                     Err(error) => state.feedback = Some(error),
                 }
@@ -872,6 +937,7 @@ fn main() {
                         file_name_input,
                         files: None,
                         monitor: None,
+                        pending_delete: None,
                     }
                 })
             })
