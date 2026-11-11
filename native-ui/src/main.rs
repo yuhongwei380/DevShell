@@ -46,6 +46,32 @@ struct ServerSummary {
     port: u16,
 }
 
+#[derive(Clone, Debug)]
+struct PendingHostKey {
+    profile_id: String,
+    challenge: HostKeyChallenge,
+}
+
+#[derive(Clone, Debug)]
+struct HostKeyChallenge {
+    host: String,
+    fingerprint: String,
+    previous_fingerprint: String,
+    algorithm: String,
+}
+
+#[derive(Debug)]
+enum SessionConnectError {
+    HostKey(HostKeyChallenge),
+    Message(String),
+}
+
+impl From<String> for SessionConnectError {
+    fn from(message: String) -> Self {
+        Self::Message(message)
+    }
+}
+
 struct DevShellWindow {
     focus: FocusHandle,
     snapshot: BackendSnapshot,
@@ -57,6 +83,7 @@ struct DevShellWindow {
     file_name_input: Entity<InputState>,
     local_path_input: Entity<InputState>,
     secret_input: Entity<InputState>,
+    pending_host_key: Option<PendingHostKey>,
     files: Option<FileListState>,
     monitor: Option<MonitorState>,
     pending_delete: Option<String>,
@@ -128,6 +155,10 @@ impl Render for DevShellWindow {
         let snapshot = self.snapshot.clone();
         let focus = self.focus.clone();
         let view = cx.entity();
+        let pending_host_key = self.pending_host_key.clone();
+        let pending_profile = pending_host_key
+            .as_ref()
+            .map(|pending| pending.profile_id.as_str());
         let status = if snapshot.locked {
             "配置已锁定"
         } else if snapshot.error.is_some() {
@@ -196,6 +227,42 @@ impl Render for DevShellWindow {
                                     .gap_6()
                                     .child(Paragraph::new("原生工作区"))
                                     .child(Input::new(&self.secret_input))
+                                    .when_some(pending_host_key, |workspace, pending| {
+                                        let detail = if pending.challenge.previous_fingerprint.is_empty() {
+                                            format!(
+                                                "首次连接 {}，请核实主机指纹后再次点击对应服务器。",
+                                                pending.challenge.host
+                                            )
+                                        } else {
+                                            format!(
+                                                "{} 的主机指纹已变化，请核实新指纹后再次点击对应服务器。",
+                                                pending.challenge.host
+                                            )
+                                        };
+                                        workspace.child(
+                                            div()
+                                                .p_3()
+                                                .rounded_md()
+                                                .bg(gpui_kit::rgb(0x2b2116))
+                                                .border_1()
+                                                .border_color(gpui_kit::rgb(0x8a5a22))
+                                                .flex()
+                                                .flex_col()
+                                                .gap_1()
+                                                .child(Paragraph::new(detail))
+                                                .child(Paragraph::new(format!(
+                                                    "算法：{} · 指纹：{}",
+                                                    pending.challenge.algorithm,
+                                                    pending.challenge.fingerprint
+                                                )))
+                                                .when(!pending.challenge.previous_fingerprint.is_empty(), |card| {
+                                                    card.child(Paragraph::new(format!(
+                                                        "旧指纹：{}",
+                                                        pending.challenge.previous_fingerprint
+                                                    )))
+                                                }),
+                                        )
+                                    })
                                     .child(
                                         div()
                                             .flex()
@@ -216,6 +283,7 @@ impl Render for DevShellWindow {
                                                             view.clone(),
                                                             server,
                                                             self.connecting.as_deref(),
+                                                            pending_profile,
                                                         )
                                                     },
                                                 ),
@@ -1073,11 +1141,15 @@ fn server_row(
     view: Entity<DevShellWindow>,
     server: ServerSummary,
     connecting: Option<&str>,
+    pending_profile: Option<&str>,
 ) -> impl IntoElement {
     let server_id = server.id.clone();
     let is_connecting = connecting == Some(server.id.as_str());
+    let is_host_key_pending = pending_profile == Some(server.id.as_str());
     let label = if is_connecting {
         "连接中…"
+    } else if is_host_key_pending {
+        "确认指纹并连接"
     } else {
         "连接"
     };
@@ -1109,15 +1181,28 @@ fn server_row(
                                 let base = state.snapshot.base.clone();
                                 let token = state.token.clone();
                                 let secret = state.secret_input.read(cx).value(cx).to_string();
+                                let approval = state
+                                    .pending_host_key
+                                    .as_ref()
+                                    .filter(|pending| pending.profile_id == profile_id)
+                                    .map(|pending| pending.challenge.clone());
                                 state.connecting = Some(profile_id.clone());
                                 state.feedback = Some("正在连接服务器…".into());
                                 cx.notify();
+                                let request_profile_id = profile_id.clone();
+                                let request_approval = approval.clone();
                                 cx.spawn(async move |this, cx| {
                                     let result = cx
                                         .background_executor()
                                         .spawn(
                                             async move {
-                                                post_session(&base, &token, &profile_id, &secret)
+                                                post_session(
+                                                    &base,
+                                                    &token,
+                                                    &request_profile_id,
+                                                    &secret,
+                                                    request_approval.as_ref(),
+                                                )
                                             },
                                         )
                                         .await;
@@ -1125,6 +1210,7 @@ fn server_row(
                                         state.connecting = None;
                                         match result {
                                             Ok(session_id) => {
+                                                state.pending_host_key = None;
                                                 state.feedback = Some(format!(
                                                     "连接已建立，会话 {}；正在打开终端。",
                                                     session_id
@@ -1312,7 +1398,19 @@ fn server_row(
                                                 })
                                                 .detach();
                                             }
-                                            Err(error) => state.feedback = Some(error),
+                                            Err(SessionConnectError::HostKey(challenge)) => {
+                                                state.pending_host_key = Some(PendingHostKey {
+                                                    profile_id: profile_id.clone(),
+                                                    challenge,
+                                                });
+                                                state.feedback = Some(
+                                                    "请核实服务器主机指纹，再次点击同一服务器按钮确认。"
+                                                        .into(),
+                                                );
+                                            }
+                                            Err(SessionConnectError::Message(error)) => {
+                                                state.feedback = Some(error)
+                                            }
                                         }
                                         cx.notify();
                                     });
@@ -1358,6 +1456,7 @@ fn main() {
                         local_path_input: cx
                             .new(|cx| InputState::new(window, cx).placeholder("本地文件路径")),
                         secret_input,
+                        pending_host_key: None,
                         files: None,
                         monitor: None,
                         pending_delete: None,
@@ -1462,7 +1561,13 @@ impl BackendSnapshot {
     }
 }
 
-fn post_session(base: &str, token: &str, profile_id: &str, secret: &str) -> Result<String, String> {
+fn post_session(
+    base: &str,
+    token: &str,
+    profile_id: &str,
+    secret: &str,
+    approval: Option<&HostKeyChallenge>,
+) -> Result<String, SessionConnectError> {
     let authority = base
         .strip_prefix("http://")
         .ok_or_else(|| "后端地址必须使用 http://".to_string())?;
@@ -1470,7 +1575,19 @@ fn post_session(base: &str, token: &str, profile_id: &str, secret: &str) -> Resu
     stream
         .set_read_timeout(Some(Duration::from_secs(25)))
         .map_err(|error| format!("设置超时失败：{error}"))?;
-    let body = serde_json::json!({"profileId": profile_id, "secret": secret}).to_string();
+    let host_key_approval = approval.map(|challenge| {
+        serde_json::json!({
+            "host": challenge.host.clone(),
+            "fingerprint": challenge.fingerprint.clone(),
+            "previousFingerprint": challenge.previous_fingerprint.clone(),
+        })
+    });
+    let body = serde_json::json!({
+        "profileId": profile_id,
+        "secret": secret,
+        "hostKeyApproval": host_key_approval,
+    })
+    .to_string();
     let request = format!(
         "POST /api/sessions HTTP/1.1\r\nHost: {authority}\r\nX-CloudShell-Token: {token}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
         body.len(),
@@ -1495,20 +1612,39 @@ fn post_session(base: &str, token: &str, profile_id: &str, secret: &str) -> Resu
             let fingerprint = host_key
                 .get("fingerprint")
                 .and_then(Value::as_str)
-                .unwrap_or("未知");
-            return Err(format!("需要确认 SSH 主机指纹：{fingerprint}"));
+                .unwrap_or("未知")
+                .to_string();
+            return Err(SessionConnectError::HostKey(HostKeyChallenge {
+                host: host_key
+                    .get("host")
+                    .and_then(Value::as_str)
+                    .unwrap_or("未知主机")
+                    .to_string(),
+                fingerprint,
+                previous_fingerprint: host_key
+                    .get("previousFingerprint")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
+                algorithm: host_key
+                    .get("algorithm")
+                    .and_then(Value::as_str)
+                    .unwrap_or("未知算法")
+                    .to_string(),
+            }));
         }
         return Err(value
             .get("error")
             .and_then(Value::as_str)
             .unwrap_or(status)
-            .to_string());
+            .to_string()
+            .into());
     }
     value
         .get("id")
         .and_then(Value::as_str)
         .map(ToString::to_string)
-        .ok_or_else(|| "连接成功但后端没有返回会话 ID".into())
+        .ok_or_else(|| "连接成功但后端没有返回会话 ID".to_string().into())
 }
 
 fn load_files(
