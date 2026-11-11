@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 )
 
@@ -19,6 +20,37 @@ func TestNoUpdateUsesDisplayVersion(t *testing.T) {
 	got := noUpdate("current")
 	if got.CurrentVersion != ApplicationDisplayVersion {
 		t.Fatalf("manual update status lost RC display version: got %q want %q", got.CurrentVersion, ApplicationDisplayVersion)
+	}
+}
+
+func TestUpdateInstallHTTPDelegatesToHost(t *testing.T) {
+	a, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	handler := a.Handler(fstest.MapFS{})
+	request := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest("POST", "/api/updates/install", strings.NewReader(`{"id":"job-1"}`))
+		req.Header.Set("X-CloudShell-Token", a.Token())
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, req)
+		return response
+	}
+	if response := request(); response.Code != http.StatusBadRequest {
+		t.Fatalf("missing host handler returned %d, want 400", response.Code)
+	}
+	var received string
+	a.SetInstallUpdateHandler(func(id string) error {
+		received = id
+		return nil
+	})
+	response := request()
+	if response.Code != http.StatusOK {
+		t.Fatalf("host handler returned %d, want 200: %s", response.Code, response.Body.String())
+	}
+	if received != "job-1" {
+		t.Fatalf("host handler received %q, want job-1", received)
 	}
 }
 
