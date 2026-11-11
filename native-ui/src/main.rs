@@ -48,6 +48,8 @@ struct ServerSummary {
     host: String,
     port: u16,
     user: String,
+    auth: String,
+    proxy_id: String,
 }
 
 #[derive(Clone, Debug)]
@@ -1762,6 +1764,14 @@ fn server_row(
                         .on_click(move |_, window, cx| {
                             let server = edit_server.clone();
                             edit_view.update(cx, |state, cx| {
+                                if server.auth != "password" || !server.proxy_id.is_empty() {
+                                    state.feedback = Some(
+                                        "原生编辑目前只支持直连密码认证服务器，私钥、Agent 或代理配置请在旧界面编辑。"
+                                            .into(),
+                                    );
+                                    cx.notify();
+                                    return;
+                                }
                                 state.profile_form_open = true;
                                 state.profile_editing_id = Some(server.id.clone());
                                 state.profile_name_input.update(cx, |input, cx| {
@@ -1974,6 +1984,13 @@ impl BackendSnapshot {
                         servers
                             .iter()
                             .filter_map(|server| {
+                                let protocol = server
+                                    .get("protocol")
+                                    .and_then(Value::as_str)
+                                    .unwrap_or("ssh");
+                                if protocol != "ssh" {
+                                    return None;
+                                }
                                 Some(ServerSummary {
                                     id: server.get("id")?.as_str()?.to_string(),
                                     name: server.get("name")?.as_str()?.to_string(),
@@ -1982,6 +1999,16 @@ impl BackendSnapshot {
                                         as u16,
                                     user: server
                                         .get("user")
+                                        .and_then(Value::as_str)
+                                        .unwrap_or_default()
+                                        .to_string(),
+                                    auth: server
+                                        .get("auth")
+                                        .and_then(Value::as_str)
+                                        .unwrap_or("password")
+                                        .to_string(),
+                                    proxy_id: server
+                                        .get("proxyId")
                                         .and_then(Value::as_str)
                                         .unwrap_or_default()
                                         .to_string(),
