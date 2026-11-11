@@ -128,6 +128,7 @@ struct DevShellWindow {
     proxy_password_input: Entity<InputState>,
     proxy_kind: String,
     proxy_editing_id: Option<String>,
+    proxy_original_signature: Option<String>,
     pending_proxy_delete: Option<String>,
     pending_host_key: Option<PendingHostKey>,
     files: Option<FileListState>,
@@ -660,6 +661,7 @@ fn settings_panel(
                                     state.proxy_form_open = opening;
                                     if opening {
                                         state.proxy_editing_id = None;
+                                        state.proxy_original_signature = None;
                                         state.proxy_name_input.update(cx, |input, cx| {
                                             input.set_value("", window, cx)
                                         });
@@ -727,6 +729,10 @@ fn settings_panel(
                                     edit_view.update(cx, |state, cx| {
                                         state.proxy_form_open = true;
                                         state.proxy_editing_id = Some(edit_id.clone());
+                                        state.proxy_original_signature = Some(format!(
+                                            "{}|{}|{}|{}",
+                                            edit_kind, edit_host, edit_port, edit_user
+                                        ));
                                         state.proxy_name_input.update(cx, |input, cx| {
                                             input.set_value(edit_name.clone(), window, cx)
                                         });
@@ -1003,6 +1009,16 @@ fn proxy_form(
                         let token = state.token.clone();
                         let kind = state.proxy_kind.clone();
                         let editing_id = state.proxy_editing_id.clone();
+                        let signature = format!("{}|{}|{}|{}", kind, host, port, user);
+                        if editing_id.is_some()
+                            && password.is_empty()
+                            && state.proxy_original_signature.as_deref() != Some(signature.as_str())
+                        {
+                            state.feedback =
+                                Some("修改代理地址或认证信息时，请重新填写代理密码。".into());
+                            cx.notify();
+                            return;
+                        }
                         state.proxy_saving = true;
                         state.feedback = Some("正在保存代理配置…".into());
                         cx.notify();
@@ -1030,6 +1046,7 @@ fn proxy_form(
                                         state.snapshot = snapshot;
                                         state.proxy_form_open = false;
                                         state.proxy_editing_id = None;
+                                        state.proxy_original_signature = None;
                                         state.feedback = Some("代理配置已保存。".into());
                                     }
                                     Err(error) => state.feedback = Some(error),
@@ -2614,6 +2631,7 @@ fn main() {
                         proxy_password_input,
                         proxy_kind: "socks5".into(),
                         proxy_editing_id: None,
+                        proxy_original_signature: None,
                         pending_proxy_delete: None,
                         pending_host_key: None,
                         files: None,
