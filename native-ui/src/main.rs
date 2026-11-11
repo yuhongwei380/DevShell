@@ -82,6 +82,8 @@ struct DevShellWindow {
     settings_visible: bool,
     update_status: Option<String>,
     update_checking: bool,
+    profile_form_open: bool,
+    profile_saving: bool,
     connecting: Option<String>,
     feedback: Option<String>,
     terminal: Option<TerminalState>,
@@ -89,6 +91,10 @@ struct DevShellWindow {
     file_name_input: Entity<InputState>,
     local_path_input: Entity<InputState>,
     secret_input: Entity<InputState>,
+    profile_name_input: Entity<InputState>,
+    profile_host_input: Entity<InputState>,
+    profile_user_input: Entity<InputState>,
+    profile_port_input: Entity<InputState>,
     pending_host_key: Option<PendingHostKey>,
     files: Option<FileListState>,
     monitor: Option<MonitorState>,
@@ -311,7 +317,42 @@ impl Render for DevShellWindow {
                                             .flex()
                                             .flex_col()
                                             .gap_2()
-                                            .child(Paragraph::new("最近配置的服务器"))
+                                            .child(
+                                                div()
+                                                    .flex()
+                                                    .items_center()
+                                                    .justify_between()
+                                                    .child(Paragraph::new("最近配置的服务器"))
+                                                    .child(
+                                                        KitButton::new("new-server")
+                                                            .secondary()
+                                                            .label(if self.profile_form_open {
+                                                                "收起新增"
+                                                            } else {
+                                                                "新增服务器"
+                                                            })
+                                                            .on_click({
+                                                                let view = view.clone();
+                                                                move |_, _, cx| {
+                                                                    view.update(cx, |state, cx| {
+                                                                        state.profile_form_open =
+                                                                            !state.profile_form_open;
+                                                                        cx.notify();
+                                                                    });
+                                                                }
+                                                            }),
+                                                    ),
+                                            )
+                                            .when(self.profile_form_open, |list| {
+                                                list.child(profile_form(
+                                                    view.clone(),
+                                                    self.profile_name_input.clone(),
+                                                    self.profile_host_input.clone(),
+                                                    self.profile_user_input.clone(),
+                                                    self.profile_port_input.clone(),
+                                                    self.profile_saving,
+                                                ))
+                                            })
                                             .children(
                                                 snapshot.servers.iter().take(8).cloned().map(
                                                     |server| {
@@ -526,6 +567,113 @@ fn settings_panel(
                     view.update(cx, |state, cx| {
                         state.settings_visible = false;
                         cx.notify();
+                    });
+                }),
+        )
+}
+
+fn profile_form(
+    view: Entity<DevShellWindow>,
+    name_input: Entity<InputState>,
+    host_input: Entity<InputState>,
+    user_input: Entity<InputState>,
+    port_input: Entity<InputState>,
+    saving: bool,
+) -> impl IntoElement {
+    div()
+        .p_4()
+        .rounded_md()
+        .bg(gpui_kit::rgb(0x171c23))
+        .border_1()
+        .border_color(gpui_kit::rgb(0x2b313b))
+        .flex()
+        .flex_col()
+        .gap_2()
+        .child(Paragraph::new("新增 SSH 服务器"))
+        .child(Input::new(&name_input))
+        .child(Input::new(&host_input))
+        .child(Input::new(&port_input))
+        .child(Input::new(&user_input))
+        .child(Paragraph::new(
+            "密码沿用上方的 SSH 凭据输入；留空则保存后连接时再输入。",
+        ))
+        .child(
+            KitButton::new("save-server")
+                .secondary()
+                .label(if saving {
+                    "保存中…"
+                } else {
+                    "保存服务器"
+                })
+                .disabled(saving)
+                .on_click(move |_, _, cx| {
+                    view.update(cx, |state, cx| {
+                        let name = state
+                            .profile_name_input
+                            .read(cx)
+                            .value(cx)
+                            .trim()
+                            .to_string();
+                        let host = state
+                            .profile_host_input
+                            .read(cx)
+                            .value(cx)
+                            .trim()
+                            .to_string();
+                        let user = state
+                            .profile_user_input
+                            .read(cx)
+                            .value(cx)
+                            .trim()
+                            .to_string();
+                        let port_text = state
+                            .profile_port_input
+                            .read(cx)
+                            .value(cx)
+                            .trim()
+                            .to_string();
+                        let secret = state.secret_input.read(cx).value(cx).to_string();
+                        if name.is_empty() || host.is_empty() || user.is_empty() {
+                            state.feedback = Some("请填写服务器名称、地址和用户名。".into());
+                            cx.notify();
+                            return;
+                        }
+                        let port = match port_text.parse::<u16>() {
+                            Ok(port) if port > 0 => port,
+                            _ => {
+                                state.feedback = Some("端口必须是 1–65535 的数字。".into());
+                                cx.notify();
+                                return;
+                            }
+                        };
+                        let base = state.snapshot.base.clone();
+                        let token = state.token.clone();
+                        state.profile_saving = true;
+                        state.feedback = Some("正在保存服务器配置…".into());
+                        cx.notify();
+                        cx.spawn(async move |this, cx| {
+                            let result = cx
+                                .background_executor()
+                                .spawn(async move {
+                                    save_profile_and_reload(
+                                        &base, &token, &name, &host, port, &user, &secret,
+                                    )
+                                })
+                                .await;
+                            let _ = this.update(cx, |state, cx| {
+                                state.profile_saving = false;
+                                match result {
+                                    Ok(snapshot) => {
+                                        state.snapshot = snapshot;
+                                        state.profile_form_open = false;
+                                        state.feedback = Some("服务器配置已保存。".into());
+                                    }
+                                    Err(error) => state.feedback = Some(error),
+                                }
+                                cx.notify();
+                            });
+                        })
+                        .detach();
                     });
                 }),
         )
@@ -1593,6 +1741,17 @@ fn main() {
                             .placeholder("SSH 密码或私钥口令")
                             .masked(true)
                     });
+                    let profile_name_input =
+                        cx.new(|cx| InputState::new(window, cx).placeholder("服务器名称"));
+                    let profile_host_input =
+                        cx.new(|cx| InputState::new(window, cx).placeholder("服务器地址"));
+                    let profile_user_input =
+                        cx.new(|cx| InputState::new(window, cx).placeholder("用户名"));
+                    let profile_port_input = cx.new(|cx| {
+                        InputState::new(window, cx)
+                            .default_value("22")
+                            .placeholder("端口")
+                    });
                     DevShellWindow {
                         focus,
                         snapshot,
@@ -1600,6 +1759,8 @@ fn main() {
                         settings_visible: false,
                         update_status: None,
                         update_checking: false,
+                        profile_form_open: false,
+                        profile_saving: false,
                         connecting: None,
                         feedback: None,
                         terminal: None,
@@ -1608,6 +1769,10 @@ fn main() {
                         local_path_input: cx
                             .new(|cx| InputState::new(window, cx).placeholder("本地文件路径")),
                         secret_input,
+                        profile_name_input,
+                        profile_host_input,
+                        profile_user_input,
+                        profile_port_input,
                         pending_host_key: None,
                         files: None,
                         monitor: None,
@@ -2450,6 +2615,32 @@ fn check_updates(base: &str, token: &str) -> Result<String, String> {
         .and_then(Value::as_str)
         .unwrap_or("更新服务返回未知状态")
         .to_string())
+}
+
+fn save_profile_and_reload(
+    base: &str,
+    token: &str,
+    name: &str,
+    host: &str,
+    port: u16,
+    user: &str,
+    secret: &str,
+) -> Result<BackendSnapshot, String> {
+    let mut profile = serde_json::json!({
+        "id": "",
+        "name": name,
+        "host": host,
+        "port": port,
+        "user": user,
+        "protocol": "ssh",
+        "auth": "password",
+        "groupId": "",
+    });
+    if !secret.is_empty() {
+        profile["secret"] = Value::String(secret.to_string());
+    }
+    post_json(base, token, "/api/profiles", profile)?;
+    Ok(BackendSnapshot::load(base, token))
 }
 
 fn post_json(base: &str, token: &str, path: &str, body: Value) -> Result<Value, String> {
