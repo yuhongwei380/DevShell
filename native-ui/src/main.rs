@@ -337,13 +337,32 @@ impl Render for DevShellWindow {
                                                 "服务地址：{}",
                                                 snapshot.base
                                             )))
-                                            .child(
-                                                ElyButton::new("refresh", "刷新后端状态").on_click(
-                                                    |_, _, _| {
-                                                        println!("refresh: native view pending")
-                                                    },
-                                                ),
-                                            ),
+                                            .child(ElyButton::new("refresh", "刷新后端状态").on_click({
+                                                let view = view.clone();
+                                                move |_, _, cx| {
+                                                    let view = view.clone();
+                                                    view.update(cx, |state, cx| {
+                                                        let base = state.snapshot.base.clone();
+                                                        let token = state.token.clone();
+                                                        state.feedback = Some("正在刷新后端状态…".into());
+                                                        cx.notify();
+                                                        cx.spawn(async move |this, cx| {
+                                                            let snapshot = cx
+                                                                .background_executor()
+                                                                .spawn(async move {
+                                                                    BackendSnapshot::load(&base, &token)
+                                                                })
+                                                                .await;
+                                                            let _ = this.update(cx, |state, cx| {
+                                                                state.snapshot = snapshot;
+                                                                state.feedback = Some("后端状态已刷新。".into());
+                                                                cx.notify();
+                                                            });
+                                                        })
+                                                        .detach();
+                                                    });
+                                                }
+                                            })),
                                     ),
                             ),
                     )
