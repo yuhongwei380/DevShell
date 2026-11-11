@@ -17,11 +17,11 @@ use ely_gpui_component::{
     typography::{Heading, Paragraph},
 };
 use gpui_kit::{
-    App, AppContext, Context, Disableable, Entity, FocusHandle, IntoElement, ParentElement, Render,
-    Styled, Window, WindowOptions,
+    AnyWindowHandle, App, AppContext, Context, Disableable, Entity, FocusHandle, IntoElement,
+    ParentElement, Render, Styled, Window, WindowOptions,
     component::{
         button::{Button as KitButton, ButtonVariants},
-        input::{Input, InputState},
+        input::{Input, InputState, Textarea, TextareaState},
     },
     div, px,
 };
@@ -106,6 +106,8 @@ struct DevShellWindow {
     pending_delete: Option<String>,
     pending_rename: Option<String>,
     preview: Option<FilePreviewState>,
+    preview_input: Entity<TextareaState>,
+    window_handle: Option<AnyWindowHandle>,
     transfers: Vec<TransferState>,
 }
 
@@ -136,6 +138,7 @@ struct RemoteEntry {
 struct FilePreviewState {
     path: String,
     encoding: String,
+    sha256: String,
     text: String,
     status: String,
 }
@@ -168,7 +171,8 @@ enum TerminalEvent {
 }
 
 impl Render for DevShellWindow {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.window_handle = Some(window.window_handle());
         let snapshot = self.snapshot.clone();
         let focus = self.focus.clone();
         let view = cx.entity();
@@ -409,7 +413,11 @@ impl Render for DevShellWindow {
                                         workspace.child(monitor_panel(monitor))
                                     })
                                     .when_some(self.preview.clone(), |workspace, preview| {
-                                        workspace.child(file_preview_panel(preview))
+                                        workspace.child(file_preview_panel(
+                                            preview,
+                                            self.preview_input.clone(),
+                                            view.clone(),
+                                        ))
                                     })
                                     .when(!self.transfers.is_empty(), |workspace| {
                                         workspace.child(transfer_panel(
@@ -1010,12 +1018,12 @@ fn monitor_panel(monitor: MonitorState) -> impl IntoElement {
         )));
 }
 
-fn file_preview_panel(preview: FilePreviewState) -> impl IntoElement {
-    let text = if preview.text.chars().count() > 12000 {
-        preview.text.chars().take(12000).collect()
-    } else {
-        preview.text
-    };
+fn file_preview_panel(
+    preview: FilePreviewState,
+    preview_input: Entity<TextareaState>,
+    view: Entity<DevShellWindow>,
+) -> impl IntoElement {
+    let save_view = view.clone();
     div()
         .p_4()
         .rounded_lg()
@@ -1029,7 +1037,22 @@ fn file_preview_panel(preview: FilePreviewState) -> impl IntoElement {
             "预览 · {} · 编码 {} · {}",
             preview.path, preview.encoding, preview.status
         )))
-        .child(Paragraph::new(text));
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .child(Paragraph::new(
+                    "保存前会校验远端文件指纹，冲突时保留远端版本。",
+                ))
+                .child(
+                    KitButton::new("preview-save")
+                        .primary()
+                        .label("保存文件")
+                        .on_click(move |_, _, cx| save_preview(save_view.clone(), cx)),
+                ),
+        )
+        .child(Textarea::new(&preview_input).h(px(280.)));
 }
 
 fn transfer_panel(transfers: Vec<TransferState>, view: Entity<DevShellWindow>) -> impl IntoElement {
@@ -1144,8 +1167,54 @@ fn preview_remote(view: Entity<DevShellWindow>, path: String, cx: &mut App) {
             let _ = view.update(cx, |state, cx| {
                 match result {
                     Ok(preview) => {
+                        let text = preview.text.clone();
                         state.preview = Some(preview);
+                        if let Some(window_handle) = state.window_handle.clone() {
+                            let input = state.preview_input.clone();
+                            let _ = cx.update_window(window_handle, |_, window, cx| {
+                                input.update(cx, |input, cx| input.set_value(text, window, cx));
+                            });
+                        }
                         state.feedback = Some("文件已加载".into());
+                    }
+                    Err(error) => state.feedback = Some(error),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    });
+}
+
+fn save_preview(view: Entity<DevShellWindow>, cx: &mut App) {
+    let _ = view.update(cx, |state, cx| {
+        let Some(preview) = state.preview.clone() else {
+            return;
+        };
+        let Some(session_id) = state
+            .terminal
+            .as_ref()
+            .map(|terminal| terminal.session_id.clone())
+        else {
+            return;
+        };
+        let base = state.snapshot.base.clone();
+        let token = state.token.clone();
+        let text = state.preview_input.read(cx).value(cx).to_string();
+        state.feedback = Some(format!("正在保存文件 {}…", preview.path));
+        let view = cx.entity();
+        cx.spawn(async move |_, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(
+                    async move { save_file_content(&base, &token, &session_id, &preview, &text) },
+                )
+                .await;
+            let _ = view.update(cx, |state, cx| {
+                match result {
+                    Ok(saved) => {
+                        state.preview = Some(saved);
+                        state.feedback = Some("文件已保存".into());
                     }
                     Err(error) => state.feedback = Some(error),
                 }
@@ -1877,6 +1946,8 @@ fn main() {
                             .default_value("22")
                             .placeholder("端口")
                     });
+                    let preview_input =
+                        cx.new(|cx| TextareaState::new(window, cx).auto_grow(8, 24));
                     DevShellWindow {
                         focus,
                         snapshot,
@@ -1906,6 +1977,8 @@ fn main() {
                         pending_delete: None,
                         pending_rename: None,
                         preview: None,
+                        preview_input,
+                        window_handle: None,
                         transfers: Vec::new(),
                     }
                 })
@@ -2230,12 +2303,60 @@ fn load_preview(
             .and_then(Value::as_str)
             .unwrap_or("unknown")
             .to_string(),
+        sha256: value
+            .get("sha256")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
         text: value
             .get("text")
             .and_then(Value::as_str)
             .unwrap_or("")
             .to_string(),
-        status: "只读预览".into(),
+        status: "可编辑".into(),
+    })
+}
+
+fn save_file_content(
+    base: &str,
+    token: &str,
+    session_id: &str,
+    preview: &FilePreviewState,
+    text: &str,
+) -> Result<FilePreviewState, String> {
+    let value = post_json(
+        base,
+        token,
+        &format!("/api/sessions/{session_id}/file-content"),
+        serde_json::json!({
+            "path": preview.path.clone(),
+            "encoding": preview.encoding.clone(),
+            "sha256": preview.sha256.clone(),
+            "text": text,
+        }),
+    )?;
+    Ok(FilePreviewState {
+        path: value
+            .get("path")
+            .and_then(Value::as_str)
+            .unwrap_or(&preview.path)
+            .to_string(),
+        encoding: value
+            .get("encoding")
+            .and_then(Value::as_str)
+            .unwrap_or(&preview.encoding)
+            .to_string(),
+        sha256: value
+            .get("sha256")
+            .and_then(Value::as_str)
+            .unwrap_or(&preview.sha256)
+            .to_string(),
+        text: value
+            .get("text")
+            .and_then(Value::as_str)
+            .unwrap_or(text)
+            .to_string(),
+        status: "已保存".into(),
     })
 }
 
