@@ -660,16 +660,34 @@ fn settings_panel(
             } else {
                 format!("{} / {}", download.received, download.total)
             };
-            panel.child(Paragraph::new(format!(
-                "更新下载 · {} · {}{}",
-                download.status,
-                progress,
-                download
-                    .error
-                    .as_deref()
-                    .map(|error| format!(" · {error}"))
-                    .unwrap_or_default()
-            )))
+            panel.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(Paragraph::new(format!(
+                        "更新下载 · {} · {}{}",
+                        download.status,
+                        progress,
+                        download
+                            .error
+                            .as_deref()
+                            .map(|error| format!(" · {error}"))
+                            .unwrap_or_default()
+                    )))
+                    .when(download_active, |row| {
+                        let view = view.clone();
+                        let job_id = download.id.clone();
+                        row.child(
+                            KitButton::new("cancel-update-download")
+                                .danger()
+                                .label("取消下载")
+                                .on_click(move |_, _, cx| {
+                                    cancel_update_download(view.clone(), job_id.clone(), cx)
+                                }),
+                        )
+                    }),
+            )
         })
         .child(
             KitButton::new("close-settings")
@@ -3155,6 +3173,36 @@ fn start_update_download(view: Entity<DevShellWindow>, hash: String, cx: &mut Ap
                     break;
                 }
             }
+        })
+        .detach();
+    });
+}
+
+fn cancel_update_download(view: Entity<DevShellWindow>, job_id: String, cx: &mut App) {
+    let _ = view.update(cx, |state, cx| {
+        let base = state.snapshot.base.clone();
+        let token = state.token.clone();
+        state.feedback = Some("正在取消更新下载…".into());
+        let view = cx.entity();
+        cx.spawn(async move |this, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    delete_json(&base, &token, &format!("/api/updates/download/{job_id}"))
+                })
+                .await;
+            let _ = this.update(cx, |state, cx| {
+                match result {
+                    Ok(_) => {
+                        if let Some(download) = state.update_download.as_mut() {
+                            download.status = "cancelled".into();
+                        }
+                        state.feedback = Some("更新下载已取消。".into());
+                    }
+                    Err(error) => state.feedback = Some(error),
+                }
+                cx.notify();
+            });
         })
         .detach();
     });
