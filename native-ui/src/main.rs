@@ -50,6 +50,7 @@ struct ServerSummary {
     host: String,
     port: u16,
     user: String,
+    group: String,
     auth: String,
     proxy_id: String,
     inline_proxy: bool,
@@ -2219,8 +2220,8 @@ fn server_row(
                 .items_center()
                 .gap_3()
                 .child(Paragraph::new(format!(
-                    "{}:{} · {} · {}",
-                    server.host, server.port, auth_label, proxy_label
+                    "{}:{} · {} · {} · {}",
+                    server.host, server.port, server.group, auth_label, proxy_label
                 )))
                 .child(
                     KitButton::new(server_id.clone())
@@ -2765,6 +2766,11 @@ impl BackendSnapshot {
                                         .get("user")
                                         .and_then(Value::as_str)
                                         .unwrap_or_default()
+                                        .to_string(),
+                                    group: server
+                                        .get("group")
+                                        .and_then(Value::as_str)
+                                        .unwrap_or("未分组")
                                         .to_string(),
                                     auth: server
                                         .get("auth")
