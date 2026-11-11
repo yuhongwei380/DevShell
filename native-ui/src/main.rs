@@ -13,8 +13,8 @@ use ely_gpui_component::{
     typography::{Heading, Paragraph},
 };
 use gpui_kit::{
-    App, AppContext, Context, FocusHandle, IntoElement, ParentElement, Render, Styled, Window,
-    WindowOptions,
+    App, AppContext, Context, Disableable, Entity, FocusHandle, IntoElement, ParentElement, Render,
+    Styled, Window, WindowOptions,
     component::button::{Button as KitButton, ButtonVariants},
     div, px,
 };
@@ -33,6 +33,7 @@ struct BackendSnapshot {
 
 #[derive(Clone, Debug)]
 struct ServerSummary {
+    id: String,
     name: String,
     host: String,
     port: u16,
@@ -41,12 +42,16 @@ struct ServerSummary {
 struct DevShellWindow {
     focus: FocusHandle,
     snapshot: BackendSnapshot,
+    token: String,
+    connecting: Option<String>,
+    feedback: Option<String>,
 }
 
 impl Render for DevShellWindow {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let snapshot = self.snapshot.clone();
         let focus = self.focus.clone();
+        let view = cx.entity();
         let status = if snapshot.locked {
             "配置已锁定"
         } else if snapshot.error.is_some() {
@@ -128,12 +133,15 @@ impl Render for DevShellWindow {
                                             .gap_2()
                                             .child(Paragraph::new("最近配置的服务器"))
                                             .children(
-                                                snapshot
-                                                    .servers
-                                                    .iter()
-                                                    .take(8)
-                                                    .cloned()
-                                                    .map(server_row),
+                                                snapshot.servers.iter().take(8).cloned().map(
+                                                    |server| {
+                                                        server_row(
+                                                            view.clone(),
+                                                            server,
+                                                            self.connecting.as_deref(),
+                                                        )
+                                                    },
+                                                ),
                                             ),
                                     )
                                     .child(
@@ -148,6 +156,9 @@ impl Render for DevShellWindow {
                                             .gap_3()
                                             .child(Paragraph::new(status))
                                             .child(Paragraph::new(status_detail))
+                                            .when_some(self.feedback.clone(), |card, message| {
+                                                card.child(Paragraph::new(message))
+                                            })
                                             .child(Paragraph::new(format!(
                                                 "服务地址：{}",
                                                 snapshot.base
@@ -200,7 +211,18 @@ fn stat_card(label: &'static str, value: usize) -> impl IntoElement {
         .child(Heading::h2(value.to_string()))
 }
 
-fn server_row(server: ServerSummary) -> impl IntoElement {
+fn server_row(
+    view: Entity<DevShellWindow>,
+    server: ServerSummary,
+    connecting: Option<&str>,
+) -> impl IntoElement {
+    let server_id = server.id.clone();
+    let is_connecting = connecting == Some(server.id.as_str());
+    let label = if is_connecting {
+        "连接中…"
+    } else {
+        "连接"
+    };
     div()
         .p_3()
         .rounded_md()
@@ -211,7 +233,50 @@ fn server_row(server: ServerSummary) -> impl IntoElement {
         .items_center()
         .justify_between()
         .child(Paragraph::new(server.name))
-        .child(Paragraph::new(format!("{}:{}", server.host, server.port)))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap_3()
+                .child(Paragraph::new(format!("{}:{}", server.host, server.port)))
+                .child(
+                    KitButton::new(server_id.clone())
+                        .secondary()
+                        .label(label)
+                        .disabled(is_connecting)
+                        .on_click(move |_, _, cx| {
+                            let view = view.clone();
+                            let profile_id = server_id.clone();
+                            view.update(cx, |state, cx| {
+                                let base = state.snapshot.base.clone();
+                                let token = state.token.clone();
+                                state.connecting = Some(profile_id.clone());
+                                state.feedback = Some("正在连接服务器…".into());
+                                cx.notify();
+                                cx.spawn(async move |this, cx| {
+                                    let result = cx
+                                        .background_executor()
+                                        .spawn(
+                                            async move { post_session(&base, &token, &profile_id) },
+                                        )
+                                        .await;
+                                    let _ = this.update(cx, |state, cx| {
+                                        state.connecting = None;
+                                        state.feedback = Some(match result {
+                                            Ok(session_id) => format!(
+                                                "连接已建立，会话 {}；终端视图正在迁移。",
+                                                session_id
+                                            ),
+                                            Err(error) => error,
+                                        });
+                                        cx.notify();
+                                    });
+                                })
+                                .detach();
+                            });
+                        }),
+                ),
+        )
 }
 
 fn main() {
@@ -230,7 +295,13 @@ fn main() {
                 cx.new(|cx| {
                     let focus = cx.focus_handle();
                     window.focus(&focus, cx);
-                    DevShellWindow { focus, snapshot }
+                    DevShellWindow {
+                        focus,
+                        snapshot,
+                        token: args.token.clone(),
+                        connecting: None,
+                        feedback: None,
+                    }
                 })
             })
             .expect("failed to open DevShell native window");
@@ -305,6 +376,7 @@ impl BackendSnapshot {
                             .iter()
                             .filter_map(|server| {
                                 Some(ServerSummary {
+                                    id: server.get("id")?.as_str()?.to_string(),
                                     name: server.get("name")?.as_str()?.to_string(),
                                     host: server.get("host")?.as_str()?.to_string(),
                                     port: server.get("port").and_then(Value::as_u64).unwrap_or(22)
@@ -325,6 +397,55 @@ impl BackendSnapshot {
         }
         snapshot
     }
+}
+
+fn post_session(base: &str, token: &str, profile_id: &str) -> Result<String, String> {
+    let authority = base
+        .strip_prefix("http://")
+        .ok_or_else(|| "后端地址必须使用 http://".to_string())?;
+    let mut stream = TcpStream::connect(authority).map_err(|error| format!("连接失败：{error}"))?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(25)))
+        .map_err(|error| format!("设置超时失败：{error}"))?;
+    let body = serde_json::json!({"profileId": profile_id, "secret": ""}).to_string();
+    let request = format!(
+        "POST /api/sessions HTTP/1.1\r\nHost: {authority}\r\nX-CloudShell-Token: {token}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        body.len(),
+        body
+    );
+    stream
+        .write_all(request.as_bytes())
+        .map_err(|error| format!("发送连接请求失败：{error}"))?;
+    let mut response = Vec::new();
+    stream
+        .read_to_end(&mut response)
+        .map_err(|error| format!("读取连接响应失败：{error}"))?;
+    let text = String::from_utf8_lossy(&response);
+    let (headers, body) = text
+        .split_once("\r\n\r\n")
+        .ok_or_else(|| "后端响应格式无效".to_string())?;
+    let status = headers.lines().next().unwrap_or_default();
+    let value: Value =
+        serde_json::from_str(body.trim()).map_err(|error| format!("解析连接响应失败：{error}"))?;
+    if !status.contains(" 200 ") {
+        if let Some(host_key) = value.get("hostKey") {
+            let fingerprint = host_key
+                .get("fingerprint")
+                .and_then(Value::as_str)
+                .unwrap_or("未知");
+            return Err(format!("需要确认 SSH 主机指纹：{fingerprint}"));
+        }
+        return Err(value
+            .get("error")
+            .and_then(Value::as_str)
+            .unwrap_or(status)
+            .to_string());
+    }
+    value
+        .get("id")
+        .and_then(Value::as_str)
+        .map(ToString::to_string)
+        .ok_or_else(|| "连接成功但后端没有返回会话 ID".into())
 }
 
 fn get_json(base: &str, token: &str, path: &str) -> Result<Value, String> {
