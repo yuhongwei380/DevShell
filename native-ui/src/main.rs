@@ -297,10 +297,26 @@ fn terminal_panel(
         .flex()
         .flex_col()
         .gap_2()
-        .child(Paragraph::new(format!(
-            "终端 · {} · {}",
-            terminal.session_id, terminal.status
-        )))
+        .child({
+            let session_id = terminal.session_id.clone();
+            let view = view.clone();
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .child(Paragraph::new(format!(
+                    "终端 · {} · {}",
+                    terminal.session_id, terminal.status
+                )))
+                .child(
+                    KitButton::new("terminal-disconnect")
+                        .danger()
+                        .label("断开")
+                        .on_click(move |_, _, cx| {
+                            disconnect_session(view.clone(), session_id.clone(), cx);
+                        }),
+                )
+        })
         .child(Paragraph::new(output))
         .child(
             div()
@@ -500,6 +516,34 @@ fn create_directory(view: Entity<DevShellWindow>, path: String, name: String, cx
                     Ok(files) => {
                         state.files = Some(files);
                         state.feedback = Some("目录已创建".into());
+                    }
+                    Err(error) => state.feedback = Some(error),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    });
+}
+
+fn disconnect_session(view: Entity<DevShellWindow>, session_id: String, cx: &mut App) {
+    let _ = view.update(cx, |state, cx| {
+        let base = state.snapshot.base.clone();
+        let token = state.token.clone();
+        state.feedback = Some("正在断开会话…".into());
+        let view = cx.entity();
+        cx.spawn(async move |_, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move { delete_session(&base, &token, &session_id) })
+                .await;
+            let _ = view.update(cx, |state, cx| {
+                match result {
+                    Ok(()) => {
+                        state.terminal = None;
+                        state.files = None;
+                        state.monitor = None;
+                        state.feedback = Some("会话已断开".into());
                     }
                     Err(error) => state.feedback = Some(error),
                 }
@@ -1046,6 +1090,40 @@ fn post_file_action(
             .get("error")
             .and_then(Value::as_str)
             .unwrap_or("文件操作失败")
+            .to_string());
+    }
+    Ok(())
+}
+
+fn delete_session(base: &str, token: &str, session_id: &str) -> Result<(), String> {
+    let authority = base
+        .strip_prefix("http://")
+        .ok_or_else(|| "后端地址必须使用 http://".to_string())?;
+    let mut stream =
+        TcpStream::connect(authority).map_err(|error| format!("连接会话服务失败：{error}"))?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(10)))
+        .map_err(|error| format!("设置断开超时失败：{error}"))?;
+    let request = format!(
+        "DELETE /api/sessions/{session_id} HTTP/1.1\r\nHost: {authority}\r\nX-CloudShell-Token: {token}\r\nConnection: close\r\n\r\n"
+    );
+    stream
+        .write_all(request.as_bytes())
+        .map_err(|error| format!("发送断开请求失败：{error}"))?;
+    let mut response = Vec::new();
+    stream
+        .read_to_end(&mut response)
+        .map_err(|error| format!("读取断开响应失败：{error}"))?;
+    let text = String::from_utf8_lossy(&response);
+    let (headers, body) = text
+        .split_once("\r\n\r\n")
+        .ok_or_else(|| "断开响应格式无效".to_string())?;
+    if !headers.lines().next().unwrap_or_default().contains(" 200 ") {
+        let value: Value = serde_json::from_str(body.trim()).unwrap_or(Value::Null);
+        return Err(value
+            .get("error")
+            .and_then(Value::as_str)
+            .unwrap_or("断开会话失败")
             .to_string());
     }
     Ok(())
