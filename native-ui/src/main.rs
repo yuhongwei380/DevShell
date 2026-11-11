@@ -36,6 +36,9 @@ struct BackendSnapshot {
     groups: usize,
     locked: bool,
     error: Option<String>,
+    config_dir: Option<String>,
+    config_format: Option<String>,
+    security_summary: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -76,6 +79,7 @@ struct DevShellWindow {
     focus: FocusHandle,
     snapshot: BackendSnapshot,
     token: String,
+    settings_visible: bool,
     connecting: Option<String>,
     feedback: Option<String>,
     terminal: Option<TerminalState>,
@@ -195,7 +199,15 @@ impl Render for DevShellWindow {
                                 KitButton::new("settings")
                                     .ghost()
                                     .label("设置")
-                                    .on_click(|_, _, _| println!("settings: native view pending")),
+                                    .on_click({
+                                        let view = view.clone();
+                                        move |_, _, cx| {
+                                            view.update(cx, |state, cx| {
+                                                state.settings_visible = !state.settings_visible;
+                                                cx.notify();
+                                            });
+                                        }
+                                    }),
                             ),
                     )
                     .child(
@@ -227,6 +239,12 @@ impl Render for DevShellWindow {
                                     .gap_6()
                                     .child(Paragraph::new("原生工作区"))
                                     .child(Input::new(&self.secret_input).mask_toggle())
+                                    .when(self.settings_visible, |workspace| {
+                                        workspace.child(settings_panel(
+                                            snapshot.clone(),
+                                            view.clone(),
+                                        ))
+                                    })
                                     .when_some(pending_host_key, |workspace, pending| {
                                         let detail = if pending.challenge.previous_fingerprint.is_empty() {
                                             format!(
@@ -402,6 +420,49 @@ fn stat_card(label: &'static str, value: usize) -> impl IntoElement {
         .gap_2()
         .child(Paragraph::new(label))
         .child(Heading::h2(value.to_string()))
+}
+
+fn settings_panel(snapshot: BackendSnapshot, view: Entity<DevShellWindow>) -> impl IntoElement {
+    let config_dir = snapshot
+        .config_dir
+        .unwrap_or_else(|| "当前锁定或不可读取".into());
+    let config_format = snapshot
+        .config_format
+        .unwrap_or_else(|| "当前锁定或不可读取".into());
+    let security = snapshot
+        .security_summary
+        .unwrap_or_else(|| "当前锁定或不可读取".into());
+    div()
+        .p_5()
+        .rounded_lg()
+        .bg(gpui_kit::rgb(0x191f27))
+        .border_1()
+        .border_color(gpui_kit::rgb(0x2b313b))
+        .flex()
+        .flex_col()
+        .gap_2()
+        .child(Heading::h2("原生设置概览"))
+        .child(Paragraph::new(format!(
+            "版本：{} · 构建：{}",
+            snapshot.version, snapshot.build
+        )))
+        .child(Paragraph::new(format!("配置目录：{config_dir}")))
+        .child(Paragraph::new(format!("存储格式：{config_format}")))
+        .child(Paragraph::new(format!("安全锁定：{security}")))
+        .child(Paragraph::new(
+            "配置、密钥和安全锁定仍由 Go 本地 API 管理，原生窗口不复制写入逻辑。",
+        ))
+        .child(
+            KitButton::new("close-settings")
+                .secondary()
+                .label("收起设置")
+                .on_click(move |_, _, cx| {
+                    view.update(cx, |state, cx| {
+                        state.settings_visible = false;
+                        cx.notify();
+                    });
+                }),
+        )
 }
 
 fn terminal_panel(
@@ -1470,6 +1531,7 @@ fn main() {
                         focus,
                         snapshot,
                         token: args.token.clone(),
+                        settings_visible: false,
                         connecting: None,
                         feedback: None,
                         terminal: None,
@@ -1532,6 +1594,9 @@ impl BackendSnapshot {
             groups: 0,
             locked: false,
             error: None,
+            config_dir: None,
+            config_format: None,
+            security_summary: None,
         };
         match get_json(base, token, "/boot.js") {
             Ok(value) => {
@@ -1578,6 +1643,49 @@ impl BackendSnapshot {
             Err(error) if error.contains("423") => snapshot.locked = true,
             Err(error) if snapshot.error.is_none() => snapshot.error = Some(error),
             Err(_) => {}
+        }
+        if let Ok(value) = get_json(base, token, "/api/config/storage") {
+            snapshot.config_dir = value
+                .get("configDir")
+                .and_then(Value::as_str)
+                .map(ToString::to_string);
+            snapshot.config_format = value
+                .get("format")
+                .and_then(Value::as_str)
+                .map(ToString::to_string);
+        }
+        if let Ok(value) = get_json(base, token, "/api/security-lock/status") {
+            let enabled = value
+                .get("enabled")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let locked = value
+                .get("locked")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let password = value
+                .get("passwordConfigured")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let two_factor = value
+                .get("twoFactorConfigured")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            snapshot.security_summary = Some(if !enabled {
+                "未启用".into()
+            } else if locked {
+                format!(
+                    "已锁定 · 密码：{} · 验证器：{}",
+                    if password { "已配置" } else { "未配置" },
+                    if two_factor { "已配置" } else { "未配置" }
+                )
+            } else {
+                format!(
+                    "已启用 · 当前已解锁 · 密码：{} · 验证器：{}",
+                    if password { "已配置" } else { "未配置" },
+                    if two_factor { "已配置" } else { "未配置" }
+                )
+            });
         }
         snapshot
     }
