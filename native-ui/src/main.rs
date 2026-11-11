@@ -55,6 +55,7 @@ struct DevShellWindow {
     command_input: Entity<InputState>,
     file_name_input: Entity<InputState>,
     files: Option<FileListState>,
+    monitor: Option<MonitorState>,
 }
 
 #[derive(Clone, Debug)]
@@ -78,6 +79,16 @@ struct RemoteEntry {
     kind: String,
     bytes: i64,
     owner: String,
+}
+
+#[derive(Clone, Debug)]
+struct MonitorState {
+    cpu: f64,
+    memory_used: u64,
+    memory_total: u64,
+    load: String,
+    sampled_at: String,
+    status: String,
 }
 
 enum TerminalEvent {
@@ -196,6 +207,9 @@ impl Render for DevShellWindow {
                                             view.clone(),
                                             self.file_name_input.clone(),
                                         ))
+                                    })
+                                    .when_some(self.monitor.clone(), |workspace, monitor| {
+                                        workspace.child(monitor_panel(monitor))
                                     })
                                     .child(
                                         div()
@@ -396,6 +410,34 @@ fn file_panel(
                 })
                 .child(Paragraph::new(entry.owner))
         }))
+}
+
+fn monitor_panel(monitor: MonitorState) -> impl IntoElement {
+    let memory_percent = if monitor.memory_total == 0 {
+        0.0
+    } else {
+        monitor.memory_used as f64 / monitor.memory_total as f64 * 100.0
+    };
+    div()
+        .p_4()
+        .rounded_lg()
+        .bg(gpui_kit::rgb(0x191f27))
+        .border_1()
+        .border_color(gpui_kit::rgb(0x2b313b))
+        .flex()
+        .flex_col()
+        .gap_2()
+        .child(Paragraph::new(format!("监控 · {}", monitor.status)))
+        .child(Paragraph::new(format!(
+            "CPU {:.1}% · 内存 {:.1}% · 负载 {}",
+            monitor.cpu, memory_percent, monitor.load
+        )))
+        .child(Paragraph::new(format!(
+            "内存 {} / {} MB · 采样 {}",
+            monitor.memory_used / 1024 / 1024,
+            monitor.memory_total / 1024 / 1024,
+            monitor.sampled_at
+        )));
 }
 
 fn navigate_files(view: Entity<DevShellWindow>, path: String, cx: &mut App) {
@@ -619,7 +661,7 @@ fn server_row(
                                                 .detach();
                                                 let files_base = state.snapshot.base.clone();
                                                 let files_token = state.token.clone();
-                                                let files_session = session_id;
+                                                let files_session = session_id.clone();
                                                 let files_view = cx.entity();
                                                 cx.spawn(async move |_, cx| {
                                                     let result = cx
@@ -639,6 +681,37 @@ fn server_row(
                                                             Err(error) => FileListState {
                                                                 path: "/".into(),
                                                                 entries: Vec::new(),
+                                                                status: error,
+                                                            },
+                                                        });
+                                                        cx.notify();
+                                                    });
+                                                })
+                                                .detach();
+                                                let monitor_base = state.snapshot.base.clone();
+                                                let monitor_token = state.token.clone();
+                                                let monitor_session = session_id;
+                                                let monitor_view = cx.entity();
+                                                cx.spawn(async move |_, cx| {
+                                                    let result = cx
+                                                        .background_executor()
+                                                        .spawn(async move {
+                                                            load_monitor(
+                                                                &monitor_base,
+                                                                &monitor_token,
+                                                                &monitor_session,
+                                                            )
+                                                        })
+                                                        .await;
+                                                    let _ = monitor_view.update(cx, |state, cx| {
+                                                        state.monitor = Some(match result {
+                                                            Ok(monitor) => monitor,
+                                                            Err(error) => MonitorState {
+                                                                cpu: 0.0,
+                                                                memory_used: 0,
+                                                                memory_total: 0,
+                                                                load: "未知".into(),
+                                                                sampled_at: "-".into(),
                                                                 status: error,
                                                             },
                                                         });
@@ -689,6 +762,7 @@ fn main() {
                         command_input,
                         file_name_input,
                         files: None,
+                        monitor: None,
                     }
                 })
             })
@@ -879,6 +953,37 @@ fn load_files(
             .to_string(),
         entries,
         status: "已加载".into(),
+    })
+}
+
+fn load_monitor(base: &str, token: &str, session_id: &str) -> Result<MonitorState, String> {
+    let value = get_json(base, token, &format!("/api/sessions/{session_id}/stats"))?;
+    Ok(MonitorState {
+        cpu: value.get("cpu").and_then(Value::as_f64).unwrap_or(0.0),
+        memory_used: value.get("memoryUsed").and_then(Value::as_u64).unwrap_or(0),
+        memory_total: value
+            .get("memoryTotal")
+            .and_then(Value::as_u64)
+            .unwrap_or(0),
+        load: value
+            .get("load")
+            .and_then(Value::as_str)
+            .unwrap_or("未知")
+            .to_string(),
+        sampled_at: value
+            .get("sampledAt")
+            .and_then(Value::as_str)
+            .unwrap_or("-")
+            .to_string(),
+        status: if value
+            .get("sampleReady")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+        {
+            "已采样".into()
+        } else {
+            "等待采样".into()
+        },
     })
 }
 
