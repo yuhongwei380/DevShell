@@ -190,7 +190,7 @@ impl Render for DevShellWindow {
                                         ))
                                     })
                                     .when_some(self.files.clone(), |workspace, files| {
-                                        workspace.child(file_panel(files))
+                                        workspace.child(file_panel(files, view.clone()))
                                     })
                                     .child(
                                         div()
@@ -312,7 +312,9 @@ fn terminal_panel(
         );
 }
 
-fn file_panel(files: FileListState) -> impl IntoElement {
+fn file_panel(files: FileListState, view: Entity<DevShellWindow>) -> impl IntoElement {
+    let current_path = files.path.clone();
+    let parent = parent_remote_path(&current_path);
     div()
         .p_4()
         .rounded_lg()
@@ -322,23 +324,105 @@ fn file_panel(files: FileListState) -> impl IntoElement {
         .flex()
         .flex_col()
         .gap_2()
-        .child(Paragraph::new(format!(
-            "文件 · {} · {}",
-            files.path, files.status
-        )))
-        .children(files.entries.into_iter().take(12).map(|entry| {
+        .child(
             div()
                 .flex()
                 .items_center()
                 .justify_between()
                 .child(Paragraph::new(format!(
-                    "{} {} · {} bytes",
-                    if entry.kind == "folder" { "▸" } else { "·" },
-                    entry.name,
-                    entry.bytes
+                    "文件 · {} · {}",
+                    files.path, files.status
                 )))
+                .when_some(parent, |bar, parent| {
+                    let view = view.clone();
+                    bar.child(
+                        KitButton::new("file-parent")
+                            .ghost()
+                            .label("上一级")
+                            .on_click(move |_, _, cx| {
+                                navigate_files(view.clone(), parent.clone(), cx)
+                            }),
+                    )
+                }),
+        )
+        .children(files.entries.into_iter().take(12).map(|entry| {
+            let is_folder = entry.kind == "folder";
+            let name = entry.name.clone();
+            let target = join_remote_path(&current_path, &name);
+            let view = view.clone();
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .child(if is_folder {
+                    KitButton::new(format!("file-folder-{}", name))
+                        .ghost()
+                        .label(format!("▸ {}", name))
+                        .on_click(move |_, _, cx| navigate_files(view.clone(), target.clone(), cx))
+                } else {
+                    KitButton::new(format!("file-entry-{}", name))
+                        .text()
+                        .label(format!("· {} · {} bytes", name, entry.bytes))
+                })
                 .child(Paragraph::new(entry.owner))
         }))
+}
+
+fn navigate_files(view: Entity<DevShellWindow>, path: String, cx: &mut App) {
+    let _ = view.update(cx, |state, cx| {
+        let Some(session_id) = state
+            .terminal
+            .as_ref()
+            .map(|terminal| terminal.session_id.clone())
+        else {
+            return;
+        };
+        let base = state.snapshot.base.clone();
+        let token = state.token.clone();
+        state.feedback = Some(format!("正在读取远端目录 {}…", path));
+        let view = cx.entity();
+        cx.spawn(async move |_, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move { load_files(&base, &token, &session_id, &path) })
+                .await;
+            let _ = view.update(cx, |state, cx| {
+                state.files = Some(match result {
+                    Ok(files) => files,
+                    Err(error) => FileListState {
+                        path,
+                        entries: Vec::new(),
+                        status: error,
+                    },
+                });
+                cx.notify();
+            });
+        })
+        .detach();
+    });
+}
+
+fn join_remote_path(parent: &str, name: &str) -> String {
+    if parent == "/" {
+        format!("/{name}")
+    } else {
+        format!("{parent}/{name}")
+    }
+}
+
+fn parent_remote_path(path: &str) -> Option<String> {
+    if path == "/" {
+        return None;
+    }
+    let parent = path
+        .rsplit_once('/')
+        .map(|(parent, _)| parent)
+        .unwrap_or("/");
+    Some(if parent.is_empty() {
+        "/".into()
+    } else {
+        parent.into()
+    })
 }
 
 fn server_row(
@@ -692,7 +776,10 @@ fn load_files(
     let value = get_json(
         base,
         token,
-        &format!("/api/sessions/{session_id}/files?path={path}"),
+        &format!(
+            "/api/sessions/{session_id}/files?path={}",
+            query_escape(path)
+        ),
     )?;
     let entries = value
         .get("entries")
@@ -724,6 +811,19 @@ fn load_files(
         entries,
         status: "已加载".into(),
     })
+}
+
+fn query_escape(value: &str) -> String {
+    value
+        .bytes()
+        .flat_map(|byte| {
+            if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
+                vec![byte as char]
+            } else {
+                format!("%{byte:02X}").chars().collect()
+            }
+        })
+        .collect()
 }
 
 fn terminal_reader(
