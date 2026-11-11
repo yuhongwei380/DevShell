@@ -47,6 +47,7 @@ type App struct {
 	windowHandoffs   map[string]WindowHandoff
 	windowViews      map[string]WindowViewInfo
 	windowLauncher   func(context.Context, WindowHandoffRequest) error
+	installUpdate    func(string) error
 }
 
 func New(configDir string) (*App, error) {
@@ -68,6 +69,14 @@ func New(configDir string) (*App, error) {
 }
 func (a *App) URL() string   { return a.baseURL }
 func (a *App) Token() string { return a.token }
+
+// SetInstallUpdateHandler lets the desktop host provide the platform-specific
+// update-helper launch without coupling the app package to the updater package.
+func (a *App) SetInstallUpdateHandler(handler func(string) error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.installUpdate = handler
+}
 
 // BrowserURL carries the bootstrap capability in a fragment, which browsers do
 // not send to HTTP servers. bootstrap.js removes it before loading app assets.

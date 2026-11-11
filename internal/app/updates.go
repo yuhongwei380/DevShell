@@ -638,6 +638,22 @@ func (a *App) registerUpdateHTTP(mux *http.ServeMux) {
 		job, e := a.StartUpdateDownload(request.SHA256)
 		respond(w, job, e)
 	})
+	mux.HandleFunc("POST /api/updates/install", func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			ID string `json:"id"`
+		}
+		if !decode(w, r, &request) {
+			return
+		}
+		a.mu.Lock()
+		handler := a.installUpdate
+		a.mu.Unlock()
+		if handler == nil {
+			respond(w, nil, errors.New("当前启动方式不支持原生更新安装"))
+			return
+		}
+		respond(w, map[string]bool{"ok": true}, handler(request.ID))
+	})
 	mux.HandleFunc("GET /api/updates/download/{id}", func(w http.ResponseWriter, r *http.Request) {
 		job, e := a.UpdateDownload(r.PathValue("id"))
 		respond(w, job, e)

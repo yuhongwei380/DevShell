@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
 //go:embed web
@@ -83,6 +84,22 @@ func main() {
 		log.Fatal(err)
 	}
 	defer application.Close()
+	application.SetInstallUpdateHandler(func(id string) error {
+		job, err := application.PreparedUpdate(id)
+		if err != nil {
+			return err
+		}
+		err = updater.LaunchUpdateHelper(job, *config, nil)
+		var pending *updater.ExitPendingError
+		if err != nil && !errors.As(err, &pending) {
+			return err
+		}
+		go func() {
+			time.Sleep(250 * time.Millisecond)
+			os.Exit(0)
+		}()
+		return nil
+	})
 	if err = application.Start(*address, content); err != nil {
 		log.Fatal(err)
 	}

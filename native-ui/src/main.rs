@@ -865,6 +865,18 @@ fn settings_panel(
                                     cancel_update_download(view.clone(), job_id.clone(), cx)
                                 }),
                         )
+                    })
+                    .when(download.status == "ready", |row| {
+                        let view = view.clone();
+                        let job_id = download.id.clone();
+                        row.child(
+                            KitButton::new("install-update")
+                                .primary()
+                                .label("安装更新")
+                                .on_click(move |_, _, cx| {
+                                    install_update(view.clone(), job_id.clone(), cx)
+                                }),
+                        )
                     }),
             )
         })
@@ -3690,6 +3702,44 @@ fn cancel_update_download(view: Entity<DevShellWindow>, job_id: String, cx: &mut
                 }
                 cx.notify();
             });
+        })
+        .detach();
+    });
+}
+
+fn install_update(view: Entity<DevShellWindow>, job_id: String, cx: &mut App) {
+    let _ = view.update(cx, |state, cx| {
+        let base = state.snapshot.base.clone();
+        let token = state.token.clone();
+        state.feedback = Some("正在准备安装更新…".into());
+        let view = cx.entity();
+        cx.spawn(async move |this, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    post_json(
+                        &base,
+                        &token,
+                        "/api/updates/install",
+                        serde_json::json!({"id": job_id}),
+                    )
+                })
+                .await;
+            match result {
+                Ok(_) => {
+                    let _ = this.update(cx, |state, cx| {
+                        state.feedback = Some("安装助手已启动，窗口即将退出并重启。".into());
+                        cx.notify();
+                    });
+                    process::exit(0);
+                }
+                Err(error) => {
+                    let _ = this.update(cx, |state, cx| {
+                        state.feedback = Some(error);
+                        cx.notify();
+                    });
+                }
+            }
         })
         .detach();
     });
