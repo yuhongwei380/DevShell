@@ -226,7 +226,7 @@ impl Render for DevShellWindow {
                                     .flex_col()
                                     .gap_6()
                                     .child(Paragraph::new("原生工作区"))
-                                    .child(Input::new(&self.secret_input))
+                                    .child(Input::new(&self.secret_input).mask_toggle())
                                     .when_some(pending_host_key, |workspace, pending| {
                                         let detail = if pending.challenge.previous_fingerprint.is_empty() {
                                             format!(
@@ -1442,8 +1442,11 @@ fn main() {
                         .new(|cx| InputState::new(window, cx).placeholder("终端输入，Enter 发送"));
                     let file_name_input =
                         cx.new(|cx| InputState::new(window, cx).placeholder("目录名称"));
-                    let secret_input =
-                        cx.new(|cx| InputState::new(window, cx).placeholder("SSH 密码或私钥口令"));
+                    let secret_input = cx.new(|cx| {
+                        InputState::new(window, cx)
+                            .placeholder("SSH 密码或私钥口令")
+                            .masked(true)
+                    });
                     DevShellWindow {
                         focus,
                         snapshot,
