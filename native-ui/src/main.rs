@@ -60,6 +60,7 @@ struct ProxySummary {
     kind: String,
     host: String,
     port: u16,
+    user: String,
 }
 
 #[derive(Clone, Debug)]
@@ -123,6 +124,7 @@ struct DevShellWindow {
     proxy_user_input: Entity<InputState>,
     proxy_password_input: Entity<InputState>,
     proxy_kind: String,
+    proxy_editing_id: Option<String>,
     pending_proxy_delete: Option<String>,
     pending_host_key: Option<PendingHostKey>,
     files: Option<FileListState>,
@@ -329,6 +331,7 @@ impl Render for DevShellWindow {
                                             self.proxy_password_input.clone(),
                                             self.proxy_kind.clone(),
                                             self.pending_proxy_delete.clone(),
+                                            self.proxy_editing_id.clone(),
                                         ))
                                     })
                                     .when_some(pending_host_key, |workspace, pending| {
@@ -589,6 +592,7 @@ fn settings_panel(
     proxy_password_input: Entity<InputState>,
     proxy_kind: String,
     pending_proxy_delete: Option<String>,
+    proxy_editing_id: Option<String>,
 ) -> impl IntoElement {
     let config_dir = snapshot
         .config_dir
@@ -646,6 +650,7 @@ fn settings_panel(
                                     let opening = !state.proxy_form_open;
                                     state.proxy_form_open = opening;
                                     if opening {
+                                        state.proxy_editing_id = None;
                                         state.proxy_name_input.update(cx, |input, cx| {
                                             input.set_value("", window, cx)
                                         });
@@ -678,6 +683,7 @@ fn settings_panel(
                 proxy_user_input.clone(),
                 proxy_password_input.clone(),
                 proxy_kind.clone(),
+                proxy_editing_id.clone(),
                 proxy_saving,
             ))
         })
@@ -685,6 +691,13 @@ fn settings_panel(
             let proxy_id = proxy.id.clone();
             let is_pending = pending_proxy_delete.as_deref() == Some(proxy.id.as_str());
             let delete_view = view.clone();
+            let edit_view = view.clone();
+            let edit_id = proxy.id.clone();
+            let edit_name = proxy.name.clone();
+            let edit_kind = proxy.kind.clone();
+            let edit_host = proxy.host.clone();
+            let edit_port = proxy.port;
+            let edit_user = proxy.user.clone();
             div()
                 .flex()
                 .items_center()
@@ -694,20 +707,60 @@ fn settings_panel(
                     proxy.name, proxy.kind, proxy.host, proxy.port
                 )))
                 .child(
-                    KitButton::new(format!("delete-proxy-{proxy_id}"))
-                        .danger()
-                        .label(if is_pending { "确认删除" } else { "删除" })
-                        .on_click(move |_, _, cx| {
-                            if is_pending {
-                                delete_proxy_and_reload(delete_view.clone(), proxy_id.clone(), cx);
-                            } else {
-                                let _ = delete_view.update(cx, |state, cx| {
-                                    state.pending_proxy_delete = Some(proxy_id.clone());
-                                    state.feedback = Some("再次点击删除按钮确认移除代理。".into());
-                                    cx.notify();
-                                });
-                            }
-                        }),
+                    div()
+                        .flex()
+                        .gap_2()
+                        .child(
+                            KitButton::new(format!("edit-proxy-{edit_id}"))
+                                .ghost()
+                                .label("编辑")
+                                .on_click(move |_, window, cx| {
+                                    edit_view.update(cx, |state, cx| {
+                                        state.proxy_form_open = true;
+                                        state.proxy_editing_id = Some(edit_id.clone());
+                                        state.proxy_name_input.update(cx, |input, cx| {
+                                            input.set_value(edit_name.clone(), window, cx)
+                                        });
+                                        state.proxy_host_input.update(cx, |input, cx| {
+                                            input.set_value(edit_host.clone(), window, cx)
+                                        });
+                                        state.proxy_port_input.update(cx, |input, cx| {
+                                            input.set_value(edit_port.to_string(), window, cx)
+                                        });
+                                        state.proxy_user_input.update(cx, |input, cx| {
+                                            input.set_value(edit_user.clone(), window, cx)
+                                        });
+                                        state.proxy_password_input.update(cx, |input, cx| {
+                                            input.set_value("", window, cx)
+                                        });
+                                        state.proxy_kind = edit_kind.clone();
+                                        state.feedback =
+                                            Some("已载入代理配置，可修改后保存。".into());
+                                        cx.notify();
+                                    });
+                                }),
+                        )
+                        .child(
+                            KitButton::new(format!("delete-proxy-{proxy_id}"))
+                                .danger()
+                                .label(if is_pending { "确认删除" } else { "删除" })
+                                .on_click(move |_, _, cx| {
+                                    if is_pending {
+                                        delete_proxy_and_reload(
+                                            delete_view.clone(),
+                                            proxy_id.clone(),
+                                            cx,
+                                        );
+                                    } else {
+                                        let _ = delete_view.update(cx, |state, cx| {
+                                            state.pending_proxy_delete = Some(proxy_id.clone());
+                                            state.feedback =
+                                                Some("再次点击删除按钮确认移除代理。".into());
+                                            cx.notify();
+                                        });
+                                    }
+                                }),
+                        ),
                 )
         }))
         .when_some(update_status, |card, status| {
@@ -836,6 +889,7 @@ fn proxy_form(
     user_input: Entity<InputState>,
     password_input: Entity<InputState>,
     kind: String,
+    editing_id: Option<String>,
     saving: bool,
 ) -> impl IntoElement {
     let socks_button = KitButton::new("proxy-kind-socks5");
@@ -859,7 +913,11 @@ fn proxy_form(
         .flex()
         .flex_col()
         .gap_2()
-        .child(Paragraph::new("新增连接代理"))
+        .child(Paragraph::new(if editing_id.is_some() {
+            "编辑连接代理"
+        } else {
+            "新增连接代理"
+        }))
         .child(Input::new(&name_input))
         .child(
             div()
@@ -893,6 +951,8 @@ fn proxy_form(
                 .secondary()
                 .label(if saving {
                     "保存中…"
+                } else if editing_id.is_some() {
+                    "保存修改"
                 } else {
                     "保存代理"
                 })
@@ -921,6 +981,7 @@ fn proxy_form(
                         let base = state.snapshot.base.clone();
                         let token = state.token.clone();
                         let kind = state.proxy_kind.clone();
+                        let editing_id = state.proxy_editing_id.clone();
                         state.proxy_saving = true;
                         state.feedback = Some("正在保存代理配置…".into());
                         cx.notify();
@@ -929,7 +990,15 @@ fn proxy_form(
                                 .background_executor()
                                 .spawn(async move {
                                     save_proxy_and_reload(
-                                        &base, &token, &name, &kind, &host, port, &user, &password,
+                                        &base,
+                                        &token,
+                                        editing_id.as_deref(),
+                                        &name,
+                                        &kind,
+                                        &host,
+                                        port,
+                                        &user,
+                                        &password,
                                     )
                                 })
                                 .await;
@@ -939,6 +1008,7 @@ fn proxy_form(
                                     Ok(snapshot) => {
                                         state.snapshot = snapshot;
                                         state.proxy_form_open = false;
+                                        state.proxy_editing_id = None;
                                         state.feedback = Some("代理配置已保存。".into());
                                     }
                                     Err(error) => state.feedback = Some(error),
@@ -2518,6 +2588,7 @@ fn main() {
                         proxy_user_input,
                         proxy_password_input,
                         proxy_kind: "socks5".into(),
+                        proxy_editing_id: None,
                         pending_proxy_delete: None,
                         pending_host_key: None,
                         files: None,
@@ -2675,6 +2746,12 @@ impl BackendSnapshot {
                                         .and_then(Value::as_u64)
                                         .unwrap_or(0)
                                         as u16,
+                                    user: proxy
+                                        .get("proxy")
+                                        .and_then(|value| value.get("user"))
+                                        .and_then(Value::as_str)
+                                        .unwrap_or_default()
+                                        .to_string(),
                                 })
                             })
                             .collect()
@@ -3657,6 +3734,7 @@ fn save_profile_and_reload(
 fn save_proxy_and_reload(
     base: &str,
     token: &str,
+    proxy_id: Option<&str>,
     name: &str,
     kind: &str,
     host: &str,
@@ -3669,7 +3747,7 @@ fn save_proxy_and_reload(
         token,
         "/api/proxies",
         serde_json::json!({
-            "id": "",
+            "id": proxy_id.unwrap_or_default(),
             "name": name,
             "proxy": {
                 "type": kind,
