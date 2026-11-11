@@ -2186,6 +2186,16 @@ fn server_row(
     let delete_view = view.clone();
     let edit_server = server.clone();
     let edit_view = view.clone();
+    let auth_label = match server.auth.as_str() {
+        "key" => "私钥",
+        "agent" => "Agent",
+        _ => "密码",
+    };
+    let proxy_label = if server.proxy_id.is_empty() {
+        "直连"
+    } else {
+        "已保存代理"
+    };
     let label = if is_connecting {
         "连接中…"
     } else if is_host_key_pending {
@@ -2208,7 +2218,10 @@ fn server_row(
                 .flex()
                 .items_center()
                 .gap_3()
-                .child(Paragraph::new(format!("{}:{}", server.host, server.port)))
+                .child(Paragraph::new(format!(
+                    "{}:{} · {} · {}",
+                    server.host, server.port, auth_label, proxy_label
+                )))
                 .child(
                     KitButton::new(server_id.clone())
                         .secondary()
