@@ -693,30 +693,45 @@ fn server_row(
                                                 let monitor_session = session_id;
                                                 let monitor_view = cx.entity();
                                                 cx.spawn(async move |_, cx| {
-                                                    let result = cx
-                                                        .background_executor()
-                                                        .spawn(async move {
-                                                            load_monitor(
-                                                                &monitor_base,
-                                                                &monitor_token,
-                                                                &monitor_session,
-                                                            )
-                                                        })
-                                                        .await;
-                                                    let _ = monitor_view.update(cx, |state, cx| {
-                                                        state.monitor = Some(match result {
-                                                            Ok(monitor) => monitor,
-                                                            Err(error) => MonitorState {
-                                                                cpu: 0.0,
-                                                                memory_used: 0,
-                                                                memory_total: 0,
-                                                                load: "未知".into(),
-                                                                sampled_at: "-".into(),
-                                                                status: error,
-                                                            },
-                                                        });
-                                                        cx.notify();
-                                                    });
+                                                    loop {
+                                                        let result = cx
+                                                            .background_executor()
+                                                            .spawn({
+                                                                let monitor_base = monitor_base.clone();
+                                                                let monitor_token = monitor_token.clone();
+                                                                let monitor_session = monitor_session.clone();
+                                                                async move {
+                                                                    load_monitor(
+                                                                        &monitor_base,
+                                                                        &monitor_token,
+                                                                        &monitor_session,
+                                                                    )
+                                                                }
+                                                            })
+                                                            .await;
+                                                        if monitor_view
+                                                            .update(cx, |state, cx| {
+                                                                state.monitor = Some(match result {
+                                                                    Ok(monitor) => monitor,
+                                                                    Err(error) => MonitorState {
+                                                                        cpu: 0.0,
+                                                                        memory_used: 0,
+                                                                        memory_total: 0,
+                                                                        load: "未知".into(),
+                                                                        sampled_at: "-".into(),
+                                                                        status: error,
+                                                                    },
+                                                                });
+                                                                cx.notify();
+                                                            })
+                                                            .is_err()
+                                                        {
+                                                            break;
+                                                        }
+                                                        cx.background_executor()
+                                                            .timer(Duration::from_secs(5))
+                                                            .await;
+                                                    }
                                                 })
                                                 .detach();
                                             }
