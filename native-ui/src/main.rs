@@ -228,7 +228,21 @@ impl Render for DevShellWindow {
                                     .child(sidebar_button("终端", false))
                                     .child(sidebar_button("文件", false))
                                     .child(sidebar_button("监控", false))
-                                    .child(sidebar_button("设置", false)),
+                                    .child(
+                                        KitButton::new("sidebar-settings")
+                                            .ghost()
+                                            .label("设置")
+                                            .on_click({
+                                                let view = view.clone();
+                                                move |_, _, cx| {
+                                                    view.update(cx, |state, cx| {
+                                                        state.settings_visible =
+                                                            !state.settings_visible;
+                                                        cx.notify();
+                                                    });
+                                                }
+                                            }),
+                                    ),
                             )
                             .child(
                                 div()
