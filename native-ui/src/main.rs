@@ -17,8 +17,8 @@ use ely_gpui_component::{
     typography::{Heading, Paragraph},
 };
 use gpui_kit::{
-    AnyWindowHandle, App, AppContext, Context, Disableable, Entity, FocusHandle, IntoElement,
-    ParentElement, Render, Styled, Window, WindowOptions,
+    App, AppContext, Context, Disableable, Entity, FocusHandle, IntoElement, ParentElement, Render,
+    Styled, Window, WindowOptions,
     component::{
         button::{Button as KitButton, ButtonVariants},
         input::{Input, InputState, Textarea, TextareaState},
@@ -107,7 +107,7 @@ struct DevShellWindow {
     pending_rename: Option<String>,
     preview: Option<FilePreviewState>,
     preview_input: Entity<TextareaState>,
-    window_handle: Option<AnyWindowHandle>,
+    preview_sync: Option<String>,
     transfers: Vec<TransferState>,
 }
 
@@ -172,7 +172,10 @@ enum TerminalEvent {
 
 impl Render for DevShellWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        self.window_handle = Some(window.window_handle());
+        if let Some(text) = self.preview_sync.take() {
+            self.preview_input
+                .update(cx, |input, cx| input.set_value(text, window, cx));
+        }
         let snapshot = self.snapshot.clone();
         let focus = self.focus.clone();
         let view = cx.entity();
@@ -1169,12 +1172,7 @@ fn preview_remote(view: Entity<DevShellWindow>, path: String, cx: &mut App) {
                     Ok(preview) => {
                         let text = preview.text.clone();
                         state.preview = Some(preview);
-                        if let Some(window_handle) = state.window_handle.clone() {
-                            let input = state.preview_input.clone();
-                            let _ = cx.update_window(window_handle, |_, window, cx| {
-                                input.update(cx, |input, cx| input.set_value(text, window, cx));
-                            });
-                        }
+                        state.preview_sync = Some(text);
                         state.feedback = Some("文件已加载".into());
                     }
                     Err(error) => state.feedback = Some(error),
@@ -1978,7 +1976,7 @@ fn main() {
                         pending_rename: None,
                         preview: None,
                         preview_input,
-                        window_handle: None,
+                        preview_sync: None,
                         transfers: Vec::new(),
                     }
                 })
