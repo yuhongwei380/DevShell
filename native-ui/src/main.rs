@@ -97,11 +97,13 @@ struct FilePreviewState {
 
 #[derive(Clone, Debug)]
 struct TransferState {
+    id: String,
     name: String,
     status: String,
     done: i64,
     total: i64,
     error: Option<String>,
+    retryable: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -241,7 +243,10 @@ impl Render for DevShellWindow {
                                         workspace.child(file_preview_panel(preview))
                                     })
                                     .when(!self.transfers.is_empty(), |workspace| {
-                                        workspace.child(transfer_panel(self.transfers.clone()))
+                                        workspace.child(transfer_panel(
+                                            self.transfers.clone(),
+                                            view.clone(),
+                                        ))
                                     })
                                     .child(
                                         div()
@@ -625,7 +630,7 @@ fn file_preview_panel(preview: FilePreviewState) -> impl IntoElement {
         .child(Paragraph::new(text));
 }
 
-fn transfer_panel(transfers: Vec<TransferState>) -> impl IntoElement {
+fn transfer_panel(transfers: Vec<TransferState>, view: Entity<DevShellWindow>) -> impl IntoElement {
     div()
         .p_4()
         .rounded_lg()
@@ -637,6 +642,10 @@ fn transfer_panel(transfers: Vec<TransferState>) -> impl IntoElement {
         .gap_2()
         .child(Paragraph::new("传输队列"))
         .children(transfers.into_iter().map(|transfer| {
+            let transfer_id = transfer.id.clone();
+            let retryable = transfer.retryable;
+            let active = matches!(transfer.status.as_str(), "queued" | "uploading");
+            let action_view = view.clone();
             let progress = if transfer.total > 0 {
                 format!(
                     "{:.0}%",
@@ -656,6 +665,25 @@ fn transfer_panel(transfers: Vec<TransferState>) -> impl IntoElement {
                 .child(Paragraph::new(transfer.error.unwrap_or_else(|| {
                     format!("{}/{}", transfer.done, transfer.total)
                 })))
+                .child(if retryable {
+                    KitButton::new(format!("transfer-retry-{}", transfer_id))
+                        .secondary()
+                        .label("重试")
+                        .on_click(move |_, _, cx| {
+                            retry_transfer(action_view.clone(), transfer_id.clone(), cx);
+                        })
+                } else if active {
+                    KitButton::new(format!("transfer-cancel-{}", transfer_id))
+                        .danger()
+                        .label("取消")
+                        .on_click(move |_, _, cx| {
+                            cancel_transfer(action_view.clone(), transfer_id.clone(), cx);
+                        })
+                } else {
+                    KitButton::new(format!("transfer-done-{}", transfer_id))
+                        .text()
+                        .label("")
+                })
         }))
 }
 
@@ -821,6 +849,52 @@ fn upload_local(view: Entity<DevShellWindow>, directory: String, local_path: Str
             let _ = view.update(cx, |state, cx| {
                 state.feedback = Some(match result {
                     Ok(message) => message,
+                    Err(error) => error,
+                });
+                cx.notify();
+            });
+        })
+        .detach();
+    });
+}
+
+fn retry_transfer(view: Entity<DevShellWindow>, transfer_id: String, cx: &mut App) {
+    transfer_action(view, transfer_id, "POST", "retry", cx);
+}
+
+fn cancel_transfer(view: Entity<DevShellWindow>, transfer_id: String, cx: &mut App) {
+    transfer_action(view, transfer_id, "DELETE", "cancel", cx);
+}
+
+fn transfer_action(
+    view: Entity<DevShellWindow>,
+    transfer_id: String,
+    method: &str,
+    action: &str,
+    cx: &mut App,
+) {
+    let method = method.to_string();
+    let action = action.to_string();
+    let _ = view.update(cx, |state, cx| {
+        let base = state.snapshot.base.clone();
+        let token = state.token.clone();
+        state.feedback = Some(format!(
+            "正在{}传输…",
+            if action == "retry" {
+                "重试"
+            } else {
+                "取消"
+            }
+        ));
+        let view = cx.entity();
+        cx.spawn(async move |_, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move { request_transfer_action(&base, &token, &transfer_id, &method) })
+                .await;
+            let _ = view.update(cx, |state, cx| {
+                state.feedback = Some(match result {
+                    Ok(()) => "传输操作已提交".into(),
                     Err(error) => error,
                 });
                 cx.notify();
@@ -1554,6 +1628,11 @@ fn load_transfers(base: &str, token: &str, session_id: &str) -> Result<Vec<Trans
                 .unwrap_or(false)
         })
         .map(|transfer| TransferState {
+            id: transfer
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string(),
             name: transfer
                 .get("name")
                 .and_then(Value::as_str)
@@ -1570,8 +1649,49 @@ fn load_transfers(base: &str, token: &str, session_id: &str) -> Result<Vec<Trans
                 .get("error")
                 .and_then(Value::as_str)
                 .map(ToString::to_string),
+            retryable: transfer
+                .get("retryable")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
         })
         .collect())
+}
+
+fn request_transfer_action(
+    base: &str,
+    token: &str,
+    transfer_id: &str,
+    method: &str,
+) -> Result<(), String> {
+    let authority = base
+        .strip_prefix("http://")
+        .ok_or_else(|| "后端地址必须使用 http://".to_string())?;
+    let mut stream =
+        TcpStream::connect(authority).map_err(|error| format!("连接传输服务失败：{error}"))?;
+    let request = format!(
+        "{method} /api/transfers/{transfer_id}{} HTTP/1.1\r\nHost: {authority}\r\nX-CloudShell-Token: {token}\r\nConnection: close\r\n\r\n",
+        if method == "POST" { "/retry" } else { "" }
+    );
+    stream
+        .write_all(request.as_bytes())
+        .map_err(|error| format!("发送传输操作失败：{error}"))?;
+    let mut response = Vec::new();
+    stream
+        .read_to_end(&mut response)
+        .map_err(|error| format!("读取传输操作响应失败：{error}"))?;
+    let text = String::from_utf8_lossy(&response);
+    let (headers, body) = text
+        .split_once("\r\n\r\n")
+        .ok_or_else(|| "传输操作响应格式无效".to_string())?;
+    if !headers.lines().next().unwrap_or_default().contains(" 200 ") {
+        let value: Value = serde_json::from_str(body.trim()).unwrap_or(Value::Null);
+        return Err(value
+            .get("error")
+            .and_then(Value::as_str)
+            .unwrap_or("传输操作失败")
+            .to_string());
+    }
+    Ok(())
 }
 
 fn post_file_action(
