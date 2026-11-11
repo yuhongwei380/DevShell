@@ -57,6 +57,7 @@ struct DevShellWindow {
     files: Option<FileListState>,
     monitor: Option<MonitorState>,
     pending_delete: Option<String>,
+    pending_rename: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -208,6 +209,7 @@ impl Render for DevShellWindow {
                                             view.clone(),
                                             self.file_name_input.clone(),
                                             self.pending_delete.clone(),
+                                            self.pending_rename.clone(),
                                         ))
                                     })
                                     .when_some(self.monitor.clone(), |workspace, monitor| {
@@ -354,6 +356,7 @@ fn file_panel(
     view: Entity<DevShellWindow>,
     file_name_input: Entity<InputState>,
     pending_delete: Option<String>,
+    pending_rename: Option<String>,
 ) -> impl IntoElement {
     let current_path = files.path.clone();
     let parent = parent_remote_path(&current_path);
@@ -428,9 +431,13 @@ fn file_panel(
             let target = join_remote_path(&current_path, &name);
             let view = view.clone();
             let is_pending = pending_delete.as_deref() == Some(target.as_str());
+            let is_rename_pending = pending_rename.as_deref() == Some(target.as_str());
             let delete_view = view.clone();
             let delete_target = target.clone();
             let delete_parent = current_path.clone();
+            let rename_view = view.clone();
+            let rename_target = target.clone();
+            let rename_parent = current_path.clone();
             div()
                 .flex()
                 .items_center()
@@ -446,6 +453,37 @@ fn file_panel(
                         .label(format!("· {} · {} bytes", name, entry.bytes))
                 })
                 .child(Paragraph::new(entry.owner))
+                .child(
+                    KitButton::new(format!("file-rename-{}", name))
+                        .secondary()
+                        .label(if is_rename_pending {
+                            "确认重命名"
+                        } else {
+                            "重命名"
+                        })
+                        .on_click({
+                            let file_name_input = file_name_input.clone();
+                            move |_, _, cx| {
+                                let new_name = file_name_input.read(cx).value(cx).to_string();
+                                if is_rename_pending && !new_name.trim().is_empty() {
+                                    rename_remote(
+                                        rename_view.clone(),
+                                        rename_target.clone(),
+                                        rename_parent.clone(),
+                                        new_name,
+                                        cx,
+                                    );
+                                } else {
+                                    let _ = rename_view.update(cx, |state, cx| {
+                                        state.pending_rename = Some(rename_target.clone());
+                                        state.feedback =
+                                            Some("输入新名称后再次点击“确认重命名”".into());
+                                        cx.notify();
+                                    });
+                                }
+                            }
+                        }),
+                )
                 .child(
                     KitButton::new(format!("file-delete-{}", name))
                         .danger()
@@ -631,6 +669,49 @@ fn delete_remote(view: Entity<DevShellWindow>, target: String, parent: String, c
                     Ok(files) => {
                         state.files = Some(files);
                         state.feedback = Some("已删除".into());
+                    }
+                    Err(error) => state.feedback = Some(error),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    });
+}
+
+fn rename_remote(
+    view: Entity<DevShellWindow>,
+    target: String,
+    parent: String,
+    name: String,
+    cx: &mut App,
+) {
+    let _ = view.update(cx, |state, cx| {
+        let Some(session_id) = state
+            .terminal
+            .as_ref()
+            .map(|terminal| terminal.session_id.clone())
+        else {
+            return;
+        };
+        let base = state.snapshot.base.clone();
+        let token = state.token.clone();
+        state.pending_rename = None;
+        state.feedback = Some(format!("正在重命名 {}…", target));
+        let view = cx.entity();
+        cx.spawn(async move |_, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    post_file_action(&base, &token, &session_id, "rename", &target, &name)?;
+                    load_files(&base, &token, &session_id, &parent)
+                })
+                .await;
+            let _ = view.update(cx, |state, cx| {
+                match result {
+                    Ok(files) => {
+                        state.files = Some(files);
+                        state.feedback = Some("已重命名".into());
                     }
                     Err(error) => state.feedback = Some(error),
                 }
@@ -938,6 +1019,7 @@ fn main() {
                         files: None,
                         monitor: None,
                         pending_delete: None,
+                        pending_rename: None,
                     }
                 })
             })
