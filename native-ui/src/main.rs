@@ -61,6 +61,7 @@ struct DevShellWindow {
     pending_delete: Option<String>,
     pending_rename: Option<String>,
     preview: Option<FilePreviewState>,
+    transfers: Vec<TransferState>,
 }
 
 #[derive(Clone, Debug)]
@@ -92,6 +93,15 @@ struct FilePreviewState {
     encoding: String,
     text: String,
     status: String,
+}
+
+#[derive(Clone, Debug)]
+struct TransferState {
+    name: String,
+    status: String,
+    done: i64,
+    total: i64,
+    error: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -229,6 +239,9 @@ impl Render for DevShellWindow {
                                     })
                                     .when_some(self.preview.clone(), |workspace, preview| {
                                         workspace.child(file_preview_panel(preview))
+                                    })
+                                    .when(!self.transfers.is_empty(), |workspace| {
+                                        workspace.child(transfer_panel(self.transfers.clone()))
                                     })
                                     .child(
                                         div()
@@ -612,6 +625,40 @@ fn file_preview_panel(preview: FilePreviewState) -> impl IntoElement {
         .child(Paragraph::new(text));
 }
 
+fn transfer_panel(transfers: Vec<TransferState>) -> impl IntoElement {
+    div()
+        .p_4()
+        .rounded_lg()
+        .bg(gpui_kit::rgb(0x191f27))
+        .border_1()
+        .border_color(gpui_kit::rgb(0x2b313b))
+        .flex()
+        .flex_col()
+        .gap_2()
+        .child(Paragraph::new("传输队列"))
+        .children(transfers.into_iter().map(|transfer| {
+            let progress = if transfer.total > 0 {
+                format!(
+                    "{:.0}%",
+                    transfer.done as f64 / transfer.total as f64 * 100.0
+                )
+            } else {
+                "-".into()
+            };
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .child(Paragraph::new(format!(
+                    "{} · {} · {}",
+                    transfer.name, transfer.status, progress
+                )))
+                .child(Paragraph::new(transfer.error.unwrap_or_else(|| {
+                    format!("{}/{}", transfer.done, transfer.total)
+                })))
+        }))
+}
+
 fn navigate_files(view: Entity<DevShellWindow>, path: String, cx: &mut App) {
     let _ = view.update(cx, |state, cx| {
         let Some(session_id) = state
@@ -911,6 +958,7 @@ fn disconnect_session(view: Entity<DevShellWindow>, session_id: String, cx: &mut
                         state.files = None;
                         state.monitor = None;
                         state.preview = None;
+                        state.transfers.clear();
                         state.feedback = Some("会话已断开".into());
                     }
                     Err(error) => state.feedback = Some(error),
@@ -1102,6 +1150,7 @@ fn server_row(
                                                 .detach();
                                                 let monitor_base = state.snapshot.base.clone();
                                                 let monitor_token = state.token.clone();
+                                                let transfer_session = session_id.clone();
                                                 let monitor_session = session_id;
                                                 let monitor_view = cx.entity();
                                                 cx.spawn(async move |_, cx| {
@@ -1142,6 +1191,43 @@ fn server_row(
                                                         }
                                                         cx.background_executor()
                                                             .timer(Duration::from_secs(5))
+                                                            .await;
+                                                    }
+                                                })
+                                                .detach();
+                                                let transfer_base = state.snapshot.base.clone();
+                                                let transfer_token = state.token.clone();
+                                                let transfer_view = cx.entity();
+                                                cx.spawn(async move |_, cx| {
+                                                    loop {
+                                                        let result = cx
+                                                            .background_executor()
+                                                            .spawn({
+                                                                let transfer_base = transfer_base.clone();
+                                                                let transfer_token = transfer_token.clone();
+                                                                let transfer_session = transfer_session.clone();
+                                                                async move {
+                                                                    load_transfers(
+                                                                        &transfer_base,
+                                                                        &transfer_token,
+                                                                        &transfer_session,
+                                                                    )
+                                                                }
+                                                            })
+                                                            .await;
+                                                        if transfer_view
+                                                            .update(cx, |state, cx| {
+                                                                if let Ok(transfers) = result {
+                                                                    state.transfers = transfers;
+                                                                }
+                                                                cx.notify();
+                                                            })
+                                                            .is_err()
+                                                        {
+                                                            break;
+                                                        }
+                                                        cx.background_executor()
+                                                            .timer(Duration::from_secs(2))
                                                             .await;
                                                     }
                                                 })
@@ -1195,6 +1281,7 @@ fn main() {
                         pending_delete: None,
                         pending_rename: None,
                         preview: None,
+                        transfers: Vec::new(),
                     }
                 })
             })
@@ -1451,6 +1538,40 @@ fn load_monitor(base: &str, token: &str, session_id: &str) -> Result<MonitorStat
             "等待采样".into()
         },
     })
+}
+
+fn load_transfers(base: &str, token: &str, session_id: &str) -> Result<Vec<TransferState>, String> {
+    let value = get_json(base, token, "/api/transfers")?;
+    Ok(value
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|transfer| {
+            transfer
+                .get("sessionId")
+                .and_then(Value::as_str)
+                .map(|value| value == session_id)
+                .unwrap_or(false)
+        })
+        .map(|transfer| TransferState {
+            name: transfer
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or("传输")
+                .to_string(),
+            status: transfer
+                .get("status")
+                .and_then(Value::as_str)
+                .unwrap_or("未知")
+                .to_string(),
+            done: transfer.get("done").and_then(Value::as_i64).unwrap_or(0),
+            total: transfer.get("total").and_then(Value::as_i64).unwrap_or(0),
+            error: transfer
+                .get("error")
+                .and_then(Value::as_str)
+                .map(ToString::to_string),
+        })
+        .collect())
 }
 
 fn post_file_action(
