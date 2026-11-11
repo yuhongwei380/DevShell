@@ -34,6 +34,7 @@ struct BackendSnapshot {
     build: String,
     servers: Vec<ServerSummary>,
     groups: usize,
+    group_names: Vec<String>,
     locked: bool,
     error: Option<String>,
     config_dir: Option<String>,
@@ -628,6 +629,12 @@ fn settings_panel(
             "版本：{} · 构建：{}",
             snapshot.version, snapshot.build
         )))
+        .when(!snapshot.group_names.is_empty(), |panel| {
+            panel.child(Paragraph::new(format!(
+                "分组：{}",
+                snapshot.group_names.join("、")
+            )))
+        })
         .child(Paragraph::new(format!("配置目录：{config_dir}")))
         .child(Paragraph::new(format!("存储格式：{config_format}")))
         .child(Paragraph::new(format!("安全锁定：{security}")))
@@ -2662,6 +2669,7 @@ impl BackendSnapshot {
             build: "未知构建".into(),
             servers: Vec::new(),
             groups: 0,
+            group_names: Vec::new(),
             locked: false,
             error: None,
             config_dir: None,
@@ -2743,6 +2751,17 @@ impl BackendSnapshot {
                     .get("groupNodes")
                     .and_then(Value::as_array)
                     .map_or(0, Vec::len);
+                snapshot.group_names = value
+                    .get("groupNodes")
+                    .and_then(Value::as_array)
+                    .map(|groups| {
+                        groups
+                            .iter()
+                            .filter_map(|group| group.get("name").and_then(Value::as_str))
+                            .map(ToString::to_string)
+                            .collect()
+                    })
+                    .unwrap_or_default();
                 snapshot.proxies = value
                     .get("proxies")
                     .and_then(Value::as_array)
