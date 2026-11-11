@@ -56,6 +56,7 @@ struct DevShellWindow {
     command_input: Entity<InputState>,
     file_name_input: Entity<InputState>,
     local_path_input: Entity<InputState>,
+    secret_input: Entity<InputState>,
     files: Option<FileListState>,
     monitor: Option<MonitorState>,
     pending_delete: Option<String>,
@@ -194,6 +195,7 @@ impl Render for DevShellWindow {
                                     .flex_col()
                                     .gap_6()
                                     .child(Paragraph::new("原生工作区"))
+                                    .child(Input::new(&self.secret_input))
                                     .child(
                                         div()
                                             .flex()
@@ -1106,6 +1108,7 @@ fn server_row(
                             view.update(cx, |state, cx| {
                                 let base = state.snapshot.base.clone();
                                 let token = state.token.clone();
+                                let secret = state.secret_input.read(cx).value(cx).to_string();
                                 state.connecting = Some(profile_id.clone());
                                 state.feedback = Some("正在连接服务器…".into());
                                 cx.notify();
@@ -1113,7 +1116,9 @@ fn server_row(
                                     let result = cx
                                         .background_executor()
                                         .spawn(
-                                            async move { post_session(&base, &token, &profile_id) },
+                                            async move {
+                                                post_session(&base, &token, &profile_id, &secret)
+                                            },
                                         )
                                         .await;
                                     let _ = this.update(cx, |state, cx| {
@@ -1339,6 +1344,8 @@ fn main() {
                         .new(|cx| InputState::new(window, cx).placeholder("终端输入，Enter 发送"));
                     let file_name_input =
                         cx.new(|cx| InputState::new(window, cx).placeholder("目录名称"));
+                    let secret_input =
+                        cx.new(|cx| InputState::new(window, cx).placeholder("SSH 密码或私钥口令"));
                     DevShellWindow {
                         focus,
                         snapshot,
@@ -1350,6 +1357,7 @@ fn main() {
                         file_name_input,
                         local_path_input: cx
                             .new(|cx| InputState::new(window, cx).placeholder("本地文件路径")),
+                        secret_input,
                         files: None,
                         monitor: None,
                         pending_delete: None,
@@ -1454,7 +1462,7 @@ impl BackendSnapshot {
     }
 }
 
-fn post_session(base: &str, token: &str, profile_id: &str) -> Result<String, String> {
+fn post_session(base: &str, token: &str, profile_id: &str, secret: &str) -> Result<String, String> {
     let authority = base
         .strip_prefix("http://")
         .ok_or_else(|| "后端地址必须使用 http://".to_string())?;
@@ -1462,7 +1470,7 @@ fn post_session(base: &str, token: &str, profile_id: &str) -> Result<String, Str
     stream
         .set_read_timeout(Some(Duration::from_secs(25)))
         .map_err(|error| format!("设置超时失败：{error}"))?;
-    let body = serde_json::json!({"profileId": profile_id, "secret": ""}).to_string();
+    let body = serde_json::json!({"profileId": profile_id, "secret": secret}).to_string();
     let request = format!(
         "POST /api/sessions HTTP/1.1\r\nHost: {authority}\r\nX-CloudShell-Token: {token}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
         body.len(),
