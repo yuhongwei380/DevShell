@@ -51,6 +51,8 @@ struct ServerSummary {
     user: String,
     auth: String,
     proxy_id: String,
+    inline_proxy: bool,
+    key_path: String,
 }
 
 #[derive(Clone, Debug)]
@@ -2426,9 +2428,9 @@ fn server_row(
                         .on_click(move |_, window, cx| {
                             let server = edit_server.clone();
                             edit_view.update(cx, |state, cx| {
-                                if server.auth != "password" || !server.proxy_id.is_empty() {
+                                if server.inline_proxy {
                                     state.feedback = Some(
-                                        "原生编辑目前只支持直连密码认证服务器，私钥、Agent 或代理配置请在旧界面编辑。"
+                                        "该服务器使用内嵌代理配置，原生编辑暂不覆盖此字段，请在代理管理中改为已保存代理后再编辑。"
                                             .into(),
                                     );
                                     cx.notify();
@@ -2449,10 +2451,14 @@ fn server_row(
                                     input.set_value(server.port.to_string(), window, cx)
                                 });
                                 state.profile_key_path_input.update(cx, |input, cx| {
-                                    input.set_value("", window, cx)
+                                    input.set_value(server.key_path.clone(), window, cx)
                                 });
                                 state.profile_auth = server.auth.clone();
-                                state.profile_proxy_id = None;
+                                state.profile_proxy_id = if server.proxy_id.is_empty() {
+                                    None
+                                } else {
+                                    Some(server.proxy_id.clone())
+                                };
                                 state.feedback = Some("已载入服务器配置，可修改后保存。".into());
                                 cx.notify();
                             });
@@ -2714,6 +2720,17 @@ impl BackendSnapshot {
                                         .to_string(),
                                     proxy_id: server
                                         .get("proxyId")
+                                        .and_then(Value::as_str)
+                                        .unwrap_or_default()
+                                        .to_string(),
+                                    inline_proxy: server
+                                        .get("proxy")
+                                        .and_then(|value| value.get("type"))
+                                        .and_then(Value::as_str)
+                                        .map(|kind| kind != "" && kind != "direct")
+                                        .unwrap_or(false),
+                                    key_path: server
+                                        .get("keyPath")
                                         .and_then(Value::as_str)
                                         .unwrap_or_default()
                                         .to_string(),
