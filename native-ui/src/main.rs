@@ -403,6 +403,20 @@ fn file_panel(
                                 create_directory(view.clone(), path.clone(), name, cx);
                             }
                         })
+                })
+                .child({
+                    let view = view.clone();
+                    let file_name_input = file_name_input.clone();
+                    let path = current_path.clone();
+                    KitButton::new("file-new-file")
+                        .secondary()
+                        .label("新建文件")
+                        .on_click(move |_, _, cx| {
+                            let name = file_name_input.read(cx).value(cx).to_string();
+                            if !name.trim().is_empty() {
+                                create_empty_file(view.clone(), path.clone(), name, cx);
+                            }
+                        })
                 }),
         )
         .children(files.entries.into_iter().take(12).map(|entry| {
@@ -516,6 +530,42 @@ fn create_directory(view: Entity<DevShellWindow>, path: String, name: String, cx
                     Ok(files) => {
                         state.files = Some(files);
                         state.feedback = Some("目录已创建".into());
+                    }
+                    Err(error) => state.feedback = Some(error),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    });
+}
+
+fn create_empty_file(view: Entity<DevShellWindow>, path: String, name: String, cx: &mut App) {
+    let _ = view.update(cx, |state, cx| {
+        let Some(session_id) = state
+            .terminal
+            .as_ref()
+            .map(|terminal| terminal.session_id.clone())
+        else {
+            return;
+        };
+        let base = state.snapshot.base.clone();
+        let token = state.token.clone();
+        state.feedback = Some(format!("正在创建文件 {}…", name));
+        let view = cx.entity();
+        cx.spawn(async move |_, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    post_file_action(&base, &token, &session_id, "new-file", &path, &name)?;
+                    load_files(&base, &token, &session_id, &path)
+                })
+                .await;
+            let _ = view.update(cx, |state, cx| {
+                match result {
+                    Ok(files) => {
+                        state.files = Some(files);
+                        state.feedback = Some("文件已创建".into());
                     }
                     Err(error) => state.feedback = Some(error),
                 }
