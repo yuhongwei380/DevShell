@@ -1,7 +1,8 @@
 use std::{
-    env,
+    env, fs,
     io::{Read, Write},
     net::TcpStream,
+    path::PathBuf,
     process,
     sync::mpsc,
     thread,
@@ -438,6 +439,9 @@ fn file_panel(
             let rename_view = view.clone();
             let rename_target = target.clone();
             let rename_parent = current_path.clone();
+            let download_view = view.clone();
+            let download_target = target.clone();
+            let download_name = name.clone();
             div()
                 .flex()
                 .items_center()
@@ -484,6 +488,21 @@ fn file_panel(
                             }
                         }),
                 )
+                .when(!is_folder, |row| {
+                    row.child(
+                        KitButton::new(format!("file-download-{}", name))
+                            .secondary()
+                            .label("下载")
+                            .on_click(move |_, _, cx| {
+                                download_remote(
+                                    download_view.clone(),
+                                    download_target.clone(),
+                                    download_name.clone(),
+                                    cx,
+                                );
+                            }),
+                    )
+                })
                 .child(
                     KitButton::new(format!("file-delete-{}", name))
                         .danger()
@@ -715,6 +734,36 @@ fn rename_remote(
                     }
                     Err(error) => state.feedback = Some(error),
                 }
+                cx.notify();
+            });
+        })
+        .detach();
+    });
+}
+
+fn download_remote(view: Entity<DevShellWindow>, target: String, name: String, cx: &mut App) {
+    let _ = view.update(cx, |state, cx| {
+        let Some(session_id) = state
+            .terminal
+            .as_ref()
+            .map(|terminal| terminal.session_id.clone())
+        else {
+            return;
+        };
+        let base = state.snapshot.base.clone();
+        let token = state.token.clone();
+        state.feedback = Some(format!("正在下载 {}…", name));
+        let view = cx.entity();
+        cx.spawn(async move |_, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move { download_file(&base, &token, &session_id, &target, &name) })
+                .await;
+            let _ = view.update(cx, |state, cx| {
+                state.feedback = Some(match result {
+                    Ok(path) => format!("已下载到 {}", path.display()),
+                    Err(error) => error,
+                });
                 cx.notify();
             });
         })
@@ -1325,6 +1374,65 @@ fn delete_session(base: &str, token: &str, session_id: &str) -> Result<(), Strin
             .to_string());
     }
     Ok(())
+}
+
+fn download_file(
+    base: &str,
+    token: &str,
+    session_id: &str,
+    remote_path: &str,
+    name: &str,
+) -> Result<PathBuf, String> {
+    let authority = base
+        .strip_prefix("http://")
+        .ok_or_else(|| "后端地址必须使用 http://".to_string())?;
+    let mut stream =
+        TcpStream::connect(authority).map_err(|error| format!("连接下载服务失败：{error}"))?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(60)))
+        .map_err(|error| format!("设置下载超时失败：{error}"))?;
+    let request = format!(
+        "GET /api/sessions/{session_id}/download?path={} HTTP/1.1\r\nHost: {authority}\r\nX-CloudShell-Token: {token}\r\nConnection: close\r\n\r\n",
+        query_escape(remote_path)
+    );
+    stream
+        .write_all(request.as_bytes())
+        .map_err(|error| format!("发送下载请求失败：{error}"))?;
+    let mut response = Vec::new();
+    stream
+        .read_to_end(&mut response)
+        .map_err(|error| format!("读取下载内容失败：{error}"))?;
+    let marker = b"\r\n\r\n";
+    let boundary = response
+        .windows(marker.len())
+        .position(|window| window == marker)
+        .ok_or_else(|| "下载响应格式无效".to_string())?;
+    let headers = &response[..boundary];
+    let body = &response[boundary + marker.len()..];
+    let header_text = String::from_utf8_lossy(headers);
+    if !header_text
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .contains(" 200 ")
+    {
+        let value: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
+        return Err(value
+            .get("error")
+            .and_then(Value::as_str)
+            .unwrap_or("下载失败")
+            .to_string());
+    }
+    let safe_name = PathBuf::from(name)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .unwrap_or("download");
+    let directory = env::temp_dir().join("DevShellDownloads");
+    fs::create_dir_all(&directory).map_err(|error| format!("创建下载目录失败：{error}"))?;
+    let target = directory.join(safe_name);
+    fs::write(&target, body).map_err(|error| format!("保存下载文件失败：{error}"))?;
+    Ok(target)
 }
 
 fn query_escape(value: &str) -> String {
