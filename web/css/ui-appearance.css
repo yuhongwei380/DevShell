@@ -46,7 +46,7 @@ button, input, select { font-family: inherit; }
 /* Both font settings use the same movable frame and content hierarchy. */
 #ui-appearance-dialog, #appearance-dialog[data-kind="font"] { position:fixed; inset:auto; margin:0; width:min(700px,calc(var(--view-width,100vw) - 16px)); height:min(740px,calc(var(--view-height,100vh) - 16px)); max-height:calc(var(--view-height,100vh) - 16px); padding:0; overflow:hidden; border-radius:17px; font-size:14px; z-index:25; box-shadow:0 12px 46px #152d4338; }
 #ui-appearance-dialog[open], #appearance-dialog[data-kind="font"][open] { display:flex; flex-direction:column; }
-#ui-appearance-dialog .dialog-heading, #appearance-dialog[data-kind="font"] .dialog-heading { flex:none; margin:0; padding:20px 20px 12px; cursor:grab; touch-action:none; user-select:none; --wails-draggable:no-drag; }
+#ui-appearance-dialog .dialog-heading, #appearance-dialog[data-kind="font"] .dialog-heading { flex:none; margin:0; padding:20px 20px 12px; cursor:grab; touch-action:none; user-select:none; --window-draggable:no-drag; }
 #ui-appearance-dialog .dialog-heading h2, #appearance-dialog[data-kind="font"] .dialog-heading h2 { font-size:21px; margin:0; }
 #ui-appearance-dialog .dialog-heading p, #appearance-dialog[data-kind="font"] .dialog-heading p { font-size:13px; line-height:1.6; margin:8px 0 0; }
 #ui-appearance-dialog .font-kind-tabs, #appearance-dialog[data-kind="font"] .font-kind-tabs { flex:none; margin:0 20px 12px; }

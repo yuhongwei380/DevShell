@@ -15,7 +15,7 @@
 [data-theme="light"] .shell-transfer-status{color:#31556a;background:#f4fafce8;border-color:#7099aa66;box-shadow:0 3px 12px #2b596326}
 [data-theme="light"] .shell-transfer-status .transfer-ring-track{stroke:#b9ced6}
 [data-theme="light"] .shell-transfer-status .transfer-ring-fill{stroke:#2fa15f}
-.terminal-popout{flex:none;display:flex;align-items:center;gap:6px;height:28px;padding:4px 11px;border:1px solid #95bed540;border-radius:9px;color:#d5e7f1;background:#95bed530;font-size:11px;white-space:nowrap;--wails-draggable:no-drag;transition:background .18s,color .18s,border-color .18s}
+.terminal-popout{flex:none;display:flex;align-items:center;gap:6px;height:28px;padding:4px 11px;border:1px solid #95bed540;border-radius:9px;color:#d5e7f1;background:#95bed530;font-size:11px;white-space:nowrap;--window-draggable:no-drag;transition:background .18s,color .18s,border-color .18s}
 .terminal-popout svg{width:14px;height:14px}
 .terminal-popout[hidden]{display:none!important}
 .terminal-popout:hover:enabled,.terminal-popout:focus-visible{background:#95bed54d;border-color:#95bed566;color:#f0f8fb}
@@ -69,7 +69,7 @@
 .session-tab-tools > .icon-button svg { width:15px; height:15px; }
 #session-tabs-previous svg { transform:rotate(180deg); }
 #session-tabs-list svg { transform:rotate(90deg); }
-.session-tabs-menu { position:fixed; z-index:100000; display:flex; flex-direction:column; gap:2px; min-width:min(200px,calc(var(--view-width,100vw) - 16px)); max-width:min(360px,calc(var(--view-width,100vw) - 16px)); overflow:auto; padding:5px; border:1px solid var(--border); border-radius:11px; background:var(--surface,#fff); color:var(--text,#43576b); box-shadow:0 10px 26px #12253426; --wails-draggable:no-drag; }
+.session-tabs-menu { position:fixed; z-index:100000; display:flex; flex-direction:column; gap:2px; min-width:min(200px,calc(var(--view-width,100vw) - 16px)); max-width:min(360px,calc(var(--view-width,100vw) - 16px)); overflow:auto; padding:5px; border:1px solid var(--border); border-radius:11px; background:var(--surface,#fff); color:var(--text,#43576b); box-shadow:0 10px 26px #12253426; --window-draggable:no-drag; }
 .session-tabs-menu button { display:flex; align-items:center; gap:8px; flex:none; padding:8px; border-radius:7px; text-align:left; font-size:12px; }
 .session-tabs-menu button:hover,.session-tabs-menu button:focus-visible { background:var(--surface-hover,#7899ac20); }
 .session-tabs-menu button[aria-current="page"] { color:var(--accent); }

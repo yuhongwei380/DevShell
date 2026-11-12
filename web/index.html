@@ -6,7 +6,7 @@
   <title>DevShell · SSH 工作台</title>
   <meta name="referrer" content="no-referrer">
   <script src="js/bootstrap.js?v=20261025-devshell-rc1"></script>
-  <script>if(location.protocol!=='wails:'&&location.hostname!=='wails.localhost'){const nonce=new URLSearchParams(location.search).get('window');if(/^[A-Za-z0-9_-]{24,96}$/.test(nonce||'')){window.DEVSHELL.detachedNonce=nonce;}}</script>
+  <script>const nonce=new URLSearchParams(location.search).get('window');if(/^[A-Za-z0-9_-]{24,96}$/.test(nonce||'')){window.DEVSHELL.detachedNonce=nonce;}</script>
   <script src="js/security-lock.js?v=20261025-devshell-rc1"></script>
   <script src="js/theme.js?v=20261107-frosted-darkonly1"></script>
   <link rel="stylesheet" href="vendor/xterm.css">

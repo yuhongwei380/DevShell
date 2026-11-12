@@ -1,4 +1,4 @@
-.help-pill { color:#71969c; background:#e4f0ee; --wails-draggable:no-drag; }
+.help-pill { color:#71969c; background:#e4f0ee; --window-draggable:no-drag; }
 .help-pill:hover { color:#497880; background:#d9eae7; }
 .help-pill svg { width:16px; height:16px; }
 [data-theme="dark"] .help-pill { color:#a6c6c8; background:#294143; }

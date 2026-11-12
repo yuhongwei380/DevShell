@@ -1,8 +1,0 @@
-//go:build desktop && !linux
-
-package desktop
-
-// Other desktop platforms use Wails' window theme APIs directly.
-func setPlatformTheme(dark bool) {}
-
-func setPlatformSystemTheme() {}

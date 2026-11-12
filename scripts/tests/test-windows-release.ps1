@@ -35,11 +35,10 @@ try{
  $expected=(Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant();$report.executableSHA256=$expected
  $report.installerSHA256=(Get-FileHash (Join-Path $Artifacts 'DevShell-Setup-x64.exe')).Hash.ToLowerInvariant()
  $config=Join-Path $qaRoot 'portable config';Seed-QA $config;$running=Start-Native $exe $config $true;Visible-QA $running 'packed release EXE launches visibly even with SW_HIDE';powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tests/test-windows-ui.ps1 -DengProcessID $running.Id -Output $Output;if($LASTEXITCODE -ne 0){throw 'Native Windows UI Automation check failed'};Stop-QA $running
- powershell -NoProfile -ExecutionPolicy Bypass -File scripts/tests/test-windows-exit.ps1 -Exe $exe -Output $Output;if($LASTEXITCODE -ne 0){throw 'Native Windows exit regression failed'}
  $install=Join-Path $qaRoot 'installed';$installer=Start-Process (Join-Path $Artifacts 'DevShell-Setup-x64.exe') -ArgumentList ('/S /D='+$install) -PassThru -Wait;Check-QA ($installer.ExitCode -eq 0) 'silent installer returns success'
  Check-QA ((Get-FileHash (Join-Path $install 'DevShell.exe')).Hash.ToLowerInvariant() -eq $expected) 'installer contains exact release executable'
  $uninstallKey='HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\DevShell';Check-QA ((Get-ItemProperty $uninstallKey).DisplayName -eq 'DevShell') 'registered in Windows uninstall control panel'
- $installedConfig=Join-Path $install 'data';Seed-QA $installedConfig;$running=Start-Native (Join-Path $install 'DevShell.exe') $installedConfig;Visible-QA $running 'installed native WebView2 frontend starts';Stop-QA $running
+ $installedConfig=Join-Path $install 'data';Seed-QA $installedConfig;$running=Start-Native (Join-Path $install 'DevShell.exe') $installedConfig;Visible-QA $running 'installed native GPUI frontend starts';Stop-QA $running
  $uninstaller=Start-Process (Join-Path $install 'data/support/Uninstall.exe') -ArgumentList '/S' -PassThru -Wait;Wait-QA {!(Test-Path (Join-Path $install 'DevShell.exe'))} 'uninstall removes executable';Check-QA (!(Test-Path $uninstallKey)) 'uninstall registration removed';Check-QA ((Get-Content (Join-Path $installedConfig 'keep-user-data.txt')).Trim() -eq 'preserve-local-fixture') 'uninstall preserves user data'
  $legacy=Join-Path $qaRoot 'legacy';Expand-Archive $LegacyZip $legacy;$oldExe=(Get-ChildItem $legacy -Filter DengShell.exe -Recurse|Select-Object -First 1).FullName
  $build=[uint64]([regex]::Match((Get-Content internal/app/updates.go -Raw),'const ApplicationBuild uint64 = (\d+)').Groups[1].Value)

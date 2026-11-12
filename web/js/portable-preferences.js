@@ -30,7 +30,7 @@
       if (Object.hasOwn(entries, key)) next[key] = entries[key]; else delete next[key];
     }
     entries = next; ready = true;
-    // Do not let an old Wails origin or a different portable directory leak state.
+    // Do not let an old desktop origin or a different portable directory leak state.
     try { for (let i = localStorage.length - 1; i >= 0; i--) {
       const key = localStorage.key(i); if (allowed(key)) localStorage.removeItem(key);
     } } catch {}

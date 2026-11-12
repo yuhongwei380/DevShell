@@ -98,7 +98,7 @@ def build(args):
             # A fixed minimum keeps the Intel and Apple Silicon slices consistent.
             for flag in ["CGO_CFLAGS", "CGO_LDFLAGS"]:
                 env[flag] = f"{env.get(flag, '')} -mmacosx-version-min={MINIMUM_MACOS}".strip()
-            run("go", "build", "-p", str(jobs), "-buildvcs=false", "-trimpath", "-tags", "desktop,production",
+            run("go", "build", "-p", str(jobs), "-buildvcs=false", "-trimpath",
                 "-ldflags", "-s -w", "-o", binary, ".", cwd=ROOT, env=env)
             binaries.append(binary)
             run("rustup", "target", "add", target, cwd=ROOT)

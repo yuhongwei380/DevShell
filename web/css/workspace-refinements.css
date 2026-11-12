@@ -86,7 +86,7 @@
 @container (max-width:330px) { .terminal-command-bar textarea:placeholder-shown { font-size:10px; } }
 /* Tab 补全候选框：贴着输入条上沿弹出，沿用终端区的深色配色；
    左列命令名，中列参数格式，右侧一句用途说明。 */
-.command-completion-popup { position:absolute; left:0; right:0; bottom:calc(100% + 5px); z-index:24; display:flex; flex-direction:column; padding:5px; border:1px solid #2c4454; border-radius:10px; background:#10212df5; color:#d7e1e8; box-shadow:0 12px 28px #06101855; max-height:246px; overflow:auto; overscroll-behavior:contain; scrollbar-width:thin; font-size:12px; line-height:1.4; --wails-draggable:no-drag; }
+.command-completion-popup { position:absolute; left:0; right:0; bottom:calc(100% + 5px); z-index:24; display:flex; flex-direction:column; padding:5px; border:1px solid #2c4454; border-radius:10px; background:#10212df5; color:#d7e1e8; box-shadow:0 12px 28px #06101855; max-height:246px; overflow:auto; overscroll-behavior:contain; scrollbar-width:thin; font-size:12px; line-height:1.4; --window-draggable:no-drag; }
 .command-completion-popup[hidden] { display:none; }
 .command-completion-option { display:flex; align-items:baseline; gap:9px; padding:5px 9px; border-radius:7px; cursor:pointer; user-select:none; }
 .command-completion-option:hover, .command-completion-option.is-active { background:#1d3546; }

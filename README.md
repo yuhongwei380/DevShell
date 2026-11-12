@@ -467,7 +467,7 @@ DevShell 应用代码采用 [MIT License](LICENSE)，可按许可使用、修改
 
 本项目源自 [BitsFlowCloud/DengShell](https://github.com/BitsFlowCloud/DengShell) 的 DengShell v0.03 分支；上游代码同样以 MIT 许可发布，感谢上游作者。
 
-第三方组件（如上游 DengShell、Go 与 npm 依赖、内置与在线字体、表情与系统图标等）的许可证信息在仓库根目录 **[LICENSES/](LICENSES/)** 中逐个单独保存，完整清单见 [LICENSES/README.md](LICENSES/README.md)；项目使用的 Go、Wails 与 xterm.js 等组件的许可证也包含其中，发行包内同样附带全部许可证副本。
+第三方组件（如上游 DengShell、Go、GPUI/ELY 与 npm 依赖、内置与在线字体、表情与系统图标等）的许可证信息在仓库根目录 **[LICENSES/](LICENSES/)** 中逐个单独保存，完整清单见 [LICENSES/README.md](LICENSES/README.md)；发行包内同样附带全部许可证副本。
 
 文本编辑器支持当前标签内搜索（Ctrl+F）、替换（Ctrl+H）和定位行（Ctrl+G）；全部替换可撤销，不影响其他标签。编码、重新读取与复制全文位于“更多”，窗口拆分/合并位于“窗口”。
 

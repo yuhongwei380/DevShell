@@ -9,7 +9,7 @@
 | 部分 | 职责 |
 | --- | --- |
 | `main.go`、`startup_error*.go` | 启动入口、命令行参数、启动错误对话框 |
-| `internal/desktop/`（`desktop*.go`、`theme*.go`、`window*.go`、`detached_cache*.go`） | 旧版 Wails 桌面窗口兼容层；新发行包优先由原生前端接管 |
+| `internal/nativeui/` | GPUI 原生窗口启动与便携配置路径 |
 | `internal/app/app.go`、`store.go`、`persistence*.go` | 本机回环 HTTP API、加密配置、原子保存与数据迁移 |
 | `internal/app/ssh*.go`、`terminal*.go`、`sftp*.go` | SSH 认证、主机指纹、会话、终端数据转发、SFTP 文件通道 |
 | `internal/app/files.go`、`file_tools.go`、`upload_pipeline.go` | 文件浏览、编辑、上传下载队列 |
@@ -26,11 +26,8 @@
 | --- | --- | --- |
 | Go | `go.mod` 要求 1.26.0+；本次采用 1.27.1 | 1.27.1，模块校验通过 |
 | Node.js / npm | xterm 依赖复制、JavaScript 检查和测试；完整测试使用 Node 22+ | Node 22.23.2 / npm 10.9.8 |
-| Wails | Go 模块锁定 v2.15.0；直接 `go build`，不依赖 Wails CLI | 已有模块 |
 | Rust / Cargo | GPUI Kit 0.9.0、ELY GPUI Components；构建 `native-ui/` | Rust 1.98+ |
 | xterm.js | 6.0.0；addon-fit 0.11.0；addon-serialize 0.14.0 | 安装及内置资源齐全 |
-| C/C++、pkg-config | Linux CGO 原生桌面编译 | GCC 15.2.0，可用 |
-| GTK3 / WebKitGTK 4.1 | Linux 原生窗口及 WebView | 3.24.52 / 2.52.6 |
 | Python 3 | 打包、资源处理、测试辅助 | 3.14.4 |
 | ping / mtr / OpenSSH | 本机延迟/MTR、隔离 SSH 测试 | 已安装 |
 | Chrome、Bash、Zsh | 终端快照与提示符测试 | 本次测试通过 |
@@ -51,18 +48,18 @@ npm ci
 npm run vendor
 npm run check
 go test -buildvcs=false -timeout 12m ./...
-go test -buildvcs=false -tags desktop,production,webkit2_41 -timeout 5m ./internal/desktop ./internal/updater .
+go test -buildvcs=false -timeout 5m ./internal/updater .
 ```
 
 Linux 桌面开发构建使用 `bash build.sh`；Windows 交叉编译使用 `bash build.sh --windows`。这两个命令会写入各自的构建输出，执行前应确认当前需要的目标。隔离测试可通过 `go build -o 缓存目录/程序` 和运行参数 `--config 临时目录` 完成。
 
-Windows 开发编译可在当前 Linux 主机完成；带 `DevShellUI.exe` 的构建使用 GPUI 原生窗口，不需要 WebView2。未携带原生前端的旧安装仍保留 Wails 兼容启动路径。macOS 通用应用构建需要 Mac + Xcode Command Line Tools/Apple SDK，详见 [macOS 构建说明](MACOS.md)。现有 Ubuntu 工具链无法代替 Apple SDK。
+Windows 开发编译可在当前 Linux 主机完成；构建会同时生成 `DevShell.exe` 与 `DevShellUI.exe`，桌面启动统一使用 GPUI 原生窗口。macOS 通用应用构建需要 Mac + Xcode Command Line Tools/Apple SDK，详见 [macOS 构建说明](MACOS.md)。现有 Ubuntu 工具链无法代替 Apple SDK。
 
 ## 本次验证范围
 
 - Go 模块完整性检查、后端常规测试、Go vet。
 - 全部 36 个自有前端 JavaScript 文件语法检查；package.json 中 15 组前端测试通过。
-- Linux 原生桌面层测试，以及使用隔离配置和虚拟显示的实际 WebKit 窗口启动。
+- GPUI 原生前端构建与 Go 后端测试。
 - Windows 桌面交叉编译成功；本次未在 Windows 真机运行新构建。
 - macOS 配置路径识别、BSD ping 命令和退出状态的回归测试。
 - Python 脚本与 GitHub Actions YAML 语法检查；Linux 启动器 11 项现有测试。

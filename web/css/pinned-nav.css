@@ -6,7 +6,7 @@
 #pinned-toggle svg { width: 17px; height: 17px; }
 #pinned-toggle.open { background: #dce8f1; color: var(--accent, #527fa4); }
 [data-theme="dark"] #pinned-toggle.open { background: #223243; color: #b9d3e6; }
-.pinned-bar { position: fixed; z-index: 61; left: 8px; top: 8px; box-sizing: border-box; width: 256px; max-width: calc(var(--view-width, 100vw) - 16px); display: flex; flex-direction: column; gap: 3px; padding: 5px; border-radius: 12px; border: 1px solid var(--border, #dbe6ee); background: var(--surface, #ffffff); box-shadow: 0 12px 28px #293f5626; overflow-y: auto; overscroll-behavior: contain; --wails-draggable: no-drag; }
+.pinned-bar { position: fixed; z-index: 61; left: 8px; top: 8px; box-sizing: border-box; width: 256px; max-width: calc(var(--view-width, 100vw) - 16px); display: flex; flex-direction: column; gap: 3px; padding: 5px; border-radius: 12px; border: 1px solid var(--border, #dbe6ee); background: var(--surface, #ffffff); box-shadow: 0 12px 28px #293f5626; overflow-y: auto; overscroll-behavior: contain; --window-draggable: no-drag; }
 .pinned-bar[hidden] { display: none; }
 [data-theme="dark"] .pinned-bar { background: #16222e; border-color: #2a3a48; box-shadow: 0 12px 28px #00000066; }
 .pinned-item { position: relative; display: flex; flex: none; align-items: center; height: 32px; padding: 0 5px 0 9px; border-radius: 9px; color: var(--text, #3d5468); font-size: 12.5px; touch-action: none; user-select: none; }

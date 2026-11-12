@@ -41,9 +41,6 @@ DevShell 自身采用根目录 [LICENSE](../LICENSE)（MIT）。上游项目 Den
 | github.com/tkrajina/go-reflector | Apache-2.0 | [github.com_tkrajina_go-reflector@v0.5.8-LICENSE.txt.txt](go/github.com_tkrajina_go-reflector@v0.5.8-LICENSE.txt.txt) |
 | github.com/valyala/bytebufferpool | MIT | [github.com_valyala_bytebufferpool@v1.0.0-LICENSE.txt](go/github.com_valyala_bytebufferpool@v1.0.0-LICENSE.txt) |
 | github.com/valyala/fasttemplate | MIT | [github.com_valyala_fasttemplate@v1.2.2-LICENSE.txt](go/github.com_valyala_fasttemplate@v1.2.2-LICENSE.txt) |
-| github.com/wailsapp/go-webview2 | MIT | [github.com_wailsapp_go-webview2@v1.0.22-LICENSE.txt](go/github.com_wailsapp_go-webview2@v1.0.22-LICENSE.txt) |
-| github.com/wailsapp/mimetype | MIT | [github.com_wailsapp_mimetype@v1.4.1-LICENSE.txt](go/github.com_wailsapp_mimetype@v1.4.1-LICENSE.txt) |
-| github.com/wailsapp/wails/v2 | MIT | [github.com_wailsapp_wails_v2@v2.15.0-LICENSE.txt](go/github.com_wailsapp_wails_v2@v2.15.0-LICENSE.txt) |
 | Go | BSD-3-clause | [Go-LICENSE.txt](go/Go-LICENSE.txt) |
 | go.bug.st/serial | BSD-3-clause | [go.bug.st_serial@v1.8.0-LICENSE.txt](go/go.bug.st_serial@v1.8.0-LICENSE.txt) |
 | golang.org/x/crypto | BSD-3-clause | [golang.org_x_crypto@v0.57.0-LICENSE.txt](go/golang.org_x_crypto@v0.57.0-LICENSE.txt) |

@@ -24,4 +24,4 @@
 .process-session-tab .session-tab-label { overflow:hidden; text-overflow:ellipsis; }
 @media(max-width:900px) { .process-view-toolbar h2 { max-width:100%; width:100%; }.process-view-toolbar,.process-view-footer { padding-left:10px; padding-right:10px; } }
 
-.process-session-tab { --wails-draggable:no-drag; }
+.process-session-tab { --window-draggable:no-drag; }

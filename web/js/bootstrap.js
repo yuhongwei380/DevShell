@@ -1,11 +1,6 @@
 // Browser capabilities arrive only in the launch URL fragment. Keep them out
 // of request URLs and remove the fragment before any application asset loads.
 (() => {
-  if (location.protocol === 'wails:' || location.hostname === 'wails.localhost') {
-    // The native asset handler supplies its own authorization header.
-    document.write('<script src="boot.js"><\/script>');
-    return;
-  }
   const key = 'dengshell.bootstrap-token';
   const fragment = new URLSearchParams(location.hash.slice(1));
   const supplied = fragment.get('token');

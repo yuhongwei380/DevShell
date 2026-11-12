@@ -47,7 +47,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force build/out | Out-Null
           cargo build --manifest-path native-ui/Cargo.toml --release
-          go build -buildvcs=false -trimpath -tags desktop,production -ldflags "-s -w -H windowsgui" -o build/out/DevShell.exe .
+          go build -buildvcs=false -trimpath -ldflags "-s -w -H windowsgui" -o build/out/DevShell.exe .
           Copy-Item native-ui/target/release/devshell-native-ui.exe build/out/DevShellUI.exe
       - name: Prepare Windows image
         run: go run ./cmd/prepare-windows-image -in build/out/DevShell.exe -out build/out/DevShell-prepared.exe

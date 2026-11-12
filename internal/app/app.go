@@ -136,7 +136,7 @@ func (a *App) Close() {
 
 func (a *App) allowedOrigin(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
-	return origin == "" || origin == a.baseURL || origin == "http://wails.localhost" || origin == "https://wails.localhost" || origin == "wails://wails.localhost" || origin == "wails://wails"
+	return origin == "" || origin == a.baseURL
 }
 func (a *App) Handler(assets fs.FS) http.Handler {
 	mux := http.NewServeMux()

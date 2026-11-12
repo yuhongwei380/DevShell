@@ -12,10 +12,9 @@ elif [[ "${1:-}" == '--windows' ]]; then
   mkdir -p build/windows
   cargo build --manifest-path native-ui/Cargo.toml --release
   cp native-ui/target/release/devshell-native-ui.exe build/windows/DevShellUI.exe
-  GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -buildvcs=false -trimpath -tags desktop,production -ldflags '-s -w -H windowsgui' -o build/windows/DevShell.exe .
-elif [[ "${1:-}" == '--browser' ]]; then
-  go build -buildvcs=false -trimpath -ldflags '-s -w' -o dengshell-server .
+  GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -buildvcs=false -trimpath -ldflags '-s -w -H windowsgui' -o build/windows/DevShell.exe .
 else
-  pkg-config --exists gtk+-3.0 webkit2gtk-4.1
-  go build -buildvcs=false -trimpath -tags desktop,production,webkit2_41 -ldflags '-s -w' -o dengshell .
+  cargo build --manifest-path native-ui/Cargo.toml --release
+  cp native-ui/target/release/devshell-native-ui ./DevShellUI
+  go build -buildvcs=false -trimpath -ldflags '-s -w' -o dengshell .
 fi

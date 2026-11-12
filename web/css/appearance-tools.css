@@ -84,7 +84,7 @@ dialog::-webkit-scrollbar-button,dialog ::-webkit-scrollbar-button { display:non
 .movable-color-dialog { position:fixed; inset:auto; margin:0; padding:0!important; width:min(480px,calc(var(--view-width) - 16px)); max-width:calc(var(--view-width) - 16px); max-height:calc(var(--view-height) - 16px); border:1px solid var(--border); border-radius:17px; overflow:hidden; color:var(--text,#43576b); background:var(--surface); box-shadow:0 15px 58px #172e4b40; }
 .movable-color-dialog[open] { display:flex; flex-direction:column; }
 .movable-color-dialog::backdrop { background:transparent; backdrop-filter:none; }
-.color-dialog-handle { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 15px 8px; flex:none; cursor:grab; touch-action:none; user-select:none; --wails-draggable:no-drag; }
+.color-dialog-handle { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 15px 8px; flex:none; cursor:grab; touch-action:none; user-select:none; --window-draggable:no-drag; }
 .color-dialog-handle h2 { margin:0; font-size:15px; font-weight:600; overflow:hidden; text-overflow:ellipsis; }
 .color-dialog-handle:focus-visible { background:var(--surface-inset); }
 .is-dragging .color-dialog-handle { cursor:grabbing; }

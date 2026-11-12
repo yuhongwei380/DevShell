@@ -288,7 +288,7 @@ func TestNativeOriginRequiresToken(t *testing.T) {
 	if err = a.Start("127.0.0.1:0", fstest.MapFS{}); err != nil {
 		t.Fatal(err)
 	}
-	for _, origin := range []string{"null", "wails://wails"} {
+	for _, origin := range []string{"null", a.URL()} {
 		for _, valid := range []bool{false, true} {
 			req, _ := http.NewRequest("GET", a.URL()+"/api/config", nil)
 			req.Header.Set("Origin", origin)

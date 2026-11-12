@@ -79,7 +79,7 @@
   }
  }
  function bindTab(tab,state=null) {
-  tab.dataset.dragBound='true';tab.style.setProperty('--wails-draggable','no-drag');
+  tab.dataset.dragBound='true';tab.style.setProperty('--window-draggable','no-drag');
   const canDetach=()=>!!(state?.ready&&state.connected&&!state.localOnly&&!state.detaching&&!state.handoffProvisional&&!state.ownershipUncertain&&!state.serial);
   tab.title=state?.detaching?'正在移至独立窗口…':'拖动调整标签顺序'+(canDetach()?' · 拖出标签栏以拆分':'')+' · Esc 取消';
   let drag=null,suppressUntil=0;

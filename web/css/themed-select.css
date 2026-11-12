@@ -1,5 +1,5 @@
 /* Every single-select shares the application's soft, theme-aware surface. */
-.themed-select { position:relative; display:inline-flex; align-items:center; min-width:0; max-width:100%; vertical-align:middle; --wails-draggable:no-drag; }
+.themed-select { position:relative; display:inline-flex; align-items:center; min-width:0; max-width:100%; vertical-align:middle; --window-draggable:no-drag; }
 select.themed-select-native { position:absolute!important; width:1px!important; height:1px!important; padding:0!important; margin:0!important; border:0!important; clip:rect(0,0,0,0)!important; clip-path:inset(50%)!important; overflow:hidden!important; white-space:nowrap!important; opacity:0!important; pointer-events:none!important; }
 .themed-select-trigger { display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; min-width:0; min-height:32px; padding:8px 11px; border:0; border-radius:10px; background:var(--surface-inset,#f1f5f8); color:var(--text,#526b7e); font:inherit; font-size:11px; text-align:left; line-height:1.4; transition:background-color .12s,color .12s; }
 .themed-select-trigger:hover,.themed-select-trigger:focus-visible,.themed-select.is-open .themed-select-trigger { background:var(--surface-hover,#e9f0f5); color:var(--text,#42627c); }
@@ -7,7 +7,7 @@ select.themed-select-native { position:absolute!important; width:1px!important; 
 .themed-select-value { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .themed-select-caret { flex:none; width:6px; height:6px; margin:0 2px 3px; border-right:1.5px solid currentColor; border-bottom:1.5px solid currentColor; transform:rotate(45deg); opacity:.65; transition:transform .12s; }
 .themed-select.is-open .themed-select-caret { transform:translateY(3px) rotate(225deg); }
-.themed-select-popup { position:fixed; inset:auto; margin:0; padding:6px; border:1px solid var(--border,#e7edf2); border-radius:13px; background:var(--surface,#fff); color:var(--text,#43576b); box-shadow:0 10px 32px #19334b26,0 2px 6px #19334b0d; z-index:100; font-family:inherit; font-size:11px; line-height:1.5; overflow:auto; overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:#91a8ba66 transparent; --wails-draggable:no-drag; }
+.themed-select-popup { position:fixed; inset:auto; margin:0; padding:6px; border:1px solid var(--border,#e7edf2); border-radius:13px; background:var(--surface,#fff); color:var(--text,#43576b); box-shadow:0 10px 32px #19334b26,0 2px 6px #19334b0d; z-index:100; font-family:inherit; font-size:11px; line-height:1.5; overflow:auto; overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:#91a8ba66 transparent; --window-draggable:no-drag; }
 .themed-select-popup::backdrop { background:transparent; pointer-events:none; }
 .themed-select-option { position:relative; display:flex; align-items:center; min-height:32px; padding:7px 30px 7px 10px; border-radius:8px; cursor:pointer; user-select:none; }
 .themed-select-option-label { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }

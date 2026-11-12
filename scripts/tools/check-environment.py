@@ -36,11 +36,7 @@ def inspect():
     checks["frontend_assets"] = {"ok": all((ROOT / "web/vendor" / name).is_file() for name in
                                                ["xterm.js", "xterm.css", "addon-fit.js", "addon-serialize.js"]),
                                   "detail": "Embedded xterm.js and addons"}
-    if system == "Linux":
-        for package in ["gtk+-3.0", "webkit2gtk-4.1"]:
-            checks[package] = probe(["pkg-config", "--modversion", package])
-        checks["c_compiler"] = probe(["cc", "--version"])
-    elif system == "Darwin":
+    if system == "Darwin":
         checks["apple_sdk"] = probe(["xcrun", "--sdk", "macosx", "--show-sdk-path"])
         checks["apple_clang"] = probe(["xcrun", "clang", "--version"])
         checks["apple_lipo"] = probe(["xcrun", "--find", "lipo"])

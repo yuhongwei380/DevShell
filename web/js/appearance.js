@@ -748,6 +748,6 @@ function initializeAppearance() {
     finally { button.disabled = false; }
   });
   for (const button of $$('[data-window-action]')) button.onclick = safe(async () => reflectWindowState(await native().WindowAction(button.dataset.windowAction)));
-  $('.session-bar').ondblclick = safe(async event => { if (native()?.WindowAction && !$('#window-controls').hidden && getComputedStyle(event.target).getPropertyValue('--wails-draggable').trim() === 'drag') reflectWindowState(await native().WindowAction('toggle-maximise')); });
+  $('.session-bar').ondblclick = safe(async event => { if (native()?.WindowAction && !$('#window-controls').hidden && getComputedStyle(event.target).getPropertyValue('--window-draggable').trim() === 'drag') reflectWindowState(await native().WindowAction('toggle-maximise')); });
   window.addEventListener('resize', () => { applyUIScale(); if (native()?.WindowState) native().WindowState().then(reflectWindowState).catch(() => {}); });
 }

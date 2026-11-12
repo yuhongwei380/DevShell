@@ -49,7 +49,7 @@
   // Responses from a request begun before a newer lock/unlock cannot clear it.
   if(Number(next.revision)<Number(state.revision))return;
   state=next;cover(forcingLock||state.locked);
-  const closeWindow=el('security-window-close');if(closeWindow)closeWindow.hidden=!window.go?.desktop?.Desktop?.ConfirmQuit;
+  const closeWindow=el('security-window-close');if(closeWindow)closeWindow.hidden=!window.DevShellNative?.ConfirmQuit;
   const manual=el('security-lock-button');if(manual){manual.disabled=!state.enabled;manual.title=state.enabled?'立即锁定所有窗口':'请先在设置中启用安全锁定';}
   const options=el('security-unlock-method');if(options){
    const previous=options.value,methods=[];
@@ -63,7 +63,7 @@
  }
  async function call(path,body){
   const target='/api/security-lock/'+path;
-  const bridge=window.go?.desktop?.Desktop;
+  const bridge=window.DevShellNative;
   if(bridge?.Request){try{return JSON.parse(await bridge.Request(body===undefined?'GET':'POST',target,body===undefined?'':JSON.stringify(body)));}catch(error){const text=error?.message||String(error),i=text.indexOf('DENGSHELL_ERROR:');if(i>=0){let data;try{data=JSON.parse(text.slice(i+16));}catch{}if(data)throw Object.assign(new Error(data.error),{code:data.code});}throw error;}}
   const r=await fetch(boot.base+target,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json','X-CloudShell-Token':boot.token},body:body===undefined?undefined:JSON.stringify(body),cache:'no-store'});
   const data=await r.json();if(!r.ok)throw Object.assign(new Error(data.error||'安全锁定服务暂不可用'),{code:data.code});return data;

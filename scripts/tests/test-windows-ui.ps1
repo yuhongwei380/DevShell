@@ -40,7 +40,7 @@ function Invoke-Button([string]$Name){
  Start-Sleep -Milliseconds 350
 }
 
-# Named HTML sections are exposed by the actual WebView2 accessibility tree.
+# Named HTML sections are exposed by the actual GPUI accessibility tree.
 # Reading UIA bounding rectangles avoids introducing a browser debugging port.
 function Find-Region([string]$Name){
  $condition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty,$Name)
@@ -129,7 +129,7 @@ function Test-SFTP-Layout {
  $restoredTerminal=(Find-Region 'SSH 终端').Current.BoundingRectangle
  $restoredBottom=(Find-Region '远程文件').Current.BoundingRectangle
  Require-Layout ($restoredTerminal.Bottom -le $restoredBottom.Y+4 -and [Math]::Abs($restoredBottom.Height-$bottomFiles.Height) -lt 4 -and [Math]::Abs($restoredTerminal.Right-$bottomTerminal.Right) -lt 4) 'switching back in settings did not restore the remembered bottom layout'
- @{passed=$true;nativeWebView2=$true;method='UI Automation region geometry and real pointer clicks';closePanelButton=$true;placementViaSettings=$true;bottom=@{terminal=(Bounds-Record $bottomTerminal);files=(Bounds-Record $bottomFiles)};right=@{terminal=(Bounds-Record $rightTerminal);files=(Bounds-Record $rightFiles)};hiddenTerminal=(Bounds-Record $hiddenTerminal);restoredRightFiles=(Bounds-Record $restoredFiles);restoredBottomFiles=(Bounds-Record $restoredBottom)}|ConvertTo-Json -Depth 8|Set-Content -Encoding UTF8 (Join-Path $Output 'windows-sftp-layout.json')
+ @{passed=$true;nativeGPUI=$true;method='UI Automation region geometry and real pointer clicks';closePanelButton=$true;placementViaSettings=$true;bottom=@{terminal=(Bounds-Record $bottomTerminal);files=(Bounds-Record $bottomFiles)};right=@{terminal=(Bounds-Record $rightTerminal);files=(Bounds-Record $rightFiles)};hiddenTerminal=(Bounds-Record $hiddenTerminal);restoredRightFiles=(Bounds-Record $restoredFiles);restoredBottomFiles=(Bounds-Record $restoredBottom)}|ConvertTo-Json -Depth 8|Set-Content -Encoding UTF8 (Join-Path $Output 'windows-sftp-layout.json')
 }
 function Capture-Native([string]$Name){
  $r=$root.Current.BoundingRectangle;$bitmap=New-Object System.Drawing.Bitmap([int]$r.Width,[int]$r.Height);$g=[System.Drawing.Graphics]::FromImage($bitmap)
@@ -156,7 +156,7 @@ function Test-SFTP-Layout {
  $restoredTerminal=(Find-Region 'SSH 终端').Current.BoundingRectangle
  $restoredBottom=(Find-Region '远程文件').Current.BoundingRectangle
  Require-Layout ($restoredTerminal.Bottom -le $restoredBottom.Y+4 -and [Math]::Abs($restoredBottom.Height-$bottomFiles.Height) -lt 4 -and [Math]::Abs($restoredTerminal.Right-$bottomTerminal.Right) -lt 4) 'switching back did not restore the remembered bottom layout'
- @{passed=$true;nativeWebView2=$true;method='UI Automation region geometry and real pointer clicks';bottom=@{terminal=(Bounds-Record $bottomTerminal);files=(Bounds-Record $bottomFiles)};right=@{terminal=(Bounds-Record $rightTerminal);files=(Bounds-Record $rightFiles)};hiddenTerminal=(Bounds-Record $hiddenTerminal);restoredRightFiles=(Bounds-Record $restoredFiles);restoredBottomFiles=(Bounds-Record $restoredBottom)}|ConvertTo-Json -Depth 8|Set-Content -Encoding UTF8 (Join-Path $Output 'windows-sftp-layout.json')
+ @{passed=$true;nativeGPUI=$true;method='UI Automation region geometry and real pointer clicks';bottom=@{terminal=(Bounds-Record $bottomTerminal);files=(Bounds-Record $bottomFiles)};right=@{terminal=(Bounds-Record $rightTerminal);files=(Bounds-Record $rightFiles)};hiddenTerminal=(Bounds-Record $hiddenTerminal);restoredRightFiles=(Bounds-Record $restoredFiles);restoredBottomFiles=(Bounds-Record $restoredBottom)}|ConvertTo-Json -Depth 8|Set-Content -Encoding UTF8 (Join-Path $Output 'windows-sftp-layout.json')
 }
 
 try{
@@ -184,7 +184,7 @@ try{
  $bitmap=New-Object System.Drawing.Bitmap([int]$r.Width,[int]$r.Height)
  $g=[System.Drawing.Graphics]::FromImage($bitmap)
  try{$g.CopyFromScreen([int]$r.X,[int]$r.Y,0,0,$bitmap.Size);$bitmap.Save((Join-Path $Output 'windows-native-manager.png'),[System.Drawing.Imaging.ImageFormat]::Png)}finally{$g.Dispose();$bitmap.Dispose()}
- @{passed=$true;nativeWebView2=$true;method='Windows UI Automation on the exact packed release';directorySelection=$true;nameClickExpandsCollapsedGroup=$true;deepFolder=$true;singleClickSelection=$true;contextMenu=$true;leftSettingsMenu=$true;manualFromSettings=$true;restoreLayoutFromSettings=$true;sftpRightLayout=$true;sftpHiddenFillsWorkspace=$true;sftpRememberedSizes=$true}|ConvertTo-Json|Set-Content -Encoding UTF8 (Join-Path $Output 'windows-ui-validation.json')
+ @{passed=$true;nativeGPUI=$true;method='Windows UI Automation on the exact packed release';directorySelection=$true;nameClickExpandsCollapsedGroup=$true;deepFolder=$true;singleClickSelection=$true;contextMenu=$true;leftSettingsMenu=$true;manualFromSettings=$true;restoreLayoutFromSettings=$true;sftpRightLayout=$true;sftpHiddenFillsWorkspace=$true;sftpRememberedSizes=$true}|ConvertTo-Json|Set-Content -Encoding UTF8 (Join-Path $Output 'windows-ui-validation.json')
  Write-Host 'PASS: native Windows SFTP right/hidden/restored geometry, directory navigation and context menu.'
 } catch {
  (Buttons)|ForEach-Object {$_.Current.Name}|Set-Content -Encoding UTF8 (Join-Path $Output 'windows-ui-controls.txt')

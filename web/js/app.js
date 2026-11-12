@@ -47,7 +47,7 @@ function toast(message) {
   }, 4500);
 }
 const safe = fn => (...args) => { try { return Promise.resolve(fn(...args)).catch(error => toast(error?.message || String(error))); } catch (error) { toast(error?.message || String(error)); } };
-const native = () => window.go?.desktop?.Desktop;
+const native = () => window.DevShellNative;
 function syncDesktopTheme() {
   const desktop = native();
   if (desktop?.SetTheme) desktop.SetTheme(window.DevShellTheme.preference).catch(error => console.warn('无法同步窗口主题', error));
@@ -64,15 +64,7 @@ $('#theme-toggle').onclick = () => window.DevShellTheme.toggle();
 window.addEventListener('cloudshell:theme', reflectTheme);
 reflectTheme();
 const boot = window.DEVSHELL;
-const desktopPage = location.protocol === 'wails:' || location.hostname === 'wails.localhost';
-let bridgeReady;
-function waitForDesktop() {
-  if (!bridgeReady) bridgeReady = (async () => {
-    const deadline = Date.now() + 5000;
-    while (!native()?.Request) { if (Date.now() >= deadline) throw new Error('桌面接口尚未就绪，请点击服务器管理按钮重试'); await new Promise(resolve => setTimeout(resolve, 40)); }
-  })().catch(error => { bridgeReady = null; throw error; });
-  return bridgeReady;
-}
+const desktopPage = false;
 function endpoint(path) { return boot.base + path; }
 async function api(path, options = {}) {
   if (desktopPage) await waitForDesktop();
@@ -1534,16 +1526,8 @@ window.addEventListener('resize', () => {
 });
 
 initializeWorkspaceTools(); initializeAppearance(); initializeRefinements(); renderSessionInfo(); renderFiles(); renderTransfers(); applyUIScale();
-let windowsDropReady = false;
-function initializeWindowsDrop() {
-  if (!windowsDropReady && window.chrome?.webview?.postMessageWithAdditionalObjects && window.runtime?.OnFileDrop) {
-    // Register WebView2's file-path resolver. Go handles the resolved drop once.
-    window.runtime.OnFileDrop(() => {}, false);
-    windowsDropReady = true;
-  }
-}
 async function initializeConfig() {
-  try { if (desktopPage) await waitForDesktop(); await initializeWindowControls(); await initializeQuitConfirmation(); await window.DengSecurityLock?.ready; if(window.DengSecurityLock?.isLocked()) window.runtime?.EventsEmit('cloudshell:ready'); await window.DengSecurityLock?.whenUnlocked(); window.DengSessionWindows.prepareRestore(); await loadProfiles(); await window.DengSessionWindows.restore(); initializeWindowsDrop(); syncDesktopTheme(); $('#connection-button').classList.remove('failed'); $('#connection-button').title = '打开服务器管理'; window.runtime?.EventsEmit('cloudshell:ready'); }
+  try { await initializeWindowControls(); await initializeQuitConfirmation(); await window.DengSecurityLock?.ready; if(window.DengSecurityLock?.isLocked()) window.runtime?.EventsEmit('cloudshell:ready'); await window.DengSecurityLock?.whenUnlocked(); window.DengSessionWindows.prepareRestore(); await loadProfiles(); await window.DengSessionWindows.restore(); syncDesktopTheme(); $('#connection-button').classList.remove('failed'); $('#connection-button').title = '打开服务器管理'; window.runtime?.EventsEmit('cloudshell:ready'); }
   catch (error) { $('#connection-button').classList.add('failed'); $('#connection-button').title = error.message + ' · 点击重试'; toast(error.message); }
 }
 $('#connection-button').onclick = () => $('#connection-button').classList.contains('failed') ? initializeConfig() : setDrawer(true);

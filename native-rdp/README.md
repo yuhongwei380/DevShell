@@ -57,7 +57,7 @@ available and writes `internal/rdpengine/payload/windows-amd64.zip`.
 WinPR internal MD4/RC4 are linked for protocol compatibility (NTLM/licensing);
 this avoids a missing external OpenSSL legacy-provider dependency. TLS and
 certificate verification remain enabled.
-Build the desktop with Go's `desktop,production` tags as usual.
+Build the desktop with the Go backend and the GPUI native frontend as usual.
 
 The patch adds ready/input-activity messages, embedded-window positioning,
 focus isolation and secure-attention delivery; disables mstsc credential lookup;
@@ -76,7 +76,8 @@ Browser tests cover tabs, viewport bounds, SSH switching, dialogs/menus,
 resizing and both themes. `TestRDPEmbeddedNativeIntegration` is opt-in and uses
 an isolated RDP fixture: it has been exercised under Wine with real remote
 desktop output, keyboard input, resizing, hiding, locking and both proxy types.
-Full Wails/WebView2 integration still needs a native Windows test machine.
+The GPUI host is the only supported desktop frontend; this RDP preview does not
+embed a browser runtime.
 
 Upstream source URLs and licenses are bundled beside this file and inside the
 engine archive. No release or website publication is performed by this builder.
