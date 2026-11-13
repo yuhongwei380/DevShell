@@ -6,10 +6,31 @@ rust-version = "1.98"
 publish = false
 description = "Native GPUI frontend for DevShell"
 
+[features]
+visual-test = ["dep:gpui-core", "dep:gpui-windows", "dep:gpui-macos", "dep:image-test"]
+
 [dependencies]
 gpui-kit = "=0.9.0"
 ely-gpui-component = { git = "https://github.com/ELY-Open-Source/Ely-GPUI-Components", rev = "69a62b10168eed5b011b978497c2fdca644cb81f" }
 serde_json = "1"
+roxmltree = "=0.21.2"
+tempfile = "=3.27.0"
+chrono = {version="=0.4.45", default-features=false, features=["std","clock"]}
 base64 = "0.22"
+raw-window-handle = "0.6"
+alacritty_terminal = { version = "=0.26.0", default-features = false }
+wuff = "=0.2.9"
+ttf-parser = "=0.25.1"
+gpui-core = { package = "gpui-pre", version = "=0.3.11", optional = true, features = ["test-support"] }
+image-test = { package = "image", version = "=0.25.10", optional = true, default-features = false, features = ["png"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+gpui-windows = { package = "gpui-pre-windows", version = "=0.3.11", optional = true, features = ["test-support"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+gpui-macos = { package = "gpui-pre-macos", version = "=0.3.11", optional = true, features = ["test-support"] }
+
+[patch."https://github.com/ELY-Open-Source/Ely-GPUI-Components"]
+ely-terminal = { path = "vendor/ely-terminal" }
 
 

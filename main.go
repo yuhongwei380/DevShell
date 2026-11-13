@@ -80,7 +80,7 @@ func main() {
 	if err = application.Start(*address, content); err != nil {
 		log.Fatal(err)
 	}
-	if err := nativeui.Run(application.URL(), application.Token()); err != nil {
+	if err := nativeui.RunWithProcess(application.URL(), application.Token(), application.SetNativeUIProcess); err != nil {
 		showStartupError(err.Error())
 		log.Print(err)
 	}

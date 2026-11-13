@@ -1,0 +1,13 @@
+{
+  "tag": "v26.11.3-rc.3",
+  "commit": "eb3e173398904883985dff8a86beca79f19c7119",
+  "source": "https://github.com/yuhongwei380/DevShell/tree/v26.11.3-rc.3/web",
+  "assets": {
+    "fira-code.ttf": "58a695d1c147cd66d106438812bc47b8e5f408a3173c53ef02782bc86c1f64fd",
+    "ibm-plex-mono-bold.ttf": "0be1dbd31b535d829503bb8a50306334c7c0ffd5aeb1b8d509d26bde0e25c4cf",
+    "ibm-plex-mono.ttf": "959c2bd22d56650cf6e5576a2456420eccf9ad5dff01019b6a87dd9e119ee98c",
+    "jetbrains-mono.ttf": "ba45234e5a01391ff7947e45225d2bb16335a3e2ee316c8c5d1e72aed1780f7c",
+    "maple-mono-cn.ttf": "5013084f0e9b617713e2e67d8bd9e16ee2b8a0e547c019be0080b5b9d3d5e9c3",
+    "source-code-pro.ttf": "c75ea8dd3794a0e0745f52550f87ee3c9d7a9380a1a77f0648e4f834c3ad9e77"
+  }
+}

@@ -13,10 +13,12 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
 type App struct {
+	nativeUIProcess  atomic.Uint32
 	rdp              rdpState
 	serial           serialState
 	local            localShellState

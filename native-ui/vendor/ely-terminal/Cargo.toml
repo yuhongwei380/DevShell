@@ -1,0 +1,25 @@
+[package]
+name = "ely-terminal"
+version = "0.2.0"
+edition = "2024"
+license = "MIT"
+publish = false
+description = "Pinned Ely terminal with a DevShell WebSocket transport adapter"
+
+[features]
+test-support = ["ely-core/test-support", "gpui/test-support", "gpui/leak-detection"]
+
+[dependencies]
+ely-core = { git = "https://github.com/ELY-Open-Source/Ely-GPUI-Components", rev = "69a62b10168eed5b011b978497c2fdca644cb81f", default-features = false }
+ely-editor = { git = "https://github.com/ELY-Open-Source/Ely-GPUI-Components", rev = "69a62b10168eed5b011b978497c2fdca644cb81f" }
+gpui = { package = "gpui-pre", version = "=0.3.11", default-features = false }
+anyhow = "1"
+futures = "0.3"
+log = "0.4"
+regex = "1"
+vte = { version = "0.15", default-features = false, features = ["std", "ansi"] }
+web-time = "1.1"
+alacritty_terminal = { version = "=0.26.0", default-features = false }
+
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", default-features = false, features = ["std", "fs"] }

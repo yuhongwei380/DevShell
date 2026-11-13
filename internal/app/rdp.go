@@ -123,7 +123,7 @@ func (a *App) StartRDPEmbedded(profileID, password string, parent uintptr) (RDPI
 	if parent == 0 {
 		return RDPInfo{}, errors.New("RDP 标签页需要 Windows 桌面窗口")
 	}
-	if err := validateRDPParent(parent); err != nil {
+	if err := a.validateRDPHost(parent); err != nil {
 		return RDPInfo{}, err
 	}
 	return a.startRDPEmbedded(profileID, password, parent)
@@ -351,6 +351,7 @@ func (a *App) closeRDP() {
 	a.rdp.wg.Wait()
 }
 func (a *App) registerRDPHTTP(mux *http.ServeMux) {
+	a.registerNativeRDPHTTP(mux)
 	mux.HandleFunc("GET /api/rdp", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"available": rdpengine.Available(), "engine": "FreeRDP 3.32.0", "sessions": a.rdpSessions()})
 	})

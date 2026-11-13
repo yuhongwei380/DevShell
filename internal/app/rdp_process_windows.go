@@ -17,9 +17,13 @@ import (
 var rdpUser32 = windows.NewLazySystemDLL("user32.dll")
 
 func validateRDPParent(parent uintptr) error {
+	return validateRDPParentProcess(parent, uint32(os.Getpid()))
+}
+
+func validateRDPParentProcess(parent uintptr, expected uint32) error {
 	var pid uint32
 	rdpUser32.NewProc("GetWindowThreadProcessId").Call(parent, uintptr(unsafe.Pointer(&pid)))
-	if parent == 0 || pid != uint32(os.Getpid()) {
+	if parent == 0 || expected == 0 || pid != expected {
 		return errors.New("RDP 宿主窗口无效")
 	}
 	return nil
@@ -90,7 +94,7 @@ func (a *App) RDPViewport(id string, x, y, width, height, viewportWidth float64,
 			}
 			continue
 		}
-		if err := validateRDPParent(s.parent); err != nil {
+		if err := a.validateRDPHost(s.parent); err != nil {
 			return err
 		}
 		var rect struct{ Left, Top, Right, Bottom int32 }

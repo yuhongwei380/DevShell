@@ -1,0 +1,131 @@
+{
+  "path": "/var/www",
+  "entries": [
+    {
+      "name": "assets",
+      "kind": "folder",
+      "bytes": 0,
+      "mode": "drwxr-xr-x",
+      "owner": "www / www",
+      "time": "2026-11-03 18:20",
+      "modifiedAt": 1793701200
+    },
+    {
+      "name": "logs",
+      "kind": "folder",
+      "bytes": 0,
+      "mode": "drwxr-x---",
+      "owner": "www / www",
+      "time": "2026-11-03 18:20",
+      "modifiedAt": 1793701200
+    },
+    {
+      "name": ".env",
+      "kind": "file",
+      "bytes": 248,
+      "mode": "-rw-------",
+      "owner": "www / www",
+      "time": "2026-11-03 18:20",
+      "modifiedAt": 1793701200
+    },
+    {
+      "name": "app.js",
+      "kind": "file",
+      "bytes": 12570,
+      "mode": "-rw-r--r--",
+      "owner": "www / www",
+      "time": "2026-11-03 18:20",
+      "modifiedAt": 1793701200
+    },
+    {
+      "name": "index.html",
+      "kind": "file",
+      "bytes": 4096,
+      "mode": "-rw-r--r--",
+      "owner": "www / www",
+      "time": "2026-11-03 18:20",
+      "modifiedAt": 1793701200
+    },
+    {
+      "name": "package.json",
+      "kind": "file",
+      "bytes": 1382,
+      "mode": "-rw-r--r--",
+      "owner": "www / www",
+      "time": "2026-11-03 18:20",
+      "modifiedAt": 1793701200
+    },
+    {
+      "name": "README.md",
+      "kind": "file",
+      "bytes": 2097,
+      "mode": "-rw-r--r--",
+      "owner": "www / www",
+      "time": "2026-11-03 18:20",
+      "modifiedAt": 1793701200
+    },
+    {
+      "name": "部署说明.txt",
+      "kind": "file",
+      "bytes": 768,
+      "mode": "-rw-r--r--",
+      "owner": "www / www",
+      "time": "2026-11-03 18:20",
+      "modifiedAt": 1793701200
+    }
+  ],
+  "folders": {
+    "/": [
+      {
+        "name": "etc",
+        "kind": "folder"
+      },
+      {
+        "name": "home",
+        "kind": "folder"
+      },
+      {
+        "name": "root",
+        "kind": "folder"
+      },
+      {
+        "name": "usr",
+        "kind": "folder"
+      },
+      {
+        "name": "var",
+        "kind": "folder"
+      }
+    ],
+    "/var": [
+      {
+        "name": "cache",
+        "kind": "folder"
+      },
+      {
+        "name": "lib",
+        "kind": "folder"
+      },
+      {
+        "name": "log",
+        "kind": "folder"
+      },
+      {
+        "name": "www",
+        "kind": "folder"
+      }
+    ],
+    "/var/www": [
+      {
+        "name": "assets",
+        "kind": "folder"
+      },
+      {
+        "name": "logs",
+        "kind": "folder"
+      }
+    ],
+    "/var/www/assets": [],
+    "/var/www/logs": []
+  }
+}

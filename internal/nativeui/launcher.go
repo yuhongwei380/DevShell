@@ -13,6 +13,11 @@ import (
 // The API remains the single source of truth for configuration and sessions;
 // the native process owns only window rendering and input dispatch.
 func Run(baseURL, token string) error {
+	return RunWithProcess(baseURL, token, nil)
+}
+
+// RunWithProcess registers the exact child before native window APIs may use it.
+func RunWithProcess(baseURL, token string, started func(int)) error {
 	path, err := executablePath()
 	if err != nil {
 		return err
@@ -21,7 +26,13 @@ func Run(baseURL, token string) error {
 	command.Stdout = os.Stdout
 	command.Stderr = os.Stderr
 	command.Dir = filepath.Dir(path)
-	return command.Run()
+	if err := command.Start(); err != nil {
+		return err
+	}
+	if started != nil {
+		started(command.Process.Pid)
+	}
+	return command.Wait()
 }
 
 // Available reports whether the native frontend can be launched from the

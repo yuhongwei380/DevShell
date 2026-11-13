@@ -1,8 +1,38 @@
+#![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
+
+mod assets;
+mod appearance;
+mod appearance_panels;
+mod ansi_schemes;
+mod file_browser;
+mod file_view;
+mod file_actions;
+mod file_upload;
+mod monitor_charts;
+mod monitor_panel;
+mod collation;
+mod forms;
+mod fonts;
+mod http;
+mod integration;
+mod help;
+mod server_manager;
+mod settings;
+mod sessions;
+mod ui_scale;
+#[cfg(feature="visual-test")]
+mod visual_tests;
+mod remote_desktop;
+mod screen;
+mod workspace;
+#[cfg(test)]
+mod workspace_tests;
+mod workspace_tools;
+
 use std::{
     env, fs,
     io::{Read, Write},
     net::TcpStream,
-    path::PathBuf,
     process,
     sync::mpsc,
     thread,
@@ -10,21 +40,18 @@ use std::{
 };
 
 use base64::Engine;
-use ely_gpui_component::{
-    Assets as ElyAssets,
-    buttons::Button as ElyButton,
-    primitives::FocusScope,
-    typography::{Heading, Paragraph},
-};
 use gpui_kit::{
-    App, AppContext, Context, Disableable, Entity, FocusHandle, IntoElement, ParentElement, Render,
-    Styled, Window, WindowOptions,
+    App, AppContext, Context, Entity, FocusHandle, InteractiveElement, IntoElement, ParentElement,
+    Render, StatefulInteractiveElement, Styled, Window, WindowOptions,
+    base::Disableable,
     component::{
         button::{Button as KitButton, ButtonVariants},
         input::{Input, InputState, Textarea, TextareaState},
     },
-    div, px,
+    div,
+    prelude::FluentBuilder,
 };
+use ui_scale::pixels as px;
 use serde_json::Value;
 
 #[derive(Clone, Debug)]
@@ -41,20 +68,22 @@ struct BackendSnapshot {
     config_format: Option<String>,
     security_summary: Option<String>,
     proxies: Vec<ProxySummary>,
+    appearance: Value,
+    commands: Vec<Value>,
+    keys: Vec<Value>,
+    config: Value,
+    security: Value,
+    ui_font_runtime:Value,
 }
 
 #[derive(Clone, Debug)]
 struct ServerSummary {
-    id: String,
-    name: String,
-    host: String,
-    port: u16,
-    user: String,
-    group: String,
-    auth: String,
-    proxy_id: String,
-    inline_proxy: bool,
-    key_path: String,
+    raw:Value,protocol:String,id:String,name:String,host:String,port:u16,user:String,
+}
+impl ServerSummary {
+    fn from_value(profile:&Value)->Option<Self>{
+        Some(Self{raw:profile.clone(),protocol:profile["protocol"].as_str().unwrap_or("ssh").into(),id:profile["id"].as_str()?.into(),name:profile["name"].as_str().unwrap_or("连接").into(),host:profile["host"].as_str().unwrap_or_default().into(),port:profile["port"].as_u64().unwrap_or(22) as u16,user:profile["user"].as_str().unwrap_or_default().into()})
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -67,10 +96,11 @@ struct ProxySummary {
     user: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct PendingHostKey {
     profile_id: String,
     challenge: HostKeyChallenge,
+    secret: String,
 }
 
 #[derive(Clone, Debug)]
@@ -98,28 +128,16 @@ struct DevShellWindow {
     snapshot: BackendSnapshot,
     token: String,
     settings_visible: bool,
+    ui: workspace::WorkspaceUi,
+    workspace: SessionWorkspace,
+    parked: Vec<SessionWorkspace>,
     update_status: Option<String>,
     update_hash: Option<String>,
     update_checking: bool,
     update_download: Option<UpdateDownloadState>,
-    profile_form_open: bool,
-    profile_saving: bool,
-    pending_profile_delete: Option<String>,
-    profile_editing_id: Option<String>,
     connecting: Option<String>,
     feedback: Option<String>,
-    terminal: Option<TerminalState>,
     command_input: Entity<InputState>,
-    file_name_input: Entity<InputState>,
-    local_path_input: Entity<InputState>,
-    secret_input: Entity<InputState>,
-    profile_name_input: Entity<InputState>,
-    profile_host_input: Entity<InputState>,
-    profile_user_input: Entity<InputState>,
-    profile_port_input: Entity<InputState>,
-    profile_key_path_input: Entity<InputState>,
-    profile_auth: String,
-    profile_proxy_id: Option<String>,
     proxy_form_open: bool,
     proxy_saving: bool,
     proxy_name_input: Entity<InputState>,
@@ -132,22 +150,113 @@ struct DevShellWindow {
     proxy_original_signature: Option<String>,
     pending_proxy_delete: Option<String>,
     pending_host_key: Option<PendingHostKey>,
+    pending_credential: Option<ServerSummary>,
+    temporary_profiles:Vec<ServerSummary>,
+    pending_dialog:Option<(&'static str,Value)>,
+    preview_input: Entity<ely_gpui_component::editor::CodeEditor>,
+    form: Option<forms::NativeForm>,
+    fonts:fonts::NativeFonts,
+}
+
+#[derive(Clone, Default)]
+struct SessionWorkspace {
+    terminal: Option<TerminalState>,
     files: Option<FileListState>,
+    file_ui:file_view::FileUi,
     monitor: Option<MonitorState>,
-    pending_delete: Option<String>,
-    pending_rename: Option<String>,
+    charts:monitor_charts::Charts,
     preview: Option<FilePreviewState>,
-    preview_input: Entity<TextareaState>,
     preview_sync: Option<String>,
+    editor:Option<Entity<ely_gpui_component::editor::CodeEditor>>,
     transfers: Vec<TransferState>,
+    selected_file: Option<RemoteEntry>,
+    command_history: Vec<String>,
+    history_cursor: Option<usize>,
+    history_draft: String,
+    rdp: Option<Value>,
+    auto_commands: Vec<String>,
+    integration:integration::ShellIntegration,
+    terminal_ready:bool,
+    auto_next:Option<std::time::Instant>,
+}
+
+impl DevShellWindow {
+    fn session_mut(&mut self, id: &str) -> Option<&mut SessionWorkspace> {
+        find_session(&mut self.workspace, &mut self.parked, id)
+    }
+
+    fn park_session(&mut self) {
+        if self.workspace.terminal.is_some() {
+            self.parked.push(std::mem::take(&mut self.workspace));
+        }
+    }
+
+    fn switch_session(&mut self, id: &str, cx: &App) {
+        if let Some(preview) = &mut self.workspace.preview {
+            preview.text = self.preview_input.read(cx).text().to_string();
+        }
+        if select_session(&mut self.workspace, &mut self.parked, id) {
+            self.ui.active_start = None;
+            if let Some(preview) = &self.workspace.preview {
+                self.workspace.preview_sync = Some(preview.text.clone());
+            }
+        }
+    }
+}
+
+fn find_session<'a>(
+    active: &'a mut SessionWorkspace,
+    parked: &'a mut [SessionWorkspace],
+    id: &str,
+) -> Option<&'a mut SessionWorkspace> {
+    if active
+        .terminal
+        .as_ref()
+        .is_some_and(|terminal| terminal.session_id == id)
+    {
+        Some(active)
+    } else {
+        parked.iter_mut().find(|session| {
+            session
+                .terminal
+                .as_ref()
+                .is_some_and(|terminal| terminal.session_id == id)
+        })
+    }
+}
+
+fn select_session(
+    active: &mut SessionWorkspace,
+    parked: &mut Vec<SessionWorkspace>,
+    id: &str,
+) -> bool {
+    let Some(index) = parked.iter().position(|session| {
+        session
+            .terminal
+            .as_ref()
+            .is_some_and(|terminal| terminal.session_id == id)
+    }) else {
+        return false;
+    };
+    let selected = parked.remove(index);
+    if active.terminal.is_some() {
+        parked.push(std::mem::take(active));
+    }
+    *active = selected;
+    true
 }
 
 #[derive(Clone, Debug)]
 struct TerminalState {
+    protocol: String,
+    profile_id: String,
+    name: String,
+    host: String,
     session_id: String,
-    output: String,
+    screen: std::sync::Arc<std::sync::Mutex<screen::TerminalScreen>>,
     status: String,
-    input_tx: Option<mpsc::Sender<String>>,
+    input_tx: Option<mpsc::Sender<TerminalInput>>,
+    view: Option<Entity<ely_gpui_component::terminal::Terminal>>,
 }
 
 #[derive(Clone, Debug)]
@@ -161,12 +270,17 @@ struct FileListState {
 struct RemoteEntry {
     name: String,
     kind: String,
+    link: bool,
     bytes: i64,
     owner: String,
+    modified: String,
+    modified_at: i64,
+    mode: String,
 }
 
 #[derive(Clone, Debug)]
 struct FilePreviewState {
+    saved_text:String,
     path: String,
     encoding: String,
     sha256: String,
@@ -187,11 +301,8 @@ struct TransferState {
 
 #[derive(Clone, Debug)]
 struct MonitorState {
-    cpu: f64,
-    memory_used: u64,
-    memory_total: u64,
+    raw: Value,
     load: String,
-    sampled_at: String,
     status: String,
 }
 
@@ -210,378 +321,37 @@ struct UpdateCheckResult {
     hash: Option<String>,
 }
 
+enum TerminalInput {
+    Ack,
+    Bytes(Vec<u8>),
+    Text(String),
+    Resize(usize, usize),
+}
+
 enum TerminalEvent {
-    Output(String),
+    Ready(Value),
+    Output(Vec<u8>),
     Info(String),
     Closed(String),
 }
 
-impl Render for DevShellWindow {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        if let Some(text) = self.preview_sync.take() {
-            self.preview_input
-                .update(cx, |input, cx| input.set_value(text, window, cx));
-        }
-        let snapshot = self.snapshot.clone();
-        let focus = self.focus.clone();
-        let view = cx.entity();
-        let pending_host_key = self.pending_host_key.clone();
-        let pending_profile = pending_host_key
-            .as_ref()
-            .map(|pending| pending.profile_id.as_str());
-        let status = if snapshot.locked {
-            "配置已锁定"
-        } else if snapshot.error.is_some() {
-            "后端连接异常"
-        } else {
-            "后端已连接"
-        };
-        let status_detail = snapshot
-            .error
-            .clone()
-            .unwrap_or_else(|| format!("{} · 构建 {}", snapshot.version, snapshot.build));
-
-        FocusScope::new(&focus)
-            .root()
-            .size_full()
-            .bg(gpui_kit::rgb(0x101318))
-            .child(
-                div()
-                    .size_full()
-                    .flex()
-                    .flex_col()
-                    .text_color(gpui_kit::rgb(0xd7dce5))
-                    .child(
-                        div()
-                            .h(px(64.))
-                            .px_6()
-                            .flex()
-                            .items_center()
-                            .justify_between()
-                            .border_b_1()
-                            .border_color(gpui_kit::rgb(0x2b313b))
-                            .child(Heading::h1("DevShell"))
-                            .child(
-                                KitButton::new("settings")
-                                    .ghost()
-                                    .label("设置")
-                                    .on_click({
-                                        let view = view.clone();
-                                        move |_, _, cx| {
-                                            view.update(cx, |state, cx| {
-                                                state.settings_visible = !state.settings_visible;
-                                                cx.notify();
-                                            });
-                                        }
-                                    }),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .flex_1()
-                            .flex()
-                            .child(
-                                div()
-                                    .w(px(248.))
-                                    .p_4()
-                                    .border_r_1()
-                                    .border_color(gpui_kit::rgb(0x2b313b))
-                                    .flex()
-                                    .flex_col()
-                                    .gap_2()
-                                    .child(Paragraph::new("工作区"))
-                                    .child(sidebar_button("服务器", true))
-                                    .child(sidebar_button("终端", false))
-                                    .child(sidebar_button("文件", false))
-                                    .child(sidebar_button("监控", false))
-                                    .child(
-                                        KitButton::new("sidebar-settings")
-                                            .ghost()
-                                            .label("设置")
-                                            .on_click({
-                                                let view = view.clone();
-                                                move |_, _, cx| {
-                                                    view.update(cx, |state, cx| {
-                                                        state.settings_visible =
-                                                            !state.settings_visible;
-                                                        cx.notify();
-                                                    });
-                                                }
-                                            }),
-                                    ),
-                            )
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .p_8()
-                                    .flex()
-                                    .flex_col()
-                                    .gap_6()
-                                    .child(Paragraph::new("原生工作区"))
-                                    .child(Input::new(&self.secret_input).mask_toggle())
-                                    .when(self.settings_visible, |workspace| {
-                                        workspace.child(settings_panel(
-                                            snapshot.clone(),
-                                            view.clone(),
-                                            self.update_status.clone(),
-                                            self.update_hash.clone(),
-                                            self.update_checking,
-                                            self.update_download.clone(),
-                                            self.proxy_form_open,
-                                            self.proxy_saving,
-                                            self.proxy_name_input.clone(),
-                                            self.proxy_host_input.clone(),
-                                            self.proxy_port_input.clone(),
-                                            self.proxy_user_input.clone(),
-                                            self.proxy_password_input.clone(),
-                                            self.proxy_kind.clone(),
-                                            self.pending_proxy_delete.clone(),
-                                            self.proxy_editing_id.clone(),
-                                        ))
-                                    })
-                                    .when_some(pending_host_key, |workspace, pending| {
-                                        let detail = if pending.challenge.previous_fingerprint.is_empty() {
-                                            format!(
-                                                "首次连接 {}，请核实主机指纹后再次点击对应服务器。",
-                                                pending.challenge.host
-                                            )
-                                        } else {
-                                            format!(
-                                                "{} 的主机指纹已变化，请核实新指纹后再次点击对应服务器。",
-                                                pending.challenge.host
-                                            )
-                                        };
-                                        workspace.child(
-                                            div()
-                                                .p_3()
-                                                .rounded_md()
-                                                .bg(gpui_kit::rgb(0x2b2116))
-                                                .border_1()
-                                                .border_color(gpui_kit::rgb(0x8a5a22))
-                                                .flex()
-                                                .flex_col()
-                                                .gap_1()
-                                                .child(Paragraph::new(detail))
-                                                .child(Paragraph::new(format!(
-                                                    "算法：{} · 指纹：{}",
-                                                    pending.challenge.algorithm,
-                                                    pending.challenge.fingerprint
-                                                )))
-                                                .when(!pending.challenge.previous_fingerprint.is_empty(), |card| {
-                                                    card.child(Paragraph::new(format!(
-                                                        "旧指纹：{}",
-                                                        pending.challenge.previous_fingerprint
-                                                    )))
-                                                }),
-                                        )
-                                    })
-                                    .child(
-                                        div()
-                                            .flex()
-                                            .gap_4()
-                                            .child(stat_card("服务器", snapshot.servers.len()))
-                                            .child(stat_card("分组", snapshot.groups)),
-                                    )
-                                    .child(
-                                        div()
-                                            .flex()
-                                            .flex_col()
-                                            .gap_2()
-                                            .child(
-                                                div()
-                                                    .flex()
-                                                    .items_center()
-                                                    .justify_between()
-                                                    .child(Paragraph::new("最近配置的服务器"))
-                                                    .child(
-                                                        KitButton::new("new-server")
-                                                            .secondary()
-                                                            .label(if self.profile_form_open {
-                                                                "收起新增"
-                                                            } else {
-                                                                "新增服务器"
-                                                            })
-                                                            .on_click({
-                                                                let view = view.clone();
-                                                                move |_, window, cx| {
-                                                                    view.update(cx, |state, cx| {
-                                                                        let opening = !state.profile_form_open;
-                                                                        state.profile_form_open = opening;
-                                                                        if opening {
-                                                                            state.profile_editing_id = None;
-                                                                            state.profile_name_input.update(cx, |input, cx| {
-                                                                                input.set_value("", window, cx)
-                                                                            });
-                                                                            state.profile_host_input.update(cx, |input, cx| {
-                                                                                input.set_value("", window, cx)
-                                                                            });
-                                                                            state.profile_user_input.update(cx, |input, cx| {
-                                                                                input.set_value("", window, cx)
-                                                                            });
-                                                                            state.profile_port_input.update(cx, |input, cx| {
-                                                                                input.set_value("22", window, cx)
-                                                                            });
-                                                                            state.profile_key_path_input.update(cx, |input, cx| {
-                                                                                input.set_value("", window, cx)
-                                                                            });
-                                                                            state.profile_auth = "password".into();
-                                                                            state.profile_proxy_id = None;
-                                                                        }
-                                                                        cx.notify();
-                                                                    });
-                                                                }
-                                                            }),
-                                                    ),
-                                            )
-                                            .when(self.profile_form_open, |list| {
-                                                list.child(profile_form(
-                                                    view.clone(),
-                                                    self.profile_name_input.clone(),
-                                                    self.profile_host_input.clone(),
-                                                    self.profile_user_input.clone(),
-                                                    self.profile_port_input.clone(),
-                                                    self.profile_key_path_input.clone(),
-                                                    self.profile_editing_id.clone(),
-                                                    self.profile_auth.clone(),
-                                                    self.profile_proxy_id.clone(),
-                                                    snapshot.proxies.clone(),
-                                                    self.profile_saving,
-                                                ))
-                                            })
-                                            .children(
-                                                snapshot.servers.iter().take(8).cloned().map(
-                                                    |server| {
-                                                        server_row(
-                                                            view.clone(),
-                                                            server,
-                                                            self.connecting.as_deref(),
-                                                            pending_profile,
-                                                            self.pending_profile_delete.as_deref(),
-                                                        )
-                                                    },
-                                                ),
-                                            ),
-                                    )
-                                    .when_some(self.terminal.clone(), |workspace, terminal| {
-                                        workspace.child(terminal_panel(
-                                            terminal,
-                                            self.command_input.clone(),
-                                            view.clone(),
-                                        ))
-                                    })
-                                    .when_some(self.files.clone(), |workspace, files| {
-                                        workspace.child(file_panel(
-                                            files,
-                                            view.clone(),
-                                            self.file_name_input.clone(),
-                                            self.local_path_input.clone(),
-                                            self.pending_delete.clone(),
-                                            self.pending_rename.clone(),
-                                        ))
-                                    })
-                                    .when_some(self.monitor.clone(), |workspace, monitor| {
-                                        workspace.child(monitor_panel(monitor))
-                                    })
-                                    .when_some(self.preview.clone(), |workspace, preview| {
-                                        workspace.child(file_preview_panel(
-                                            preview,
-                                            self.preview_input.clone(),
-                                            view.clone(),
-                                        ))
-                                    })
-                                    .when(!self.transfers.is_empty(), |workspace| {
-                                        workspace.child(transfer_panel(
-                                            self.transfers.clone(),
-                                            view.clone(),
-                                        ))
-                                    })
-                                    .child(
-                                        div()
-                                            .p_5()
-                                            .rounded_lg()
-                                            .bg(gpui_kit::rgb(0x191f27))
-                                            .border_1()
-                                            .border_color(gpui_kit::rgb(0x2b313b))
-                                            .flex()
-                                            .flex_col()
-                                            .gap_3()
-                                            .child(Paragraph::new(status))
-                                            .child(Paragraph::new(status_detail))
-                                            .when_some(self.feedback.clone(), |card, message| {
-                                                card.child(Paragraph::new(message))
-                                            })
-                                            .child(Paragraph::new(format!(
-                                                "服务地址：{}",
-                                                snapshot.base
-                                            )))
-                                            .child(ElyButton::new("refresh", "刷新后端状态").on_click({
-                                                let view = view.clone();
-                                                move |_, _, cx| {
-                                                    let view = view.clone();
-                                                    view.update(cx, |state, cx| {
-                                                        let base = state.snapshot.base.clone();
-                                                        let token = state.token.clone();
-                                                        state.feedback = Some("正在刷新后端状态…".into());
-                                                        cx.notify();
-                                                        cx.spawn(async move |this, cx| {
-                                                            let snapshot = cx
-                                                                .background_executor()
-                                                                .spawn(async move {
-                                                                    BackendSnapshot::load(&base, &token)
-                                                                })
-                                                                .await;
-                                                            let _ = this.update(cx, |state, cx| {
-                                                                state.snapshot = snapshot;
-                                                                state.feedback = Some("后端状态已刷新。".into());
-                                                                cx.notify();
-                                                            });
-                                                        })
-                                                        .detach();
-                                                    });
-                                                }
-                                            })),
-                                    ),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .h(px(32.))
-                            .px_6()
-                            .flex()
-                            .items_center()
-                            .border_t_1()
-                            .border_color(gpui_kit::rgb(0x2b313b))
-                            .child(Paragraph::new("GPUI Kit + ELY GPUI · WebView 已移除")),
-                    ),
-            )
-    }
-}
-
-fn sidebar_button(label: &'static str, selected: bool) -> impl IntoElement {
-    let button = KitButton::new(label).label(label);
-    if selected {
-        button.primary()
-    } else {
-        button.ghost()
-    }
-}
-
-fn stat_card(label: &'static str, value: usize) -> impl IntoElement {
+// Shell typography inherits the active workspace palette. ELY typography owns
+// a separate palette and otherwise paints dark text in GPUI Kit dark dialogs.
+fn paragraph(text: impl Into<gpui_kit::SharedString>) -> gpui_kit::Div {
     div()
-        .w(px(180.))
-        .p_5()
-        .rounded_lg()
-        .bg(gpui_kit::rgb(0x191f27))
-        .border_1()
-        .border_color(gpui_kit::rgb(0x2b313b))
-        .flex()
-        .flex_col()
-        .gap_2()
-        .child(Paragraph::new(label))
-        .child(Heading::h2(value.to_string()))
+        .text_size(px(12.))
+        .line_height(gpui_kit::relative(1.6))
+        .child(text.into())
+}
+fn heading(text: impl Into<gpui_kit::SharedString>) -> gpui_kit::Div {
+    div()
+        .text_size(px(17.))
+        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
+        .child(text.into())
 }
 
 fn settings_panel(
+    p: workspace::Palette,
     snapshot: BackendSnapshot,
     view: Entity<DevShellWindow>,
     update_status: Option<String>,
@@ -598,16 +368,8 @@ fn settings_panel(
     proxy_kind: String,
     pending_proxy_delete: Option<String>,
     proxy_editing_id: Option<String>,
+    section: &'static str,
 ) -> impl IntoElement {
-    let config_dir = snapshot
-        .config_dir
-        .unwrap_or_else(|| "当前锁定或不可读取".into());
-    let config_format = snapshot
-        .config_format
-        .unwrap_or_else(|| "当前锁定或不可读取".into());
-    let security = snapshot
-        .security_summary
-        .unwrap_or_else(|| "当前锁定或不可读取".into());
     let update_label = if update_checking {
         "正在检查更新…"
     } else {
@@ -620,296 +382,305 @@ fn settings_panel(
     div()
         .p_5()
         .rounded_lg()
-        .bg(gpui_kit::rgb(0x191f27))
+        .bg(gpui_kit::rgb(p.surface))
         .border_1()
-        .border_color(gpui_kit::rgb(0x2b313b))
+        .border_color(gpui_kit::rgb(p.border))
         .flex()
         .flex_col()
         .gap_2()
-        .child(Heading::h2("原生设置概览"))
-        .child(Paragraph::new(format!(
-            "版本：{} · 构建：{}",
-            snapshot.version, snapshot.build
-        )))
-        .when(!snapshot.group_names.is_empty(), |panel| {
-            panel.child(Paragraph::new(format!(
-                "分组：{}",
-                snapshot.group_names.join("、")
+        .when(section == "updates", |panel| {
+            panel.child(paragraph(format!(
+                "{} · 构建 {}",
+                snapshot.version, snapshot.build
             )))
         })
-        .child(Paragraph::new(format!("配置目录：{config_dir}")))
-        .child(Paragraph::new(format!("存储格式：{config_format}")))
-        .child(Paragraph::new(format!("安全锁定：{security}")))
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .justify_between()
-                .child(Paragraph::new("已保存代理"))
-                .child(
-                    KitButton::new("new-proxy")
-                        .secondary()
-                        .label(if proxy_form_open {
-                            "收起新增"
-                        } else {
-                            "新增代理"
-                        })
-                        .on_click({
-                            let view = view.clone();
-                            move |_, window, cx| {
-                                view.update(cx, |state, cx| {
-                                    let opening = !state.proxy_form_open;
-                                    state.proxy_form_open = opening;
-                                    if opening {
-                                        state.proxy_editing_id = None;
-                                        state.proxy_original_signature = None;
-                                        state.proxy_name_input.update(cx, |input, cx| {
-                                            input.set_value("", window, cx)
-                                        });
-                                        state.proxy_host_input.update(cx, |input, cx| {
-                                            input.set_value("", window, cx)
-                                        });
-                                        state.proxy_port_input.update(cx, |input, cx| {
-                                            input.set_value("1080", window, cx)
-                                        });
-                                        state.proxy_user_input.update(cx, |input, cx| {
-                                            input.set_value("", window, cx)
-                                        });
-                                        state.proxy_password_input.update(cx, |input, cx| {
-                                            input.set_value("", window, cx)
-                                        });
-                                        state.proxy_kind = "socks5".into();
-                                    }
-                                    cx.notify();
-                                });
-                            }
-                        }),
-                ),
-        )
-        .when(proxy_form_open, |panel| {
-            panel.child(proxy_form(
-                view.clone(),
-                proxy_name_input.clone(),
-                proxy_host_input.clone(),
-                proxy_port_input.clone(),
-                proxy_user_input.clone(),
-                proxy_password_input.clone(),
-                proxy_kind.clone(),
-                proxy_editing_id.clone(),
-                proxy_saving,
-            ))
-        })
-        .children(snapshot.proxies.iter().map(|proxy| {
-            let proxy_id = proxy.id.clone();
-            let is_pending = pending_proxy_delete.as_deref() == Some(proxy.id.as_str());
-            let delete_view = view.clone();
-            let edit_view = view.clone();
-            let edit_id = proxy.id.clone();
-            let edit_name = proxy.name.clone();
-            let edit_kind = proxy.kind.clone();
-            let edit_host = proxy.host.clone();
-            let edit_port = proxy.port;
-            let edit_user = proxy.user.clone();
-            div()
-                .flex()
-                .items_center()
-                .justify_between()
-                .child(Paragraph::new(format!(
-                    "{} · {} {}:{}",
-                    proxy.name, proxy.kind, proxy.host, proxy.port
-                )))
+        .when(section == "proxy", |panel| {
+            panel
                 .child(
                     div()
                         .flex()
-                        .gap_2()
+                        .items_center()
+                        .justify_between()
+                        .child(paragraph("已保存代理"))
                         .child(
-                            KitButton::new(format!("edit-proxy-{edit_id}"))
-                                .ghost()
-                                .label("编辑")
-                                .on_click(move |_, window, cx| {
-                                    edit_view.update(cx, |state, cx| {
-                                        state.proxy_form_open = true;
-                                        state.proxy_editing_id = Some(edit_id.clone());
-                                        state.proxy_original_signature = Some(format!(
-                                            "{}|{}|{}|{}",
-                                            edit_kind, edit_host, edit_port, edit_user
-                                        ));
-                                        state.proxy_name_input.update(cx, |input, cx| {
-                                            input.set_value(edit_name.clone(), window, cx)
-                                        });
-                                        state.proxy_host_input.update(cx, |input, cx| {
-                                            input.set_value(edit_host.clone(), window, cx)
-                                        });
-                                        state.proxy_port_input.update(cx, |input, cx| {
-                                            input.set_value(edit_port.to_string(), window, cx)
-                                        });
-                                        state.proxy_user_input.update(cx, |input, cx| {
-                                            input.set_value(edit_user.clone(), window, cx)
-                                        });
-                                        state.proxy_password_input.update(cx, |input, cx| {
-                                            input.set_value("", window, cx)
-                                        });
-                                        state.proxy_kind = edit_kind.clone();
-                                        state.feedback =
-                                            Some("已载入代理配置，可修改后保存。".into());
-                                        cx.notify();
-                                    });
-                                }),
-                        )
-                        .child(
-                            KitButton::new(format!("delete-proxy-{proxy_id}"))
-                                .danger()
-                                .label(if is_pending { "确认删除" } else { "删除" })
-                                .on_click(move |_, _, cx| {
-                                    if is_pending {
-                                        delete_proxy_and_reload(
-                                            delete_view.clone(),
-                                            proxy_id.clone(),
-                                            cx,
-                                        );
-                                    } else {
-                                        let _ = delete_view.update(cx, |state, cx| {
-                                            state.pending_proxy_delete = Some(proxy_id.clone());
-                                            state.feedback =
-                                                Some("再次点击删除按钮确认移除代理。".into());
+                            KitButton::new("new-proxy")
+                                .secondary()
+                                .label(if proxy_form_open {
+                                    "收起新增"
+                                } else {
+                                    "新增代理"
+                                })
+                                .on_click({
+                                    let view = view.clone();
+                                    move |_, window, cx| {
+                                        view.update(cx, |state, cx| {
+                                            let opening = !state.proxy_form_open;
+                                            state.proxy_form_open = opening;
+                                            if opening {
+                                                state.proxy_editing_id = None;
+                                                state.proxy_original_signature = None;
+                                                state.proxy_name_input.update(cx, |input, cx| {
+                                                    input.set_value("", window, cx)
+                                                });
+                                                state.proxy_host_input.update(cx, |input, cx| {
+                                                    input.set_value("", window, cx)
+                                                });
+                                                state.proxy_port_input.update(cx, |input, cx| {
+                                                    input.set_value("1080", window, cx)
+                                                });
+                                                state.proxy_user_input.update(cx, |input, cx| {
+                                                    input.set_value("", window, cx)
+                                                });
+                                                state
+                                                    .proxy_password_input
+                                                    .update(cx, |input, cx| {
+                                                        input.set_value("", window, cx)
+                                                    });
+                                                state.proxy_kind = "socks5".into();
+                                            }
                                             cx.notify();
                                         });
                                     }
                                 }),
                         ),
                 )
-        }))
-        .when_some(update_status, |card, status| {
-            card.child(Paragraph::new(format!("更新状态：{status}")))
+                .when(proxy_form_open, |panel| {
+                    panel.child(proxy_form(
+                        p,
+                        view.clone(),
+                        proxy_name_input.clone(),
+                        proxy_host_input.clone(),
+                        proxy_port_input.clone(),
+                        proxy_user_input.clone(),
+                        proxy_password_input.clone(),
+                        proxy_kind.clone(),
+                        proxy_editing_id.clone(),
+                        proxy_saving,
+                    ))
+                })
+                .children(snapshot.proxies.iter().map(|proxy| {
+                    let proxy_id = proxy.id.clone();
+                    let is_pending = pending_proxy_delete.as_deref() == Some(proxy.id.as_str());
+                    let delete_view = view.clone();
+                    let edit_view = view.clone();
+                    let edit_id = proxy.id.clone();
+                    let edit_name = proxy.name.clone();
+                    let edit_kind = proxy.kind.clone();
+                    let edit_host = proxy.host.clone();
+                    let edit_port = proxy.port;
+                    let edit_user = proxy.user.clone();
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .child(paragraph(format!(
+                            "{} · {} {}:{}",
+                            proxy.name, proxy.kind, proxy.host, proxy.port
+                        )))
+                        .child(
+                            div()
+                                .flex()
+                                .gap_2()
+                                .child(
+                                    KitButton::new(format!("edit-proxy-{edit_id}"))
+                                        .ghost()
+                                        .label("编辑")
+                                        .on_click(move |_, window, cx| {
+                                            edit_view.update(cx, |state, cx| {
+                                                state.proxy_form_open = true;
+                                                state.proxy_editing_id = Some(edit_id.clone());
+                                                state.proxy_original_signature = Some(format!(
+                                                    "{}|{}|{}|{}",
+                                                    edit_kind, edit_host, edit_port, edit_user
+                                                ));
+                                                state.proxy_name_input.update(cx, |input, cx| {
+                                                    input.set_value(edit_name.clone(), window, cx)
+                                                });
+                                                state.proxy_host_input.update(cx, |input, cx| {
+                                                    input.set_value(edit_host.clone(), window, cx)
+                                                });
+                                                state.proxy_port_input.update(cx, |input, cx| {
+                                                    input.set_value(
+                                                        edit_port.to_string(),
+                                                        window,
+                                                        cx,
+                                                    )
+                                                });
+                                                state.proxy_user_input.update(cx, |input, cx| {
+                                                    input.set_value(edit_user.clone(), window, cx)
+                                                });
+                                                state
+                                                    .proxy_password_input
+                                                    .update(cx, |input, cx| {
+                                                        input.set_value("", window, cx)
+                                                    });
+                                                state.proxy_kind = edit_kind.clone();
+                                                state.feedback =
+                                                    Some("已载入代理配置，可修改后保存。".into());
+                                                cx.notify();
+                                            });
+                                        }),
+                                )
+                                .child(
+                                    KitButton::new(format!("delete-proxy-{proxy_id}"))
+                                        .danger()
+                                        .label(if is_pending { "确认删除" } else { "删除" })
+                                        .on_click(move |_, _, cx| {
+                                            if is_pending {
+                                                delete_proxy_and_reload(
+                                                    delete_view.clone(),
+                                                    proxy_id.clone(),
+                                                    cx,
+                                                );
+                                            } else {
+                                                let _ = delete_view.update(cx, |state, cx| {
+                                                    state.pending_proxy_delete =
+                                                        Some(proxy_id.clone());
+                                                    state.feedback = Some(
+                                                        "再次点击删除按钮确认移除代理。".into(),
+                                                    );
+                                                    cx.notify();
+                                                });
+                                            }
+                                        }),
+                                ),
+                        )
+                }))
         })
-        .child(Paragraph::new(
-            "配置、密钥和安全锁定仍由 Go 本地 API 管理，原生窗口不复制写入逻辑。",
-        ))
-        .child(
-            KitButton::new("check-updates")
-                .secondary()
-                .label(update_label)
-                .disabled(update_checking)
-                .on_click({
-                    let view = view.clone();
-                    move |_, _, cx| {
-                        let view = view.clone();
-                        view.update(cx, |state, cx| {
-                            let base = state.snapshot.base.clone();
-                            let token = state.token.clone();
-                            state.update_checking = true;
-                            state.feedback = Some("正在检查 release 更新…".into());
-                            cx.notify();
-                            cx.spawn(async move |this, cx| {
-                                let result = cx
-                                    .background_executor()
-                                    .spawn(async move { check_updates(&base, &token) })
-                                    .await;
-                                let _ = this.update(cx, |state, cx| {
-                                    state.update_checking = false;
-                                    match result {
-                                        Ok(result) => {
-                                            state.update_status = Some(result.summary);
-                                            state.update_hash = result.hash;
-                                            state.update_download = None;
-                                        }
-                                        Err(error) => {
-                                            state.update_status =
-                                                Some(format!("检查失败：{error}"));
-                                            state.update_hash = None;
-                                        }
-                                    }
-                                    state.feedback = Some("更新检查完成。".into());
+        .when(section == "updates", |panel| {
+            panel
+                .when_some(update_status, |card, status| {
+                    card.child(paragraph(format!("更新状态：{status}")))
+                })
+                .child(
+                    KitButton::new("check-updates")
+                        .secondary()
+                        .label(update_label)
+                        .disabled(update_checking)
+                        .on_click({
+                            let view = view.clone();
+                            move |_, _, cx| {
+                                let view = view.clone();
+                                view.update(cx, |state, cx| {
+                                    let base = state.snapshot.base.clone();
+                                    let token = state.token.clone();
+                                    state.update_checking = true;
+                                    state.feedback = Some("正在检查 release 更新…".into());
                                     cx.notify();
+                                    cx.spawn(async move |this, cx| {
+                                        let result = cx
+                                            .background_executor()
+                                            .spawn(async move { check_updates(&base, &token) })
+                                            .await;
+                                        let _ = this.update(cx, |state, cx| {
+                                            state.update_checking = false;
+                                            match result {
+                                                Ok(result) => {
+                                                    state.update_status = Some(result.summary);
+                                                    state.update_hash = result.hash;
+                                                    state.update_download = None;
+                                                }
+                                                Err(error) => {
+                                                    state.update_status =
+                                                        Some(format!("检查失败：{error}"));
+                                                    state.update_hash = None;
+                                                }
+                                            }
+                                            state.feedback = Some("更新检查完成。".into());
+                                            cx.notify();
+                                        });
+                                    })
+                                    .detach();
                                 });
-                            })
-                            .detach();
-                        });
-                    }
-                }),
-        )
-        .when_some(update_hash, |panel, hash| {
-            panel.child(
-                KitButton::new("download-update")
-                    .secondary()
-                    .label(if download_active {
-                        "正在下载更新…"
-                    } else {
-                        "下载更新"
-                    })
-                    .disabled(download_active)
-                    .on_click({
-                        let view = view.clone();
-                        move |_, _, cx| start_update_download(view.clone(), hash.clone(), cx)
-                    }),
-            )
-        })
-        .when_some(update_download, |panel, download| {
-            let progress = if download.total > 0 {
-                format!(
-                    "{:.0}% ({}/{})",
-                    download.received as f64 / download.total as f64 * 100.0,
-                    download.received,
-                    download.total
+                            }
+                        }),
                 )
-            } else {
-                format!("{} / {}", download.received, download.total)
-            };
-            panel.child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .child(Paragraph::new(format!(
-                        "更新下载 · {} · {}{}",
-                        download.status,
-                        progress,
-                        download
-                            .error
-                            .as_deref()
-                            .map(|error| format!(" · {error}"))
-                            .unwrap_or_default()
-                    )))
-                    .when(download_active, |row| {
-                        let view = view.clone();
-                        let job_id = download.id.clone();
-                        row.child(
-                            KitButton::new("cancel-update-download")
-                                .danger()
-                                .label("取消下载")
-                                .on_click(move |_, _, cx| {
-                                    cancel_update_download(view.clone(), job_id.clone(), cx)
-                                }),
+                .when_some(update_hash, |panel, hash| {
+                    panel.child(
+                        KitButton::new("download-update")
+                            .secondary()
+                            .label(if download_active {
+                                "正在下载更新…"
+                            } else {
+                                "下载更新"
+                            })
+                            .disabled(download_active)
+                            .on_click({
+                                let view = view.clone();
+                                move |_, _, cx| {
+                                    start_update_download(view.clone(), hash.clone(), cx)
+                                }
+                            }),
+                    )
+                })
+                .when_some(update_download, |panel, download| {
+                    let progress = if download.total > 0 {
+                        format!(
+                            "{:.0}% ({}/{})",
+                            download.received as f64 / download.total as f64 * 100.0,
+                            download.received,
+                            download.total
                         )
-                    })
-                    .when(download.status == "ready", |row| {
-                        let view = view.clone();
-                        let job_id = download.id.clone();
-                        row.child(
-                            KitButton::new("install-update")
-                                .primary()
-                                .label("安装更新")
-                                .on_click(move |_, _, cx| {
-                                    install_update(view.clone(), job_id.clone(), cx)
-                                }),
-                        )
-                    }),
-            )
+                    } else {
+                        format!("{} / {}", download.received, download.total)
+                    };
+                    panel.child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .child(paragraph(format!(
+                                "更新下载 · {} · {}{}",
+                                download.status,
+                                progress,
+                                download
+                                    .error
+                                    .as_deref()
+                                    .map(|error| format!(" · {error}"))
+                                    .unwrap_or_default()
+                            )))
+                            .when(download_active, |row| {
+                                let view = view.clone();
+                                let job_id = download.id.clone();
+                                row.child(
+                                    KitButton::new("cancel-update-download")
+                                        .danger()
+                                        .label("取消下载")
+                                        .on_click(move |_, _, cx| {
+                                            cancel_update_download(view.clone(), job_id.clone(), cx)
+                                        }),
+                                )
+                            })
+                            .when(download.status == "ready", |row| {
+                                let view = view.clone();
+                                let job_id = download.id.clone();
+                                row.child(
+                                    KitButton::new("install-update")
+                                        .primary()
+                                        .label("安装更新")
+                                        .on_click(move |_, _, cx| {
+                                            install_update(view.clone(), job_id.clone(), cx)
+                                        }),
+                                )
+                            }),
+                    )
+                })
+                .child(
+                    KitButton::new("close-settings")
+                        .secondary()
+                        .label("收起设置")
+                        .on_click(move |_, _, cx| {
+                            view.update(cx, |state, cx| {
+                                state.settings_visible = false;
+                                cx.notify();
+                            });
+                        }),
+                )
         })
-        .child(
-            KitButton::new("close-settings")
-                .secondary()
-                .label("收起设置")
-                .on_click(move |_, _, cx| {
-                    view.update(cx, |state, cx| {
-                        state.settings_visible = false;
-                        cx.notify();
-                    });
-                }),
-        )
 }
 
 fn proxy_form(
+    p: workspace::Palette,
     view: Entity<DevShellWindow>,
     name_input: Entity<InputState>,
     host_input: Entity<InputState>,
@@ -935,13 +706,13 @@ fn proxy_form(
     div()
         .p_4()
         .rounded_md()
-        .bg(gpui_kit::rgb(0x171c23))
+        .bg(gpui_kit::rgb(p.surface))
         .border_1()
-        .border_color(gpui_kit::rgb(0x2b313b))
+        .border_color(gpui_kit::rgb(p.border))
         .flex()
         .flex_col()
         .gap_2()
-        .child(Paragraph::new(if editing_id.is_some() {
+        .child(paragraph(if editing_id.is_some() {
             "编辑连接代理"
         } else {
             "新增连接代理"
@@ -987,12 +758,11 @@ fn proxy_form(
                 .disabled(saving)
                 .on_click(move |_, _, cx| {
                     view.update(cx, |state, cx| {
-                        let name = state.proxy_name_input.read(cx).value(cx).trim().to_string();
-                        let host = state.proxy_host_input.read(cx).value(cx).trim().to_string();
-                        let port_text =
-                            state.proxy_port_input.read(cx).value(cx).trim().to_string();
-                        let user = state.proxy_user_input.read(cx).value(cx).trim().to_string();
-                        let password = state.proxy_password_input.read(cx).value(cx).to_string();
+                        let name = state.proxy_name_input.read(cx).value().trim().to_string();
+                        let host = state.proxy_host_input.read(cx).value().trim().to_string();
+                        let port_text = state.proxy_port_input.read(cx).value().trim().to_string();
+                        let user = state.proxy_user_input.read(cx).value().trim().to_string();
+                        let password = state.proxy_password_input.read(cx).value().to_string();
                         if name.is_empty() || host.is_empty() {
                             state.feedback = Some("请填写代理名称和地址。".into());
                             cx.notify();
@@ -1061,558 +831,25 @@ fn proxy_form(
         )
 }
 
-fn profile_form(
-    view: Entity<DevShellWindow>,
-    name_input: Entity<InputState>,
-    host_input: Entity<InputState>,
-    user_input: Entity<InputState>,
-    port_input: Entity<InputState>,
-    key_path_input: Entity<InputState>,
-    editing_id: Option<String>,
-    auth: String,
-    proxy_id: Option<String>,
-    proxies: Vec<ProxySummary>,
-    saving: bool,
-) -> impl IntoElement {
-    let editing = editing_id.is_some();
-    div()
-        .p_4()
-        .rounded_md()
-        .bg(gpui_kit::rgb(0x171c23))
-        .border_1()
-        .border_color(gpui_kit::rgb(0x2b313b))
-        .flex()
-        .flex_col()
-        .gap_2()
-        .child(Paragraph::new(if editing {
-            "编辑 SSH 服务器"
-        } else {
-            "新增 SSH 服务器"
-        }))
-        .child(Input::new(&name_input))
-        .child(Input::new(&host_input))
-        .child(Input::new(&port_input))
-        .child(Input::new(&user_input))
-        .child(Paragraph::new("认证方式"))
-        .child(
-            div()
-                .flex()
-                .gap_2()
-                .child(auth_choice_button(
-                    view.clone(),
-                    "password",
-                    "密码",
-                    auth == "password",
-                ))
-                .child(auth_choice_button(
-                    view.clone(),
-                    "key",
-                    "私钥",
-                    auth == "key",
-                ))
-                .child(auth_choice_button(
-                    view.clone(),
-                    "agent",
-                    "Agent",
-                    auth == "agent",
-                )),
-        )
-        .when(auth == "key", |form| {
-            form.child(Input::new(&key_path_input))
-                .child(Paragraph::new(
-                    "填写私钥文件路径；私钥口令沿用上方的凭据输入。",
-                ))
-        })
-        .when(auth == "password", |form| {
-            form.child(Paragraph::new(
-                "密码沿用上方的 SSH 凭据输入；留空则保存后连接时再输入。",
-            ))
-        })
-        .when(auth == "agent", |form| {
-            form.child(Paragraph::new("连接时使用本机 SSH Agent，不保存密码。"))
-        })
-        .child(Paragraph::new("连接代理"))
-        .child(
-            div()
-                .flex()
-                .gap_2()
-                .child(proxy_choice_button(
-                    view.clone(),
-                    None,
-                    "直连".into(),
-                    proxy_id.is_none(),
-                ))
-                .children(proxies.into_iter().map(|proxy| {
-                    let id = proxy.id.clone();
-                    let label = format!(
-                        "{} · {} {}:{}",
-                        proxy.name, proxy.kind, proxy.host, proxy.port
-                    );
-                    let selected = proxy_id.as_deref() == Some(id.as_str());
-                    proxy_choice_button(view.clone(), Some(id), label, selected)
-                })),
-        )
-        .child(
-            KitButton::new("save-server")
-                .secondary()
-                .label(if saving {
-                    "保存中…"
-                } else if editing {
-                    "保存修改"
-                } else {
-                    "保存服务器"
-                })
-                .disabled(saving)
-                .on_click(move |_, _, cx| {
-                    view.update(cx, |state, cx| {
-                        let name = state
-                            .profile_name_input
-                            .read(cx)
-                            .value(cx)
-                            .trim()
-                            .to_string();
-                        let host = state
-                            .profile_host_input
-                            .read(cx)
-                            .value(cx)
-                            .trim()
-                            .to_string();
-                        let user = state
-                            .profile_user_input
-                            .read(cx)
-                            .value(cx)
-                            .trim()
-                            .to_string();
-                        let port_text = state
-                            .profile_port_input
-                            .read(cx)
-                            .value(cx)
-                            .trim()
-                            .to_string();
-                        let auth = state.profile_auth.clone();
-                        let key_path = state
-                            .profile_key_path_input
-                            .read(cx)
-                            .value(cx)
-                            .trim()
-                            .to_string();
-                        let proxy_id = state.profile_proxy_id.clone();
-                        let secret = state.secret_input.read(cx).value(cx).to_string();
-                        if name.is_empty() || host.is_empty() || user.is_empty() {
-                            state.feedback = Some("请填写服务器名称、地址和用户名。".into());
-                            cx.notify();
-                            return;
-                        }
-                        let port = match port_text.parse::<u16>() {
-                            Ok(port) if port > 0 => port,
-                            _ => {
-                                state.feedback = Some("端口必须是 1–65535 的数字。".into());
-                                cx.notify();
-                                return;
-                            }
-                        };
-                        if auth == "key" && key_path.is_empty() {
-                            state.feedback = Some("私钥认证需要填写私钥文件路径。".into());
-                            cx.notify();
-                            return;
-                        }
-                        let base = state.snapshot.base.clone();
-                        let token = state.token.clone();
-                        state.profile_saving = true;
-                        state.feedback = Some("正在保存服务器配置…".into());
-                        cx.notify();
-                        cx.spawn(async move |this, cx| {
-                            let result = cx
-                                .background_executor()
-                                .spawn(async move {
-                                    save_profile_and_reload(
-                                        &base,
-                                        &token,
-                                        editing_id.as_deref(),
-                                        &auth,
-                                        &key_path,
-                                        proxy_id.as_deref(),
-                                        &name,
-                                        &host,
-                                        port,
-                                        &user,
-                                        &secret,
-                                    )
-                                })
-                                .await;
-                            let _ = this.update(cx, |state, cx| {
-                                state.profile_saving = false;
-                                match result {
-                                    Ok(snapshot) => {
-                                        state.snapshot = snapshot;
-                                        state.profile_form_open = false;
-                                        state.profile_editing_id = None;
-                                        state.feedback = Some("服务器配置已保存。".into());
-                                    }
-                                    Err(error) => state.feedback = Some(error),
-                                }
-                                cx.notify();
-                            });
-                        })
-                        .detach();
-                    });
-                }),
-        )
-}
-
-fn auth_choice_button(
-    view: Entity<DevShellWindow>,
-    auth: &'static str,
-    label: &'static str,
-    selected: bool,
-) -> impl IntoElement {
-    let button = KitButton::new(format!("profile-auth-{auth}"));
-    let button = if selected {
-        button.primary()
-    } else {
-        button.secondary()
-    };
-    button.label(label).on_click(move |_, _, cx| {
-        view.update(cx, |state, cx| {
-            state.profile_auth = auth.into();
-            cx.notify();
-        });
-    })
-}
-
-fn proxy_choice_button(
-    view: Entity<DevShellWindow>,
-    proxy_id: Option<String>,
-    label: String,
-    selected: bool,
-) -> impl IntoElement {
-    let button = KitButton::new(format!(
-        "profile-proxy-{}",
-        proxy_id.as_deref().unwrap_or("direct")
-    ));
-    let button = if selected {
-        button.primary()
-    } else {
-        button.secondary()
-    };
-    button.label(label).on_click(move |_, _, cx| {
-        view.update(cx, |state, cx| {
-            state.profile_proxy_id = proxy_id.clone();
-            cx.notify();
-        });
-    })
-}
-
-fn terminal_panel(
-    terminal: TerminalState,
-    command_input: Entity<InputState>,
-    view: Entity<DevShellWindow>,
-) -> impl IntoElement {
-    let output = if terminal.output.is_empty() {
-        "等待远端终端输出…".to_string()
-    } else {
-        terminal.output
-    };
-    div()
-        .p_4()
-        .rounded_lg()
-        .bg(gpui_kit::rgb(0x080b0f))
-        .border_1()
-        .border_color(gpui_kit::rgb(0x2b313b))
-        .flex()
-        .flex_col()
-        .gap_2()
-        .child({
-            let session_id = terminal.session_id.clone();
-            let view = view.clone();
-            div()
-                .flex()
-                .items_center()
-                .justify_between()
-                .child(Paragraph::new(format!(
-                    "终端 · {} · {}",
-                    terminal.session_id, terminal.status
-                )))
-                .child(
-                    KitButton::new("terminal-disconnect")
-                        .danger()
-                        .label("断开")
-                        .on_click(move |_, _, cx| {
-                            disconnect_session(view.clone(), session_id.clone(), cx);
-                        }),
-                )
-        })
-        .child(Paragraph::new(output))
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .gap_2()
-                .child(Input::new(&command_input))
-                .child(
-                    KitButton::new("terminal-send")
-                        .primary()
-                        .label("发送")
-                        .on_click(move |_, _, cx| {
-                            let text = command_input.read(cx).value(cx).to_string();
-                            if text.is_empty() {
-                                return;
-                            }
-                            view.update(cx, |state, _| {
-                                if let Some(sender) = state
-                                    .terminal
-                                    .as_ref()
-                                    .and_then(|terminal| terminal.input_tx.clone())
-                                {
-                                    let _ = sender.send(format!("{text}\n"));
-                                }
-                            });
-                        }),
-                ),
-        );
-}
-
-fn file_panel(
-    files: FileListState,
-    view: Entity<DevShellWindow>,
-    file_name_input: Entity<InputState>,
-    local_path_input: Entity<InputState>,
-    pending_delete: Option<String>,
-    pending_rename: Option<String>,
-) -> impl IntoElement {
-    let current_path = files.path.clone();
-    let parent = parent_remote_path(&current_path);
-    div()
-        .p_4()
-        .rounded_lg()
-        .bg(gpui_kit::rgb(0x191f27))
-        .border_1()
-        .border_color(gpui_kit::rgb(0x2b313b))
-        .flex()
-        .flex_col()
-        .gap_2()
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .justify_between()
-                .child(Paragraph::new(format!(
-                    "文件 · {} · {}",
-                    files.path, files.status
-                )))
-                .when_some(parent, |bar, parent| {
-                    let view = view.clone();
-                    bar.child(
-                        KitButton::new("file-parent")
-                            .ghost()
-                            .label("上一级")
-                            .on_click(move |_, _, cx| {
-                                navigate_files(view.clone(), parent.clone(), cx)
-                            }),
-                    )
-                }),
-        )
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .gap_2()
-                .child(Input::new(&file_name_input))
-                .child({
-                    let view = view.clone();
-                    let file_name_input = file_name_input.clone();
-                    let path = current_path.clone();
-                    KitButton::new("file-mkdir")
-                        .secondary()
-                        .label("新建目录")
-                        .on_click(move |_, _, cx| {
-                            let name = file_name_input.read(cx).value(cx).to_string();
-                            if !name.trim().is_empty() {
-                                create_directory(view.clone(), path.clone(), name, cx);
-                            }
-                        })
-                })
-                .child({
-                    let view = view.clone();
-                    let file_name_input = file_name_input.clone();
-                    let path = current_path.clone();
-                    KitButton::new("file-new-file")
-                        .secondary()
-                        .label("新建文件")
-                        .on_click(move |_, _, cx| {
-                            let name = file_name_input.read(cx).value(cx).to_string();
-                            if !name.trim().is_empty() {
-                                create_empty_file(view.clone(), path.clone(), name, cx);
-                            }
-                        })
-                })
-                .child(Input::new(&local_path_input))
-                .child({
-                    let view = view.clone();
-                    let local_path_input = local_path_input.clone();
-                    let path = current_path.clone();
-                    KitButton::new("file-upload")
-                        .secondary()
-                        .label("上传")
-                        .on_click(move |_, _, cx| {
-                            let local_path = local_path_input.read(cx).value(cx).to_string();
-                            if !local_path.trim().is_empty() {
-                                upload_local(view.clone(), path.clone(), local_path, cx);
-                            }
-                        })
-                }),
-        )
-        .children(files.entries.into_iter().take(12).map(|entry| {
-            let is_folder = entry.kind == "folder";
-            let name = entry.name.clone();
-            let target = join_remote_path(&current_path, &name);
-            let view = view.clone();
-            let is_pending = pending_delete.as_deref() == Some(target.as_str());
-            let is_rename_pending = pending_rename.as_deref() == Some(target.as_str());
-            let delete_view = view.clone();
-            let delete_target = target.clone();
-            let delete_parent = current_path.clone();
-            let rename_view = view.clone();
-            let rename_target = target.clone();
-            let rename_parent = current_path.clone();
-            let download_view = view.clone();
-            let download_target = target.clone();
-            let download_name = name.clone();
-            let preview_view = view.clone();
-            let preview_target = target.clone();
-            div()
-                .flex()
-                .items_center()
-                .justify_between()
-                .child(if is_folder {
-                    KitButton::new(format!("file-folder-{}", name))
-                        .ghost()
-                        .label(format!("▸ {}", name))
-                        .on_click(move |_, _, cx| navigate_files(view.clone(), target.clone(), cx))
-                } else {
-                    KitButton::new(format!("file-entry-{}", name))
-                        .text()
-                        .label(format!("· {} · {} bytes", name, entry.bytes))
-                        .on_click(move |_, _, cx| {
-                            preview_remote(preview_view.clone(), preview_target.clone(), cx);
-                        })
-                })
-                .child(Paragraph::new(entry.owner))
-                .child(
-                    KitButton::new(format!("file-rename-{}", name))
-                        .secondary()
-                        .label(if is_rename_pending {
-                            "确认重命名"
-                        } else {
-                            "重命名"
-                        })
-                        .on_click({
-                            let file_name_input = file_name_input.clone();
-                            move |_, _, cx| {
-                                let new_name = file_name_input.read(cx).value(cx).to_string();
-                                if is_rename_pending && !new_name.trim().is_empty() {
-                                    rename_remote(
-                                        rename_view.clone(),
-                                        rename_target.clone(),
-                                        rename_parent.clone(),
-                                        new_name,
-                                        cx,
-                                    );
-                                } else {
-                                    let _ = rename_view.update(cx, |state, cx| {
-                                        state.pending_rename = Some(rename_target.clone());
-                                        state.feedback =
-                                            Some("输入新名称后再次点击“确认重命名”".into());
-                                        cx.notify();
-                                    });
-                                }
-                            }
-                        }),
-                )
-                .when(!is_folder, |row| {
-                    row.child(
-                        KitButton::new(format!("file-download-{}", name))
-                            .secondary()
-                            .label("下载")
-                            .on_click(move |_, _, cx| {
-                                download_remote(
-                                    download_view.clone(),
-                                    download_target.clone(),
-                                    download_name.clone(),
-                                    cx,
-                                );
-                            }),
-                    )
-                })
-                .child(
-                    KitButton::new(format!("file-delete-{}", name))
-                        .danger()
-                        .label(if is_pending { "确认删除" } else { "删除" })
-                        .on_click(move |_, _, cx| {
-                            if is_pending {
-                                delete_remote(
-                                    delete_view.clone(),
-                                    delete_target.clone(),
-                                    delete_parent.clone(),
-                                    cx,
-                                );
-                            } else {
-                                let _ = delete_view.update(cx, |state, cx| {
-                                    state.pending_delete = Some(delete_target.clone());
-                                    state.feedback = Some("再次点击“确认删除”以继续".into());
-                                    cx.notify();
-                                });
-                            }
-                        }),
-                )
-        }))
-}
-
-fn monitor_panel(monitor: MonitorState) -> impl IntoElement {
-    let memory_percent = if monitor.memory_total == 0 {
-        0.0
-    } else {
-        monitor.memory_used as f64 / monitor.memory_total as f64 * 100.0
-    };
-    div()
-        .p_4()
-        .rounded_lg()
-        .bg(gpui_kit::rgb(0x191f27))
-        .border_1()
-        .border_color(gpui_kit::rgb(0x2b313b))
-        .flex()
-        .flex_col()
-        .gap_2()
-        .child(Paragraph::new(format!("监控 · {}", monitor.status)))
-        .child(Paragraph::new(format!(
-            "CPU {:.1}% · 内存 {:.1}% · 负载 {}",
-            monitor.cpu, memory_percent, monitor.load
-        )))
-        .child(Paragraph::new(format!(
-            "内存 {} / {} MB · 采样 {}",
-            monitor.memory_used / 1024 / 1024,
-            monitor.memory_total / 1024 / 1024,
-            monitor.sampled_at
-        )));
-}
-
 fn file_preview_panel(
+    p: workspace::Palette,
     preview: FilePreviewState,
-    preview_input: Entity<TextareaState>,
+    preview_input: Entity<ely_gpui_component::editor::CodeEditor>,
     view: Entity<DevShellWindow>,
 ) -> impl IntoElement {
     let save_view = view.clone();
     let close_view = view.clone();
     div()
+        .absolute().left(px(32.)).right(px(32.)).top(px(68.)).bottom(px(24.)).occlude().shadow_lg()
         .p_4()
         .rounded_lg()
-        .bg(gpui_kit::rgb(0x080b0f))
+        .bg(gpui_kit::rgb(p.inset))
         .border_1()
-        .border_color(gpui_kit::rgb(0x2b313b))
+        .border_color(gpui_kit::rgb(p.border))
         .flex()
         .flex_col()
         .gap_2()
-        .child(Paragraph::new(format!(
+        .child(paragraph(format!(
             "预览 · {} · 编码 {} · {}",
             preview.path, preview.encoding, preview.status
         )))
@@ -1621,9 +858,7 @@ fn file_preview_panel(
                 .flex()
                 .items_center()
                 .justify_between()
-                .child(Paragraph::new(
-                    "保存前会校验远端文件指纹，冲突时保留远端版本。",
-                ))
+                .child(paragraph("保存前会校验远端文件指纹，冲突时保留远端版本。"))
                 .child(
                     KitButton::new("preview-save")
                         .primary()
@@ -1636,24 +871,28 @@ fn file_preview_panel(
                         .label("关闭预览")
                         .on_click(move |_, _, cx| {
                             close_view.update(cx, |state, cx| {
-                                state.preview = None;
-                                state.preview_sync = None;
-                                state.feedback = Some("已关闭文件预览。".into());
+                                if state.workspace.preview.as_ref().is_some_and(|preview|state.preview_input.read(cx).text()!=preview.saved_text){state.pending_dialog=Some(("close-preview",serde_json::json!({})));}
+                                else{state.workspace.preview=None;state.workspace.preview_sync=None;state.workspace.editor=None;}
                                 cx.notify();
                             });
                         }),
                 ),
         )
-        .child(Textarea::new(&preview_input).h(px(280.)));
+        .child(div().flex_1().min_h_0().child(preview_input))
 }
 
-fn transfer_panel(transfers: Vec<TransferState>, view: Entity<DevShellWindow>) -> impl IntoElement {
+fn transfer_panel(
+    p: workspace::Palette,
+    transfers: Vec<TransferState>,
+    view: Entity<DevShellWindow>,
+) -> impl IntoElement {
+    let clear_view = view.clone();
     div()
         .p_4()
         .rounded_lg()
-        .bg(gpui_kit::rgb(0x191f27))
+        .bg(gpui_kit::rgb(p.surface))
         .border_1()
-        .border_color(gpui_kit::rgb(0x2b313b))
+        .border_color(gpui_kit::rgb(p.border))
         .flex()
         .flex_col()
         .gap_2()
@@ -1662,12 +901,14 @@ fn transfer_panel(transfers: Vec<TransferState>, view: Entity<DevShellWindow>) -
                 .flex()
                 .items_center()
                 .justify_between()
-                .child(Paragraph::new("传输队列"))
+                .child(paragraph("传输队列"))
                 .child(
                     KitButton::new("transfer-clear-completed")
                         .secondary()
                         .label("清理已完成")
-                        .on_click(move |_, _, cx| clear_completed_transfers(view.clone(), cx)),
+                        .on_click(move |_, _, cx| {
+                            clear_completed_transfers(clear_view.clone(), cx)
+                        }),
                 ),
         )
         .children(transfers.into_iter().map(|transfer| {
@@ -1687,11 +928,11 @@ fn transfer_panel(transfers: Vec<TransferState>, view: Entity<DevShellWindow>) -
                 .flex()
                 .items_center()
                 .justify_between()
-                .child(Paragraph::new(format!(
+                .child(paragraph(format!(
                     "{} · {} · {}",
                     transfer.name, transfer.status, progress
                 )))
-                .child(Paragraph::new(transfer.error.unwrap_or_else(|| {
+                .child(paragraph(transfer.error.unwrap_or_else(|| {
                     format!("{}/{}", transfer.done, transfer.total)
                 })))
                 .child(if retryable {
@@ -1716,43 +957,55 @@ fn transfer_panel(transfers: Vec<TransferState>, view: Entity<DevShellWindow>) -
         }))
 }
 
-fn navigate_files(view: Entity<DevShellWindow>, path: String, cx: &mut App) {
-    let _ = view.update(cx, |state, cx| {
-        let Some(session_id) = state
-            .terminal
-            .as_ref()
-            .map(|terminal| terminal.session_id.clone())
-        else {
-            return;
-        };
+fn navigate_files_for(view: Entity<DevShellWindow>,session_id:String,path:String,cx:&mut App){
+    navigate_files_for_mode(view,session_id,path,false,cx);
+}
+fn navigate_files_for_mode(view: Entity<DevShellWindow>,session_id:String,path:String,preview_on_error:bool,cx:&mut App){
+    cx.defer(move|cx|{
+    let _=view.update(cx,|state,cx|{
+        if state.snapshot.locked{return;}
+
         let base = state.snapshot.base.clone();
         let token = state.token.clone();
         state.feedback = Some(format!("正在读取远端目录 {}…", path));
-        let view = cx.entity();
+        let Some(owner)=state.session_mut(&session_id)else{return;};owner.file_ui.navigation=owner.file_ui.navigation.wrapping_add(1);let navigation=owner.file_ui.navigation;
+        let result_session=Some(session_id.clone());
+        let view = cx.entity().downgrade();
         cx.spawn(async move |_, cx| {
             let result = cx
                 .background_executor()
-                .spawn(async move { load_files(&base, &token, &session_id, &path) })
+                .spawn({
+                    let path = path.clone();
+                    async move { load_files(&base, &token, &session_id, &path) }
+                })
                 .await;
             let _ = view.update(cx, |state, cx| {
-                state.files = Some(match result {
-                    Ok(files) => files,
-                    Err(error) => FileListState {
-                        path,
-                        entries: Vec::new(),
-                        status: error,
-                    },
-                });
+                let Some(session) = result_session
+                    .as_deref()
+                    .and_then(|id| state.session_mut(id))
+                else {
+                    return;
+                };
+                let preview = preview_on_error && result.is_err() && session.file_ui.navigation == navigation;
+                let target = path.clone();
+                if !session.accept_listing(navigation,path,result){return;}
+                if preview && state.workspace.terminal.as_ref().is_some_and(|t|Some(t.session_id.as_str())==result_session.as_deref()) { state.preview_file(target,cx); }
                 cx.notify();
             });
         })
         .detach();
     });
+    });
 }
 
-fn preview_remote(view: Entity<DevShellWindow>, path: String, cx: &mut App) {
+fn preview_remote_for(view: Entity<DevShellWindow>,owner:String, path: String, cx: &mut App) {
+    cx.defer(move|cx|{
     let _ = view.update(cx, |state, cx| {
+        if state.snapshot.locked||!state.workspace.terminal.as_ref().is_some_and(|t|t.session_id==owner&&t.input_tx.is_some()){return;}
+
+        if state.workspace.preview.as_ref().is_some_and(|preview|state.preview_input.read(cx).text()!=preview.saved_text){state.pending_dialog=Some(("open-preview",serde_json::json!({"path":path})));cx.notify();return;}
         let Some(session_id) = state
+            .workspace
             .terminal
             .as_ref()
             .map(|terminal| terminal.session_id.clone())
@@ -1762,18 +1015,30 @@ fn preview_remote(view: Entity<DevShellWindow>, path: String, cx: &mut App) {
         let base = state.snapshot.base.clone();
         let token = state.token.clone();
         state.feedback = Some(format!("正在读取文件 {}…", path));
-        let view = cx.entity();
+        let result_session = state
+            .workspace
+            .terminal
+            .as_ref()
+            .map(|t| t.session_id.clone());
+        let view = cx.entity().downgrade();
         cx.spawn(async move |_, cx| {
             let result = cx
                 .background_executor()
                 .spawn(async move { load_preview(&base, &token, &session_id, &path) })
                 .await;
             let _ = view.update(cx, |state, cx| {
+                let Some(session) = result_session
+                    .as_deref()
+                    .and_then(|id| state.session_mut(id))
+                else {
+                    return;
+                };
                 match result {
                     Ok(preview) => {
                         let text = preview.text.clone();
-                        state.preview = Some(preview);
-                        state.preview_sync = Some(text);
+                        session.editor=None;
+                        session.preview = Some(preview);
+                        session.preview_sync = Some(text);
                         state.feedback = Some("文件已加载".into());
                     }
                     Err(error) => state.feedback = Some(error),
@@ -1783,14 +1048,17 @@ fn preview_remote(view: Entity<DevShellWindow>, path: String, cx: &mut App) {
         })
         .detach();
     });
+    });
 }
 
 fn save_preview(view: Entity<DevShellWindow>, cx: &mut App) {
+    cx.defer(move|cx|{
     let _ = view.update(cx, |state, cx| {
-        let Some(preview) = state.preview.clone() else {
+        let Some(preview) = state.workspace.preview.clone() else {
             return;
         };
         let Some(session_id) = state
+            .workspace
             .terminal
             .as_ref()
             .map(|terminal| terminal.session_id.clone())
@@ -1799,9 +1067,14 @@ fn save_preview(view: Entity<DevShellWindow>, cx: &mut App) {
         };
         let base = state.snapshot.base.clone();
         let token = state.token.clone();
-        let text = state.preview_input.read(cx).value(cx).to_string();
+        let text = state.preview_input.read(cx).text().to_string();
         state.feedback = Some(format!("正在保存文件 {}…", preview.path));
-        let view = cx.entity();
+        let result_session = state
+            .workspace
+            .terminal
+            .as_ref()
+            .map(|t| t.session_id.clone());
+        let view = cx.entity().downgrade();
         cx.spawn(async move |_, cx| {
             let result = cx
                 .background_executor()
@@ -1810,9 +1083,15 @@ fn save_preview(view: Entity<DevShellWindow>, cx: &mut App) {
                 )
                 .await;
             let _ = view.update(cx, |state, cx| {
+                let Some(session) = result_session
+                    .as_deref()
+                    .and_then(|id| state.session_mut(id))
+                else {
+                    return;
+                };
                 match result {
                     Ok(saved) => {
-                        state.preview = Some(saved);
+                        session.preview = Some(saved);
                         state.feedback = Some("文件已保存".into());
                     }
                     Err(error) => state.feedback = Some(error),
@@ -1822,109 +1101,6 @@ fn save_preview(view: Entity<DevShellWindow>, cx: &mut App) {
         })
         .detach();
     });
-}
-
-fn create_directory(view: Entity<DevShellWindow>, path: String, name: String, cx: &mut App) {
-    let _ = view.update(cx, |state, cx| {
-        let Some(session_id) = state
-            .terminal
-            .as_ref()
-            .map(|terminal| terminal.session_id.clone())
-        else {
-            return;
-        };
-        let base = state.snapshot.base.clone();
-        let token = state.token.clone();
-        state.feedback = Some(format!("正在创建目录 {}…", name));
-        let view = cx.entity();
-        cx.spawn(async move |_, cx| {
-            let result = cx
-                .background_executor()
-                .spawn(async move {
-                    post_file_action(&base, &token, &session_id, "mkdir", &path, &name)?;
-                    load_files(&base, &token, &session_id, &path)
-                })
-                .await;
-            let _ = view.update(cx, |state, cx| {
-                match result {
-                    Ok(files) => {
-                        state.files = Some(files);
-                        state.feedback = Some("目录已创建".into());
-                    }
-                    Err(error) => state.feedback = Some(error),
-                }
-                cx.notify();
-            });
-        })
-        .detach();
-    });
-}
-
-fn create_empty_file(view: Entity<DevShellWindow>, path: String, name: String, cx: &mut App) {
-    let _ = view.update(cx, |state, cx| {
-        let Some(session_id) = state
-            .terminal
-            .as_ref()
-            .map(|terminal| terminal.session_id.clone())
-        else {
-            return;
-        };
-        let base = state.snapshot.base.clone();
-        let token = state.token.clone();
-        state.feedback = Some(format!("正在创建文件 {}…", name));
-        let view = cx.entity();
-        cx.spawn(async move |_, cx| {
-            let result = cx
-                .background_executor()
-                .spawn(async move {
-                    post_file_action(&base, &token, &session_id, "new-file", &path, &name)?;
-                    load_files(&base, &token, &session_id, &path)
-                })
-                .await;
-            let _ = view.update(cx, |state, cx| {
-                match result {
-                    Ok(files) => {
-                        state.files = Some(files);
-                        state.feedback = Some("文件已创建".into());
-                    }
-                    Err(error) => state.feedback = Some(error),
-                }
-                cx.notify();
-            });
-        })
-        .detach();
-    });
-}
-
-fn upload_local(view: Entity<DevShellWindow>, directory: String, local_path: String, cx: &mut App) {
-    let _ = view.update(cx, |state, cx| {
-        let Some(session_id) = state
-            .terminal
-            .as_ref()
-            .map(|terminal| terminal.session_id.clone())
-        else {
-            return;
-        };
-        let base = state.snapshot.base.clone();
-        let token = state.token.clone();
-        state.feedback = Some(format!("正在上传 {}…", local_path));
-        let view = cx.entity();
-        cx.spawn(async move |_, cx| {
-            let result = cx
-                .background_executor()
-                .spawn(async move {
-                    post_upload_local(&base, &token, &session_id, &directory, &local_path)
-                })
-                .await;
-            let _ = view.update(cx, |state, cx| {
-                state.feedback = Some(match result {
-                    Ok(message) => message,
-                    Err(error) => error,
-                });
-                cx.notify();
-            });
-        })
-        .detach();
     });
 }
 
@@ -1937,11 +1113,16 @@ fn cancel_transfer(view: Entity<DevShellWindow>, transfer_id: String, cx: &mut A
 }
 
 fn clear_completed_transfers(view: Entity<DevShellWindow>, cx: &mut App) {
+    cx.defer(move|cx|{
     let _ = view.update(cx, |state, cx| {
         let base = state.snapshot.base.clone();
         let token = state.token.clone();
         state.feedback = Some("正在清理已完成传输…".into());
-        let view = cx.entity();
+        let result_session = state
+            .workspace
+            .terminal
+            .as_ref()
+            .map(|t| t.session_id.clone());
         cx.spawn(async move |this, cx| {
             let result = cx
                 .background_executor()
@@ -1955,9 +1136,15 @@ fn clear_completed_transfers(view: Entity<DevShellWindow>, cx: &mut App) {
                 })
                 .await;
             let _ = this.update(cx, |state, cx| {
+                let Some(session) = result_session
+                    .as_deref()
+                    .and_then(|id| state.session_mut(id))
+                else {
+                    return;
+                };
                 match result {
                     Ok(_) => {
-                        state.transfers.retain(|transfer| {
+                        session.transfers.retain(|transfer| {
                             matches!(transfer.status.as_str(), "queued" | "uploading")
                         });
                         state.feedback = Some("已清理完成传输。".into());
@@ -1968,6 +1155,7 @@ fn clear_completed_transfers(view: Entity<DevShellWindow>, cx: &mut App) {
             });
         })
         .detach();
+    });
     });
 }
 
@@ -1980,6 +1168,7 @@ fn transfer_action(
 ) {
     let method = method.to_string();
     let action = action.to_string();
+    cx.defer(move|cx|{
     let _ = view.update(cx, |state, cx| {
         let base = state.snapshot.base.clone();
         let token = state.token.clone();
@@ -1991,13 +1180,24 @@ fn transfer_action(
                 "取消"
             }
         ));
-        let view = cx.entity();
+        let result_session = state
+            .workspace
+            .terminal
+            .as_ref()
+            .map(|t| t.session_id.clone());
+        let view = cx.entity().downgrade();
         cx.spawn(async move |_, cx| {
             let result = cx
                 .background_executor()
                 .spawn(async move { request_transfer_action(&base, &token, &transfer_id, &method) })
                 .await;
             let _ = view.update(cx, |state, cx| {
+                let Some(_session) = result_session
+                    .as_deref()
+                    .and_then(|id| state.session_mut(id))
+                else {
+                    return;
+                };
                 state.feedback = Some(match result {
                     Ok(()) => "传输操作已提交".into(),
                     Err(error) => error,
@@ -2007,137 +1207,52 @@ fn transfer_action(
         })
         .detach();
     });
-}
-
-fn delete_remote(view: Entity<DevShellWindow>, target: String, parent: String, cx: &mut App) {
-    let _ = view.update(cx, |state, cx| {
-        let Some(session_id) = state
-            .terminal
-            .as_ref()
-            .map(|terminal| terminal.session_id.clone())
-        else {
-            return;
-        };
-        let base = state.snapshot.base.clone();
-        let token = state.token.clone();
-        state.pending_delete = None;
-        state.feedback = Some(format!("正在删除 {}…", target));
-        let view = cx.entity();
-        cx.spawn(async move |_, cx| {
-            let result = cx
-                .background_executor()
-                .spawn(async move {
-                    post_file_action(&base, &token, &session_id, "delete", &target, "")?;
-                    load_files(&base, &token, &session_id, &parent)
-                })
-                .await;
-            let _ = view.update(cx, |state, cx| {
-                match result {
-                    Ok(files) => {
-                        state.files = Some(files);
-                        state.feedback = Some("已删除".into());
-                    }
-                    Err(error) => state.feedback = Some(error),
-                }
-                cx.notify();
-            });
-        })
-        .detach();
-    });
-}
-
-fn rename_remote(
-    view: Entity<DevShellWindow>,
-    target: String,
-    parent: String,
-    name: String,
-    cx: &mut App,
-) {
-    let _ = view.update(cx, |state, cx| {
-        let Some(session_id) = state
-            .terminal
-            .as_ref()
-            .map(|terminal| terminal.session_id.clone())
-        else {
-            return;
-        };
-        let base = state.snapshot.base.clone();
-        let token = state.token.clone();
-        state.pending_rename = None;
-        state.feedback = Some(format!("正在重命名 {}…", target));
-        let view = cx.entity();
-        cx.spawn(async move |_, cx| {
-            let result = cx
-                .background_executor()
-                .spawn(async move {
-                    post_file_action(&base, &token, &session_id, "rename", &target, &name)?;
-                    load_files(&base, &token, &session_id, &parent)
-                })
-                .await;
-            let _ = view.update(cx, |state, cx| {
-                match result {
-                    Ok(files) => {
-                        state.files = Some(files);
-                        state.feedback = Some("已重命名".into());
-                    }
-                    Err(error) => state.feedback = Some(error),
-                }
-                cx.notify();
-            });
-        })
-        .detach();
-    });
-}
-
-fn download_remote(view: Entity<DevShellWindow>, target: String, name: String, cx: &mut App) {
-    let _ = view.update(cx, |state, cx| {
-        let Some(session_id) = state
-            .terminal
-            .as_ref()
-            .map(|terminal| terminal.session_id.clone())
-        else {
-            return;
-        };
-        let base = state.snapshot.base.clone();
-        let token = state.token.clone();
-        state.feedback = Some(format!("正在下载 {}…", name));
-        let view = cx.entity();
-        cx.spawn(async move |_, cx| {
-            let result = cx
-                .background_executor()
-                .spawn(async move { download_file(&base, &token, &session_id, &target, &name) })
-                .await;
-            let _ = view.update(cx, |state, cx| {
-                state.feedback = Some(match result {
-                    Ok(path) => format!("已下载到 {}", path.display()),
-                    Err(error) => error,
-                });
-                cx.notify();
-            });
-        })
-        .detach();
     });
 }
 
 fn disconnect_session(view: Entity<DevShellWindow>, session_id: String, cx: &mut App) {
+    cx.defer(move|cx|{
     let _ = view.update(cx, |state, cx| {
         let base = state.snapshot.base.clone();
         let token = state.token.clone();
         state.feedback = Some("正在断开会话…".into());
+        let protocol=state.session_mut(&session_id).and_then(|session|session.terminal.as_ref()).map(|t|t.protocol.clone()).unwrap_or_else(||"ssh".into());
+        let result_session = session_id.clone();
         let view = cx.entity();
         cx.spawn(async move |_, cx| {
             let result = cx
                 .background_executor()
-                .spawn(async move { delete_session(&base, &token, &session_id) })
+                .spawn(async move { delete_json(&base,&token,&format!("{}{session_id}",remote_desktop::session_root(&protocol))).map(|_|()) })
                 .await;
             let _ = view.update(cx, |state, cx| {
                 match result {
                     Ok(()) => {
-                        state.terminal = None;
-                        state.files = None;
-                        state.monitor = None;
-                        state.preview = None;
-                        state.transfers.clear();
+                        if let Some(session) = state.session_mut(&result_session) {
+                            if let Some(terminal) = &mut session.terminal {
+                                terminal.input_tx = None;
+                                terminal.status = "已断开".into();
+                            }
+                        }
+                        if state.ui.closing_sessions.contains(&result_session) {
+                            state.ui.closing_sessions.retain(|id| id != &result_session);
+                            state.ui.session_order.retain(|id| id != &result_session);
+                            state.parked.retain(|s| {
+                                !s.terminal
+                                    .as_ref()
+                                    .is_some_and(|t| t.session_id == result_session)
+                            });
+                            if state
+                                .workspace
+                                .terminal
+                                .as_ref()
+                                .is_some_and(|t| t.session_id == result_session)
+                            {
+                                state.workspace = state.parked.pop().unwrap_or_default();
+                                if state.workspace.terminal.is_none() {
+                                    state.ui.active_start = state.ui.start_tabs.last().copied();
+                                }
+                            }
+                        }
                         state.feedback = Some("会话已断开".into());
                     }
                     Err(error) => state.feedback = Some(error),
@@ -2146,6 +1261,7 @@ fn disconnect_session(view: Entity<DevShellWindow>, session_id: String, cx: &mut
             });
         })
         .detach();
+    });
     });
 }
 
@@ -2172,400 +1288,6 @@ fn parent_remote_path(path: &str) -> Option<String> {
     })
 }
 
-fn server_row(
-    view: Entity<DevShellWindow>,
-    server: ServerSummary,
-    connecting: Option<&str>,
-    pending_profile: Option<&str>,
-    pending_delete: Option<&str>,
-) -> impl IntoElement {
-    let server_id = server.id.clone();
-    let is_connecting = connecting == Some(server.id.as_str());
-    let is_host_key_pending = pending_profile == Some(server.id.as_str());
-    let is_delete_pending = pending_delete == Some(server.id.as_str());
-    let delete_profile_id = server.id.clone();
-    let delete_view = view.clone();
-    let edit_server = server.clone();
-    let edit_view = view.clone();
-    let auth_label = match server.auth.as_str() {
-        "key" => "私钥",
-        "agent" => "Agent",
-        _ => "密码",
-    };
-    let proxy_label = if server.proxy_id.is_empty() {
-        "直连"
-    } else {
-        "已保存代理"
-    };
-    let label = if is_connecting {
-        "连接中…"
-    } else if is_host_key_pending {
-        "确认指纹并连接"
-    } else {
-        "连接"
-    };
-    div()
-        .p_3()
-        .rounded_md()
-        .bg(gpui_kit::rgb(0x191f27))
-        .border_1()
-        .border_color(gpui_kit::rgb(0x2b313b))
-        .flex()
-        .items_center()
-        .justify_between()
-        .child(Paragraph::new(server.name))
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .gap_3()
-                .child(Paragraph::new(format!(
-                    "{}:{} · {} · {} · {}",
-                    server.host, server.port, server.group, auth_label, proxy_label
-                )))
-                .child(
-                    KitButton::new(server_id.clone())
-                        .secondary()
-                        .label(label)
-                        .disabled(is_connecting)
-                        .on_click(move |_, _, cx| {
-                            let view = view.clone();
-                            let profile_id = server_id.clone();
-                            view.update(cx, |state, cx| {
-                                let base = state.snapshot.base.clone();
-                                let token = state.token.clone();
-                                let secret = state.secret_input.read(cx).value(cx).to_string();
-                                let approval = state
-                                    .pending_host_key
-                                    .as_ref()
-                                    .filter(|pending| pending.profile_id == profile_id)
-                                    .map(|pending| pending.challenge.clone());
-                                state.connecting = Some(profile_id.clone());
-                                state.feedback = Some("正在连接服务器…".into());
-                                cx.notify();
-                                let request_profile_id = profile_id.clone();
-                                let request_approval = approval.clone();
-                                cx.spawn(async move |this, cx| {
-                                    let result = cx
-                                        .background_executor()
-                                        .spawn(
-                                            async move {
-                                                post_session(
-                                                    &base,
-                                                    &token,
-                                                    &request_profile_id,
-                                                    &secret,
-                                                    request_approval.as_ref(),
-                                                )
-                                            },
-                                        )
-                                        .await;
-                                    let _ = this.update(cx, |state, cx| {
-                                        state.connecting = None;
-                                        match result {
-                                            Ok(session_id) => {
-                                                state.pending_host_key = None;
-                                                state.feedback = Some(format!(
-                                                    "连接已建立，会话 {}；正在打开终端。",
-                                                    session_id
-                                                ));
-                                                let (sender, receiver) = mpsc::channel();
-                                                let (input_tx, input_rx) = mpsc::channel();
-                                                let base = state.snapshot.base.clone();
-                                                let token = state.token.clone();
-                                                let terminal_id = session_id.clone();
-                                                thread::spawn(move || {
-                                                    let event = match terminal_reader(
-                                                        &base,
-                                                        &token,
-                                                        &terminal_id,
-                                                        &sender,
-                                                        input_rx,
-                                                    ) {
-                                                        Ok(()) => TerminalEvent::Closed(
-                                                            "终端连接已关闭".into(),
-                                                        ),
-                                                        Err(error) => TerminalEvent::Closed(
-                                                            format!("终端错误：{error}"),
-                                                        ),
-                                                    };
-                                                    let _ = sender.send(event);
-                                                });
-                                                state.terminal = Some(TerminalState {
-                                                    session_id: session_id.clone(),
-                                                    output: String::new(),
-                                                    status: "连接中".into(),
-                                                    input_tx: Some(input_tx),
-                                                });
-                                                let view = cx.entity();
-                                                cx.spawn(async move |_, cx| {
-                                                    let mut closed = false;
-                                                    while !closed {
-                                                        while let Ok(event) = receiver.try_recv() {
-                                                            let _ = view.update(cx, |state, cx| {
-                                                                if let Some(terminal) =
-                                                                    state.terminal.as_mut()
-                                                                {
-                                                                    match event {
-                                                                        TerminalEvent::Output(text) => {
-                                                                            terminal.output.push_str(&text);
-                                                                            let count = terminal.output.chars().count();
-                                                                            if count > 12000 {
-                                                                                terminal.output = terminal
-                                                                                    .output
-                                                                                    .chars()
-                                                                                    .skip(count - 12000)
-                                                                                    .collect();
-                                                                            }
-                                                                        }
-                                                                        TerminalEvent::Info(message) => {
-                                                                            terminal.status = message;
-                                                                        }
-                                                                        TerminalEvent::Closed(message) => {
-                                                                            terminal.status = message;
-                                                                            closed = true;
-                                                                        }
-                                                                    }
-                                                                }
-                                                                cx.notify();
-                                                            });
-                                                        }
-                                                        if !closed {
-                                                            cx.background_executor()
-                                                                .timer(Duration::from_millis(50))
-                                                                .await;
-                                                        }
-                                                    }
-                                                })
-                                                .detach();
-                                                let files_base = state.snapshot.base.clone();
-                                                let files_token = state.token.clone();
-                                                let files_session = session_id.clone();
-                                                let files_view = cx.entity();
-                                                cx.spawn(async move |_, cx| {
-                                                    let result = cx
-                                                        .background_executor()
-                                                        .spawn(async move {
-                                                            load_files(
-                                                                &files_base,
-                                                                &files_token,
-                                                                &files_session,
-                                                                "/",
-                                                            )
-                                                        })
-                                                        .await;
-                                                    let _ = files_view.update(cx, |state, cx| {
-                                                        state.files = Some(match result {
-                                                            Ok(files) => files,
-                                                            Err(error) => FileListState {
-                                                                path: "/".into(),
-                                                                entries: Vec::new(),
-                                                                status: error,
-                                                            },
-                                                        });
-                                                        cx.notify();
-                                                    });
-                                                })
-                                                .detach();
-                                                let monitor_base = state.snapshot.base.clone();
-                                                let monitor_token = state.token.clone();
-                                                let transfer_session = session_id.clone();
-                                                let monitor_session = session_id;
-                                                let monitor_view = cx.entity();
-                                                cx.spawn(async move |_, cx| {
-                                                    loop {
-                                                        let result = cx
-                                                            .background_executor()
-                                                            .spawn({
-                                                                let monitor_base = monitor_base.clone();
-                                                                let monitor_token = monitor_token.clone();
-                                                                let monitor_session = monitor_session.clone();
-                                                                async move {
-                                                                    load_monitor(
-                                                                        &monitor_base,
-                                                                        &monitor_token,
-                                                                        &monitor_session,
-                                                                    )
-                                                                }
-                                                            })
-                                                            .await;
-                                                        if monitor_view
-                                                            .update(cx, |state, cx| {
-                                                                state.monitor = Some(match result {
-                                                                    Ok(monitor) => monitor,
-                                                                    Err(error) => MonitorState {
-                                                                        cpu: 0.0,
-                                                                        memory_used: 0,
-                                                                        memory_total: 0,
-                                                                        load: "未知".into(),
-                                                                        sampled_at: "-".into(),
-                                                                        status: error,
-                                                                    },
-                                                                });
-                                                                cx.notify();
-                                                            })
-                                                            .is_err()
-                                                        {
-                                                            break;
-                                                        }
-                                                        cx.background_executor()
-                                                            .timer(Duration::from_secs(5))
-                                                            .await;
-                                                    }
-                                                })
-                                                .detach();
-                                                let transfer_base = state.snapshot.base.clone();
-                                                let transfer_token = state.token.clone();
-                                                let transfer_view = cx.entity();
-                                                cx.spawn(async move |_, cx| {
-                                                    loop {
-                                                        let result = cx
-                                                            .background_executor()
-                                                            .spawn({
-                                                                let transfer_base = transfer_base.clone();
-                                                                let transfer_token = transfer_token.clone();
-                                                                let transfer_session = transfer_session.clone();
-                                                                async move {
-                                                                    load_transfers(
-                                                                        &transfer_base,
-                                                                        &transfer_token,
-                                                                        &transfer_session,
-                                                                    )
-                                                                }
-                                                            })
-                                                            .await;
-                                                        if transfer_view
-                                                            .update(cx, |state, cx| {
-                                                                if let Ok(transfers) = result {
-                                                                    state.transfers = transfers;
-                                                                }
-                                                                cx.notify();
-                                                            })
-                                                            .is_err()
-                                                        {
-                                                            break;
-                                                        }
-                                                        cx.background_executor()
-                                                            .timer(Duration::from_secs(2))
-                                                            .await;
-                                                    }
-                                                })
-                                                .detach();
-                                            }
-                                            Err(SessionConnectError::HostKey(challenge)) => {
-                                                state.pending_host_key = Some(PendingHostKey {
-                                                    profile_id: profile_id.clone(),
-                                                    challenge,
-                                                });
-                                                state.feedback = Some(
-                                                    "请核实服务器主机指纹，再次点击同一服务器按钮确认。"
-                                                        .into(),
-                                                );
-                                            }
-                                            Err(SessionConnectError::Message(error)) => {
-                                                state.feedback = Some(error)
-                                            }
-                                        }
-                                        cx.notify();
-                                    });
-                                })
-                                .detach();
-                            });
-                        }),
-                )
-                .child(
-                    KitButton::new(format!("edit-{delete_profile_id}"))
-                        .ghost()
-                        .label("编辑")
-                        .on_click(move |_, window, cx| {
-                            let server = edit_server.clone();
-                            edit_view.update(cx, |state, cx| {
-                                if server.inline_proxy {
-                                    state.feedback = Some(
-                                        "该服务器使用内嵌代理配置，原生编辑暂不覆盖此字段，请在代理管理中改为已保存代理后再编辑。"
-                                            .into(),
-                                    );
-                                    cx.notify();
-                                    return;
-                                }
-                                state.profile_form_open = true;
-                                state.profile_editing_id = Some(server.id.clone());
-                                state.profile_name_input.update(cx, |input, cx| {
-                                    input.set_value(server.name.clone(), window, cx)
-                                });
-                                state.profile_host_input.update(cx, |input, cx| {
-                                    input.set_value(server.host.clone(), window, cx)
-                                });
-                                state.profile_user_input.update(cx, |input, cx| {
-                                    input.set_value(server.user.clone(), window, cx)
-                                });
-                                state.profile_port_input.update(cx, |input, cx| {
-                                    input.set_value(server.port.to_string(), window, cx)
-                                });
-                                state.profile_key_path_input.update(cx, |input, cx| {
-                                    input.set_value(server.key_path.clone(), window, cx)
-                                });
-                                state.profile_auth = server.auth.clone();
-                                state.profile_proxy_id = if server.proxy_id.is_empty() {
-                                    None
-                                } else {
-                                    Some(server.proxy_id.clone())
-                                };
-                                state.feedback = Some("已载入服务器配置，可修改后保存。".into());
-                                cx.notify();
-                            });
-                        }),
-                )
-                .child(
-                    KitButton::new(format!("delete-{delete_profile_id}"))
-                        .ghost()
-                        .label(if is_delete_pending { "确认删除" } else { "删除" })
-                        .on_click({
-                            let view = delete_view;
-                            move |_, _, cx| {
-                                let profile_id = delete_profile_id.clone();
-                                view.update(cx, |state, cx| {
-                                    if is_delete_pending {
-                                        let base = state.snapshot.base.clone();
-                                        let token = state.token.clone();
-                                        state.feedback = Some("正在回收服务器配置…".into());
-                                        cx.notify();
-                                        cx.spawn(async move |this, cx| {
-                                            let result = cx
-                                                .background_executor()
-                                                .spawn(async move {
-                                                    delete_profile_and_reload(
-                                                        &base, &token, &profile_id,
-                                                    )
-                                                })
-                                                .await;
-                                            let _ = this.update(cx, |state, cx| {
-                                                match result {
-                                                    Ok(snapshot) => {
-                                                        state.snapshot = snapshot;
-                                                        state.pending_profile_delete = None;
-                                                        state.feedback =
-                                                            Some("服务器配置已移入回收站。".into());
-                                                    }
-                                                    Err(error) => state.feedback = Some(error),
-                                                }
-                                                cx.notify();
-                                            });
-                                        })
-                                        .detach();
-                                    } else {
-                                        state.pending_profile_delete = Some(profile_id);
-                                        state.feedback =
-                                            Some("再次点击删除按钮确认移入回收站。".into());
-                                        cx.notify();
-                                    }
-                                });
-                            }
-                        }),
-                ),
-        )
-}
-
 fn main() {
     let args = Arguments::parse().unwrap_or_else(|error| {
         eprintln!("DevShell native UI: {error}");
@@ -2574,36 +1296,57 @@ fn main() {
     let snapshot = BackendSnapshot::load(&args.base, &args.token);
 
     gpui_kit::application()
-        .with_assets(ElyAssets::before(gpui_kit::assets::Assets))
+        .with_assets(assets::Assets)
         .run(move |cx: &mut App| {
             gpui_kit::init(cx);
+            let _=cx.text_system().add_fonts(vec![
+                std::borrow::Cow::Borrowed(include_bytes!("../../web/assets/ui-fonts/alibaba-puhuiti-3-55-regular.ttf")),
+                std::borrow::Cow::Borrowed(include_bytes!("../assets/fonts/jetbrains-mono.ttf")),
+                std::borrow::Cow::Borrowed(include_bytes!("../assets/fonts/fira-code.ttf")),
+                std::borrow::Cow::Borrowed(include_bytes!("../assets/fonts/source-code-pro.ttf")),
+                std::borrow::Cow::Borrowed(include_bytes!("../assets/fonts/ibm-plex-mono.ttf")),
+                std::borrow::Cow::Borrowed(include_bytes!("../assets/fonts/ibm-plex-mono-bold.ttf")),
+                std::borrow::Cow::Borrowed(include_bytes!("../assets/fonts/maple-mono-cn.ttf")),
+            ]);
+            let dark = match snapshot.appearance.get("theme").and_then(Value::as_str) {
+                Some("light") => false,
+                Some("dark") => true,
+                _ => matches!(
+                    cx.window_appearance(),
+                    gpui_kit::WindowAppearance::Dark | gpui_kit::WindowAppearance::VibrantDark
+                ),
+            };
+            workspace::apply_theme(dark, None, cx);
             ely_gpui_component::init(cx).expect("Ely failed to start");
-            gpui_kit::open_window(WindowOptions::default(), cx, |window, cx| {
-                cx.new(|cx| {
+            ely_gpui_component::terminal::bind_keys(cx);
+            ely_gpui_component::editor::bind_keys(cx);
+            cx.on_window_closed(|cx, _| {
+                if cx.windows().is_empty() {
+                    cx.quit();
+                }
+            })
+            .detach();
+            let options = WindowOptions {
+                window_bounds: Some(gpui_kit::WindowBounds::Windowed(
+                    gpui_kit::Bounds::centered(None, gpui_kit::size(px(1280.), px(800.)), cx),
+                )),
+                window_min_size: Some(gpui_kit::size(px(720.), px(480.))),
+                titlebar: Some(gpui_kit::TitlebarOptions {
+                    title: Some("DevShell".into()),
+                    appears_transparent: true,
+                    ..Default::default()
+                }),
+                app_owns_titlebar_drag: true,
+                ..Default::default()
+            };
+            gpui_kit::open_window(options, cx, |window, cx| {
+                let entity=cx.new(|cx| {
                     let focus = cx.focus_handle();
                     window.focus(&focus, cx);
-                    let command_input = cx
-                        .new(|cx| InputState::new(window, cx).placeholder("终端输入，Enter 发送"));
-                    let file_name_input =
-                        cx.new(|cx| InputState::new(window, cx).placeholder("目录名称"));
-                    let secret_input = cx.new(|cx| {
-                        InputState::new(window, cx)
-                            .placeholder("SSH 密码或私钥口令")
-                            .masked(true)
+                    let command_input = cx.new(|cx| {
+                        InputState::new(window, cx).placeholder("输入命令并回车发送 · ↑↓ 历史")
                     });
-                    let profile_name_input =
-                        cx.new(|cx| InputState::new(window, cx).placeholder("服务器名称"));
-                    let profile_host_input =
-                        cx.new(|cx| InputState::new(window, cx).placeholder("服务器地址"));
-                    let profile_user_input =
-                        cx.new(|cx| InputState::new(window, cx).placeholder("用户名"));
-                    let profile_port_input = cx.new(|cx| {
-                        InputState::new(window, cx)
-                            .default_value("22")
-                            .placeholder("端口")
-                    });
-                    let profile_key_path_input =
-                        cx.new(|cx| InputState::new(window, cx).placeholder("私钥文件路径"));
+
                     let proxy_name_input =
                         cx.new(|cx| InputState::new(window, cx).placeholder("代理名称"));
                     let proxy_host_input =
@@ -2621,35 +1364,68 @@ fn main() {
                             .masked(true)
                     });
                     let preview_input =
-                        cx.new(|cx| TextareaState::new(window, cx).auto_grow(8, 24));
+                        cx.new(|cx| ely_gpui_component::editor::CodeEditor::new("",window,cx));
+                    cx.subscribe_in(
+                        &command_input,
+                        window,
+                        |state: &mut DevShellWindow,
+                         _,
+                         event: &gpui_kit::base::input::InputEvent,
+                         window,
+                         cx| {
+                            if matches!(event, gpui_kit::base::input::InputEvent::PressEnter { .. })
+                            {
+                                state.send_command(window, cx);
+                            }
+                        },
+                    )
+                    .detach();
+                    let mut ui = workspace::WorkspaceUi::new(window, cx);
+                    ui.restore(&snapshot.appearance, dark);
+                    ui.rdp.parent=DevShellWindow::native_parent(window);
+                    cx.subscribe(
+                        &ui.file_filter,
+                        |_, _, _: &gpui_kit::base::input::InputEvent, cx| cx.notify(),
+                    )
+                    .detach();
+                    cx.subscribe_in(
+                        &ui.file_path,
+                        window,
+                        |state: &mut DevShellWindow,
+                         _,
+                         event: &gpui_kit::base::input::InputEvent,
+                         _,
+                         cx| {
+                            if matches!(event, gpui_kit::base::input::InputEvent::PressEnter { .. })
+                            {
+                                let path = state.ui.file_path.read(cx).value().to_string();
+                                if !path.trim().is_empty() {
+                                    state.browse_files(path,cx);
+                                }
+                            }
+                        },
+                    )
+                    .detach();
+                    cx.subscribe(
+                        &ui.search,
+                        |_, _, _: &gpui_kit::base::input::InputEvent, cx| cx.notify(),
+                    )
+                    .detach();
                     DevShellWindow {
                         focus,
                         snapshot,
                         token: args.token.clone(),
                         settings_visible: false,
+                        ui,
+                        workspace: SessionWorkspace::default(),
+                        parked: Vec::new(),
                         update_status: None,
                         update_hash: None,
                         update_checking: false,
                         update_download: None,
-                        profile_form_open: false,
-                        profile_saving: false,
-                        pending_profile_delete: None,
-                        profile_editing_id: None,
                         connecting: None,
                         feedback: None,
-                        terminal: None,
                         command_input,
-                        file_name_input,
-                        local_path_input: cx
-                            .new(|cx| InputState::new(window, cx).placeholder("本地文件路径")),
-                        secret_input,
-                        profile_name_input,
-                        profile_host_input,
-                        profile_user_input,
-                        profile_port_input,
-                        profile_key_path_input,
-                        profile_auth: "password".into(),
-                        profile_proxy_id: None,
                         proxy_form_open: false,
                         proxy_saving: false,
                         proxy_name_input,
@@ -2662,16 +1438,18 @@ fn main() {
                         proxy_original_signature: None,
                         pending_proxy_delete: None,
                         pending_host_key: None,
-                        files: None,
-                        monitor: None,
-                        pending_delete: None,
-                        pending_rename: None,
-                        preview: None,
+                        pending_credential: None,
+                        temporary_profiles:Vec::new(),
+                        pending_dialog:None,
                         preview_input,
-                        preview_sync: None,
-                        transfers: Vec::new(),
+                        form: None,
+                        fonts:fonts::NativeFonts::default(),
                     }
-                })
+                });
+                entity.update(cx,|state,cx|{state.poll_security(cx);state.poll_rdp(cx);});
+                #[cfg(feature="visual-test")]
+                if let Some(directory)=env::var_os("DEVSHELL_VISUAL_TEST_DIR"){visual_tests::start(directory.into(),&entity,window,cx);}
+                entity
             })
             .expect("failed to open DevShell native window");
         });
@@ -2722,6 +1500,12 @@ impl BackendSnapshot {
             config_format: None,
             security_summary: None,
             proxies: Vec::new(),
+            appearance: Value::Null,
+            commands: Vec::new(),
+            keys: Vec::new(),
+            config: Value::Null,
+            security: Value::Null,
+            ui_font_runtime:Value::Null,
         };
         match get_json(base, token, "/boot.js") {
             Ok(value) => {
@@ -2742,62 +1526,19 @@ impl BackendSnapshot {
         }
         match get_json(base, token, "/api/config") {
             Ok(value) => {
-                snapshot.servers = value
-                    .get("servers")
+                snapshot.config = value.clone();
+                snapshot.appearance = value.get("appearance").cloned().unwrap_or(Value::Null);
+                snapshot.commands = value
+                    .get("commands")
                     .and_then(Value::as_array)
-                    .map(|servers| {
-                        servers
-                            .iter()
-                            .filter_map(|server| {
-                                let protocol = server
-                                    .get("protocol")
-                                    .and_then(Value::as_str)
-                                    .unwrap_or("ssh");
-                                if protocol != "ssh" {
-                                    return None;
-                                }
-                                Some(ServerSummary {
-                                    id: server.get("id")?.as_str()?.to_string(),
-                                    name: server.get("name")?.as_str()?.to_string(),
-                                    host: server.get("host")?.as_str()?.to_string(),
-                                    port: server.get("port").and_then(Value::as_u64).unwrap_or(22)
-                                        as u16,
-                                    user: server
-                                        .get("user")
-                                        .and_then(Value::as_str)
-                                        .unwrap_or_default()
-                                        .to_string(),
-                                    group: server
-                                        .get("group")
-                                        .and_then(Value::as_str)
-                                        .unwrap_or("未分组")
-                                        .to_string(),
-                                    auth: server
-                                        .get("auth")
-                                        .and_then(Value::as_str)
-                                        .unwrap_or("password")
-                                        .to_string(),
-                                    proxy_id: server
-                                        .get("proxyId")
-                                        .and_then(Value::as_str)
-                                        .unwrap_or_default()
-                                        .to_string(),
-                                    inline_proxy: server
-                                        .get("proxy")
-                                        .and_then(|value| value.get("type"))
-                                        .and_then(Value::as_str)
-                                        .map(|kind| kind != "" && kind != "direct")
-                                        .unwrap_or(false),
-                                    key_path: server
-                                        .get("keyPath")
-                                        .and_then(Value::as_str)
-                                        .unwrap_or_default()
-                                        .to_string(),
-                                })
-                            })
-                            .collect()
-                    })
+                    .cloned()
                     .unwrap_or_default();
+                snapshot.keys = value
+                    .get("keys")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default();
+                snapshot.servers=value["servers"].as_array().map(|profiles|profiles.iter().filter_map(ServerSummary::from_value).collect()).unwrap_or_default();
                 snapshot.groups = value
                     .get("groupNodes")
                     .and_then(Value::as_array)
@@ -2861,6 +1602,7 @@ impl BackendSnapshot {
             Err(error) if snapshot.error.is_none() => snapshot.error = Some(error),
             Err(_) => {}
         }
+        snapshot.ui_font_runtime=get_json(base,token,"/api/ui-fonts/runtime").unwrap_or_default();
         if let Ok(value) = get_json(base, token, "/api/config/storage") {
             snapshot.config_dir = value
                 .get("configDir")
@@ -2872,6 +1614,8 @@ impl BackendSnapshot {
                 .map(ToString::to_string);
         }
         if let Ok(value) = get_json(base, token, "/api/security-lock/status") {
+            snapshot.security=value.clone();
+            snapshot.locked=value.get("locked").and_then(Value::as_bool).unwrap_or(snapshot.locked);
             let enabled = value
                 .get("enabled")
                 .and_then(Value::as_bool)
@@ -2947,6 +1691,7 @@ fn post_session(
     stream
         .read_to_end(&mut response)
         .map_err(|error| format!("读取连接响应失败：{error}"))?;
+    let response=http::decode_response(&response)?;
     let text = String::from_utf8_lossy(&response);
     let (headers, body) = text
         .split_once("\r\n\r\n")
@@ -3008,6 +1753,10 @@ fn load_files(
             query_escape(path)
         ),
     )?;
+    Ok(parse_file_list(&value,path))
+}
+
+fn parse_file_list(value:&Value,path:&str)->FileListState {
     let entries = value
         .get("entries")
         .and_then(Value::as_array)
@@ -3018,18 +1767,30 @@ fn load_files(
                     Some(RemoteEntry {
                         name: entry.get("name")?.as_str()?.to_string(),
                         kind: entry.get("kind")?.as_str()?.to_string(),
+                        link: entry.get("link").and_then(Value::as_bool).unwrap_or(false),
                         bytes: entry.get("bytes").and_then(Value::as_i64).unwrap_or(0),
                         owner: entry
                             .get("owner")
                             .and_then(Value::as_str)
                             .unwrap_or("未知属主")
                             .to_string(),
+                        modified: entry
+                            .get("time")
+                            .and_then(Value::as_str)
+                            .unwrap_or("—")
+                            .to_owned(),
+                        modified_at: entry.get("modifiedAt").and_then(Value::as_i64).unwrap_or(0),
+                        mode: entry
+                            .get("mode")
+                            .and_then(Value::as_str)
+                            .unwrap_or("—")
+                            .to_owned(),
                     })
                 })
                 .collect()
         })
         .unwrap_or_default();
-    Ok(FileListState {
+    FileListState {
         path: value
             .get("path")
             .and_then(Value::as_str)
@@ -3037,7 +1798,7 @@ fn load_files(
             .to_string(),
         entries,
         status: "已加载".into(),
-    })
+    }
 }
 
 fn load_preview(
@@ -3055,6 +1816,7 @@ fn load_preview(
         ),
     )?;
     Ok(FilePreviewState {
+        saved_text:value.get("text").and_then(Value::as_str).unwrap_or_default().to_owned(),
         path: value
             .get("path")
             .and_then(Value::as_str)
@@ -3098,6 +1860,7 @@ fn save_file_content(
         }),
     )?;
     Ok(FilePreviewState {
+        saved_text:text.to_owned(),
         path: value
             .get("path")
             .and_then(Value::as_str)
@@ -3125,21 +1888,11 @@ fn save_file_content(
 fn load_monitor(base: &str, token: &str, session_id: &str) -> Result<MonitorState, String> {
     let value = get_json(base, token, &format!("/api/sessions/{session_id}/stats"))?;
     Ok(MonitorState {
-        cpu: value.get("cpu").and_then(Value::as_f64).unwrap_or(0.0),
-        memory_used: value.get("memoryUsed").and_then(Value::as_u64).unwrap_or(0),
-        memory_total: value
-            .get("memoryTotal")
-            .and_then(Value::as_u64)
-            .unwrap_or(0),
+        raw: value.clone(),
         load: value
             .get("load")
             .and_then(Value::as_str)
             .unwrap_or("未知")
-            .to_string(),
-        sampled_at: value
-            .get("sampledAt")
-            .and_then(Value::as_str)
-            .unwrap_or("-")
             .to_string(),
         status: if value
             .get("sampleReady")
@@ -3218,6 +1971,7 @@ fn request_transfer_action(
     stream
         .read_to_end(&mut response)
         .map_err(|error| format!("读取传输操作响应失败：{error}"))?;
+    let response=http::decode_response(&response)?;
     let text = String::from_utf8_lossy(&response);
     let (headers, body) = text
         .split_once("\r\n\r\n")
@@ -3267,6 +2021,7 @@ fn post_file_action(
     stream
         .read_to_end(&mut response)
         .map_err(|error| format!("读取文件操作响应失败：{error}"))?;
+    let response=http::decode_response(&response)?;
     let text = String::from_utf8_lossy(&response);
     let (headers, body) = text
         .split_once("\r\n\r\n")
@@ -3280,149 +2035,6 @@ fn post_file_action(
             .to_string());
     }
     Ok(())
-}
-
-fn post_upload_local(
-    base: &str,
-    token: &str,
-    session_id: &str,
-    directory: &str,
-    local_path: &str,
-) -> Result<String, String> {
-    let authority = base
-        .strip_prefix("http://")
-        .ok_or_else(|| "后端地址必须使用 http://".to_string())?;
-    let mut stream =
-        TcpStream::connect(authority).map_err(|error| format!("连接上传服务失败：{error}"))?;
-    stream
-        .set_read_timeout(Some(Duration::from_secs(20)))
-        .map_err(|error| format!("设置上传超时失败：{error}"))?;
-    let body = serde_json::json!({
-        "paths": [local_path],
-        "directory": directory,
-        "overwrite": false,
-        "overwriteTargets": [],
-        "skipTargets": [],
-    })
-    .to_string();
-    let request = format!(
-        "POST /api/sessions/{session_id}/upload-local HTTP/1.1\r\nHost: {authority}\r\nX-CloudShell-Token: {token}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-        body.len(),
-        body
-    );
-    stream
-        .write_all(request.as_bytes())
-        .map_err(|error| format!("发送上传请求失败：{error}"))?;
-    let mut response = Vec::new();
-    stream
-        .read_to_end(&mut response)
-        .map_err(|error| format!("读取上传响应失败：{error}"))?;
-    let text = String::from_utf8_lossy(&response);
-    let (headers, body) = text
-        .split_once("\r\n\r\n")
-        .ok_or_else(|| "上传响应格式无效".to_string())?;
-    let value: Value = serde_json::from_str(body.trim()).unwrap_or(Value::Null);
-    if !headers.lines().next().unwrap_or_default().contains(" 200 ") {
-        return Err(value
-            .get("error")
-            .and_then(Value::as_str)
-            .unwrap_or("上传失败")
-            .to_string());
-    }
-    Ok("上传已加入传输队列".into())
-}
-
-fn delete_session(base: &str, token: &str, session_id: &str) -> Result<(), String> {
-    let authority = base
-        .strip_prefix("http://")
-        .ok_or_else(|| "后端地址必须使用 http://".to_string())?;
-    let mut stream =
-        TcpStream::connect(authority).map_err(|error| format!("连接会话服务失败：{error}"))?;
-    stream
-        .set_read_timeout(Some(Duration::from_secs(10)))
-        .map_err(|error| format!("设置断开超时失败：{error}"))?;
-    let request = format!(
-        "DELETE /api/sessions/{session_id} HTTP/1.1\r\nHost: {authority}\r\nX-CloudShell-Token: {token}\r\nConnection: close\r\n\r\n"
-    );
-    stream
-        .write_all(request.as_bytes())
-        .map_err(|error| format!("发送断开请求失败：{error}"))?;
-    let mut response = Vec::new();
-    stream
-        .read_to_end(&mut response)
-        .map_err(|error| format!("读取断开响应失败：{error}"))?;
-    let text = String::from_utf8_lossy(&response);
-    let (headers, body) = text
-        .split_once("\r\n\r\n")
-        .ok_or_else(|| "断开响应格式无效".to_string())?;
-    if !headers.lines().next().unwrap_or_default().contains(" 200 ") {
-        let value: Value = serde_json::from_str(body.trim()).unwrap_or(Value::Null);
-        return Err(value
-            .get("error")
-            .and_then(Value::as_str)
-            .unwrap_or("断开会话失败")
-            .to_string());
-    }
-    Ok(())
-}
-
-fn download_file(
-    base: &str,
-    token: &str,
-    session_id: &str,
-    remote_path: &str,
-    name: &str,
-) -> Result<PathBuf, String> {
-    let authority = base
-        .strip_prefix("http://")
-        .ok_or_else(|| "后端地址必须使用 http://".to_string())?;
-    let mut stream =
-        TcpStream::connect(authority).map_err(|error| format!("连接下载服务失败：{error}"))?;
-    stream
-        .set_read_timeout(Some(Duration::from_secs(60)))
-        .map_err(|error| format!("设置下载超时失败：{error}"))?;
-    let request = format!(
-        "GET /api/sessions/{session_id}/download?path={} HTTP/1.1\r\nHost: {authority}\r\nX-CloudShell-Token: {token}\r\nConnection: close\r\n\r\n",
-        query_escape(remote_path)
-    );
-    stream
-        .write_all(request.as_bytes())
-        .map_err(|error| format!("发送下载请求失败：{error}"))?;
-    let mut response = Vec::new();
-    stream
-        .read_to_end(&mut response)
-        .map_err(|error| format!("读取下载内容失败：{error}"))?;
-    let marker = b"\r\n\r\n";
-    let boundary = response
-        .windows(marker.len())
-        .position(|window| window == marker)
-        .ok_or_else(|| "下载响应格式无效".to_string())?;
-    let headers = &response[..boundary];
-    let body = &response[boundary + marker.len()..];
-    let header_text = String::from_utf8_lossy(headers);
-    if !header_text
-        .lines()
-        .next()
-        .unwrap_or_default()
-        .contains(" 200 ")
-    {
-        let value: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
-        return Err(value
-            .get("error")
-            .and_then(Value::as_str)
-            .unwrap_or("下载失败")
-            .to_string());
-    }
-    let safe_name = PathBuf::from(name)
-        .file_name()
-        .and_then(|name| name.to_str())
-        .filter(|name| !name.is_empty())
-        .unwrap_or("download");
-    let directory = env::temp_dir().join("DevShellDownloads");
-    fs::create_dir_all(&directory).map_err(|error| format!("创建下载目录失败：{error}"))?;
-    let target = directory.join(safe_name);
-    fs::write(&target, body).map_err(|error| format!("保存下载文件失败：{error}"))?;
-    Ok(target)
 }
 
 fn query_escape(value: &str) -> String {
@@ -3442,8 +2054,9 @@ fn terminal_reader(
     base: &str,
     token: &str,
     session_id: &str,
+    protocol: &str,
     sender: &mpsc::Sender<TerminalEvent>,
-    input_rx: mpsc::Receiver<String>,
+    input_rx: mpsc::Receiver<TerminalInput>,
 ) -> Result<(), String> {
     let authority = base
         .strip_prefix("http://")
@@ -3455,7 +2068,7 @@ fn terminal_reader(
         key[index % key.len()] ^= byte.wrapping_add(index as u8);
     }
     let websocket_key = base64::engine::general_purpose::STANDARD.encode(key);
-    let path = format!("/api/sessions/{session_id}/terminal?token={token}&cols=120&rows=30");
+    let path = format!("{}{session_id}/terminal?token={token}&cols=120&rows=30",remote_desktop::session_root(protocol));
     let request = format!(
         "GET {path} HTTP/1.1\r\nHost: {authority}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {websocket_key}\r\nSec-WebSocket-Version: 13\r\n\r\n"
     );
@@ -3469,18 +2082,30 @@ fn terminal_reader(
             headers.lines().next().unwrap_or_default()
         ));
     }
-    let mut writer = stream
-        .try_clone()
-        .map_err(|error| format!("复制终端通道失败：{error}"))?;
+    let writer = std::sync::Arc::new(std::sync::Mutex::new(
+        stream
+            .try_clone()
+            .map_err(|error| format!("复制终端通道失败：{error}"))?,
+    ));
+    let input_writer = writer.clone();
     thread::spawn(move || {
-        while let Ok(text) = input_rx.recv() {
-            let payload = serde_json::json!({"type":"input","data":text}).to_string();
-            if write_ws_text(&mut writer, &payload).is_err() {
-                break;
+        while let Ok(input) = input_rx.recv() {
+            let payloads=match input {
+                TerminalInput::Ack=>vec![serde_json::json!({"type":"ack"}).to_string()],
+                TerminalInput::Text(text)=>terminal_input_frames(text.as_bytes()),
+                TerminalInput::Bytes(bytes)=>terminal_input_frames(&bytes),
+                TerminalInput::Resize(cols,rows)=>vec![serde_json::json!({"type":"resize","cols":cols,"rows":rows}).to_string()],
+            };
+            for payload in payloads {
+                let Ok(mut writer)=input_writer.lock()else{return;};
+                if write_ws_text(&mut writer,&payload).is_err(){return;}
             }
         }
     });
-    write_ws_text(&mut stream, r#"{"type":"resize","cols":120,"rows":30}"#)?;
+    write_ws_text(
+        &mut *writer.lock().map_err(|_| "终端发送锁失效")?,
+        r#"{"type":"resize","cols":120,"rows":30}"#,
+    )?;
     let _ = sender.send(TerminalEvent::Info("终端已连接".into()));
 
     loop {
@@ -3490,7 +2115,7 @@ fn terminal_reader(
                 if let Ok(value) = serde_json::from_slice::<Value>(&payload) {
                     match value.get("type").and_then(Value::as_str) {
                         Some("ready") => {
-                            let _ = sender.send(TerminalEvent::Info("远端 Shell 已就绪".into()));
+                            let _ = sender.send(TerminalEvent::Ready(value.get("integration").cloned().unwrap_or_default()));
                         }
                         Some("error") => {
                             let message = value
@@ -3510,14 +2135,13 @@ fn terminal_reader(
                     }
                 }
             }
-            0x2 => {
-                let _ = sender.send(TerminalEvent::Output(
-                    String::from_utf8_lossy(&payload).into_owned(),
-                ));
-                write_ws_text(&mut stream, r#"{"type":"ack"}"#)?;
-            }
+            0x2 => {let _=sender.send(TerminalEvent::Output(payload));}
             0x8 => return Ok(()),
-            0x9 => write_ws_control(&mut stream, 0xA, &payload)?,
+            0x9 => write_ws_control(
+                &mut *writer.lock().map_err(|_| "终端发送锁失效")?,
+                0xA,
+                &payload,
+            )?,
             _ => {}
         }
     }
@@ -3585,13 +2209,28 @@ fn write_ws_text(stream: &mut TcpStream, text: &str) -> Result<(), String> {
 }
 
 fn write_ws_control(stream: &mut TcpStream, opcode: u8, payload: &[u8]) -> Result<(), String> {
-    if payload.len() >= 126 {
+    let frame = websocket_frame(opcode, payload)?;
+    stream
+        .write_all(&frame)
+        .map_err(|error| format!("发送终端帧失败：{error}"))
+}
+
+fn websocket_frame(opcode: u8, payload: &[u8]) -> Result<Vec<u8>, String> {
+    if opcode >= 0x8 && payload.len() >= 126 {
         return Err("终端控制帧过大".into());
     }
     let mask = [0x52, 0x41, 0x57, 0x01];
     let mut frame = Vec::with_capacity(payload.len() + 6);
     frame.push(0x80 | opcode);
-    frame.push(0x80 | payload.len() as u8);
+    if payload.len() < 126 {
+        frame.push(0x80 | payload.len() as u8);
+    } else if payload.len() <= u16::MAX as usize {
+        frame.push(0x80 | 126);
+        frame.extend_from_slice(&(payload.len() as u16).to_be_bytes());
+    } else {
+        frame.push(0x80 | 127);
+        frame.extend_from_slice(&(payload.len() as u64).to_be_bytes());
+    }
     frame.extend_from_slice(&mask);
     frame.extend(
         payload
@@ -3599,9 +2238,7 @@ fn write_ws_control(stream: &mut TcpStream, opcode: u8, payload: &[u8]) -> Resul
             .enumerate()
             .map(|(index, byte)| byte ^ mask[index % 4]),
     );
-    stream
-        .write_all(&frame)
-        .map_err(|error| format!("发送终端控制帧失败：{error}"))
+    Ok(frame)
 }
 
 fn check_updates(base: &str, token: &str) -> Result<UpdateCheckResult, String> {
@@ -3679,11 +2316,11 @@ fn parse_update_download(value: &Value) -> UpdateDownloadState {
 }
 
 fn start_update_download(view: Entity<DevShellWindow>, hash: String, cx: &mut App) {
+    cx.defer(move|cx|{
     let _ = view.update(cx, |state, cx| {
         let base = state.snapshot.base.clone();
         let token = state.token.clone();
         state.feedback = Some("正在启动更新下载…".into());
-        let view = cx.entity();
         cx.spawn(async move |this, cx| {
             let request_base = base.clone();
             let request_token = token.clone();
@@ -3762,14 +2399,15 @@ fn start_update_download(view: Entity<DevShellWindow>, hash: String, cx: &mut Ap
         })
         .detach();
     });
+    });
 }
 
 fn cancel_update_download(view: Entity<DevShellWindow>, job_id: String, cx: &mut App) {
+    cx.defer(move|cx|{
     let _ = view.update(cx, |state, cx| {
         let base = state.snapshot.base.clone();
         let token = state.token.clone();
         state.feedback = Some("正在取消更新下载…".into());
-        let view = cx.entity();
         cx.spawn(async move |this, cx| {
             let result = cx
                 .background_executor()
@@ -3792,14 +2430,15 @@ fn cancel_update_download(view: Entity<DevShellWindow>, job_id: String, cx: &mut
         })
         .detach();
     });
+    });
 }
 
 fn install_update(view: Entity<DevShellWindow>, job_id: String, cx: &mut App) {
+    cx.defer(move|cx|{
     let _ = view.update(cx, |state, cx| {
         let base = state.snapshot.base.clone();
         let token = state.token.clone();
         state.feedback = Some("正在准备安装更新…".into());
-        let view = cx.entity();
         cx.spawn(async move |this, cx| {
             let result = cx
                 .background_executor()
@@ -3830,42 +2469,7 @@ fn install_update(view: Entity<DevShellWindow>, job_id: String, cx: &mut App) {
         })
         .detach();
     });
-}
-
-fn save_profile_and_reload(
-    base: &str,
-    token: &str,
-    profile_id: Option<&str>,
-    auth: &str,
-    key_path: &str,
-    proxy_id: Option<&str>,
-    name: &str,
-    host: &str,
-    port: u16,
-    user: &str,
-    secret: &str,
-) -> Result<BackendSnapshot, String> {
-    let mut profile = serde_json::json!({
-        "id": profile_id.unwrap_or_default(),
-        "name": name,
-        "host": host,
-        "port": port,
-        "user": user,
-        "protocol": "ssh",
-        "auth": auth,
-        "groupId": "",
     });
-    if auth == "key" {
-        profile["keyPath"] = Value::String(key_path.to_string());
-    }
-    if let Some(proxy_id) = proxy_id {
-        profile["proxyId"] = Value::String(proxy_id.to_string());
-    }
-    if auth == "password" && !secret.is_empty() {
-        profile["secret"] = Value::String(secret.to_string());
-    }
-    post_json(base, token, "/api/profiles", profile)?;
-    Ok(BackendSnapshot::load(base, token))
 }
 
 fn save_proxy_and_reload(
@@ -3899,11 +2503,11 @@ fn save_proxy_and_reload(
 }
 
 fn delete_proxy_and_reload(view: Entity<DevShellWindow>, proxy_id: String, cx: &mut App) {
+    cx.defer(move|cx|{
     let _ = view.update(cx, |state, cx| {
         let base = state.snapshot.base.clone();
         let token = state.token.clone();
         state.feedback = Some("正在删除代理配置…".into());
-        let view = cx.entity();
         cx.spawn(async move |this, cx| {
             let result = cx
                 .background_executor()
@@ -3926,28 +2530,21 @@ fn delete_proxy_and_reload(view: Entity<DevShellWindow>, proxy_id: String, cx: &
         })
         .detach();
     });
+    });
 }
 
-fn delete_profile_and_reload(
-    base: &str,
-    token: &str,
-    profile_id: &str,
-) -> Result<BackendSnapshot, String> {
-    delete_json(base, token, &format!("/api/profiles/{profile_id}"))?;
-    Ok(BackendSnapshot::load(base, token))
-}
-
-fn post_json(base: &str, token: &str, path: &str, body: Value) -> Result<Value, String> {
+fn post_json(base:&str,token:&str,path:&str,body:Value)->Result<Value,String>{json_body_request("POST",base,token,path,body)}
+fn json_body_request(method:&str,base: &str, token: &str, path: &str, body: Value) -> Result<Value, String> {
     let authority = base
         .strip_prefix("http://")
         .ok_or_else(|| "后端地址必须使用 http://".to_string())?;
     let mut stream = TcpStream::connect(authority).map_err(|error| format!("连接失败：{error}"))?;
     stream
-        .set_read_timeout(Some(Duration::from_secs(12)))
+        .set_read_timeout(Some(Duration::from_secs(if path.ends_with("/upload-check")||path.ends_with("/upload-local"){60}else{12})))
         .map_err(|error| format!("设置超时失败：{error}"))?;
     let body = body.to_string();
     let request = format!(
-        "POST {path} HTTP/1.1\r\nHost: {authority}\r\nX-CloudShell-Token: {token}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        "{method} {path} HTTP/1.1\r\nHost: {authority}\r\nX-CloudShell-Token: {token}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
         body.len(),
         body
     );
@@ -3958,6 +2555,7 @@ fn post_json(base: &str, token: &str, path: &str, body: Value) -> Result<Value, 
     stream
         .read_to_end(&mut response)
         .map_err(|error| format!("读取响应失败：{error}"))?;
+    let response=http::decode_response(&response)?;
     let text = String::from_utf8_lossy(&response);
     let (headers, body) = text
         .split_once("\r\n\r\n")
@@ -3980,7 +2578,7 @@ fn delete_json(base: &str, token: &str, path: &str) -> Result<Value, String> {
         .ok_or_else(|| "后端地址必须使用 http://".to_string())?;
     let mut stream = TcpStream::connect(authority).map_err(|error| format!("连接失败：{error}"))?;
     stream
-        .set_read_timeout(Some(Duration::from_secs(12)))
+        .set_read_timeout(Some(Duration::from_secs(if path.ends_with("/upload-check")||path.ends_with("/upload-local"){60}else{12})))
         .map_err(|error| format!("设置超时失败：{error}"))?;
     let request = format!(
         "DELETE {path} HTTP/1.1\r\nHost: {authority}\r\nX-CloudShell-Token: {token}\r\nConnection: close\r\n\r\n"
@@ -3992,6 +2590,7 @@ fn delete_json(base: &str, token: &str, path: &str) -> Result<Value, String> {
     stream
         .read_to_end(&mut response)
         .map_err(|error| format!("读取删除响应失败：{error}"))?;
+    let response=http::decode_response(&response)?;
     let text = String::from_utf8_lossy(&response);
     let (headers, body) = text
         .split_once("\r\n\r\n")
@@ -4026,6 +2625,7 @@ fn get_json(base: &str, token: &str, path: &str) -> Result<Value, String> {
     stream
         .read_to_end(&mut response)
         .map_err(|error| format!("读取响应失败：{error}"))?;
+    let response=http::decode_response(&response)?;
     let text = String::from_utf8_lossy(&response);
     let (headers, body) = text
         .split_once("\r\n\r\n")
@@ -4043,4 +2643,296 @@ fn get_json(base: &str, token: &str, path: &str) -> Result<Value, String> {
         body
     };
     serde_json::from_str(body.trim()).map_err(|error| format!("解析后端响应失败：{error}"))
+}
+
+impl DevShellWindow {
+    fn connect_profile(&mut self,server:ServerSummary,cx:&mut Context<Self>) {
+        let secret=self.pending_host_key.as_ref().filter(|pending|pending.profile_id==server.id).map(|pending|pending.secret.clone()).unwrap_or_default();
+        if secret.is_empty() && needs_credential(&server.raw) {self.pending_credential=Some(server);cx.notify();return;}
+        self.connect_profile_with_secret(server,secret,cx);
+    }
+    fn connect_profile_with_secret(&mut self,server:ServerSummary,secret:String,cx:&mut Context<Self>) {
+        if server.protocol=="rdp" {self.connect_rdp(server,secret,cx);return;}
+        let protocol=if server.protocol=="serial" {"serial"}else{"ssh"}.to_string();
+        let auto_commands=if self.snapshot.appearance["autoCommandsEnabled"].as_bool().unwrap_or(true)&&server.raw["autoRun"].as_bool().unwrap_or(false){server.raw.get("autoCommands").and_then(Value::as_array).map(|a|a.iter().filter_map(Value::as_str).filter(|s|!s.trim().is_empty()).map(ToString::to_string).collect()).unwrap_or_default()}else{Vec::new()};
+        let pending_secret=secret.clone();
+        let profile_id=server.id.clone();
+        let state=self;
+
+                                let base = state.snapshot.base.clone();
+                                let token = state.token.clone();
+                                let approval = state
+                                    .pending_host_key
+                                    .as_ref()
+                                    .filter(|pending| pending.profile_id == profile_id)
+                                    .map(|pending| pending.challenge.clone());
+                                state.connecting = Some(profile_id.clone());
+                                state.feedback = Some("正在连接服务器…".into());
+                                cx.notify();
+                                let request_profile_id = profile_id.clone();
+                                let request_approval = approval.clone();
+                                let request_protocol=protocol.clone();
+                                cx.spawn(async move |this, cx| {
+                                    let result = cx
+                                        .background_executor()
+                                        .spawn(
+                                            async move {
+                                                if request_protocol=="serial" {
+                                                    let value=post_json(&base,&token,"/api/serial/sessions",serde_json::json!({"profileId":request_profile_id})).map_err(SessionConnectError::Message)?;
+                                                    value.get("id").and_then(Value::as_str).map(ToString::to_string).ok_or_else(||SessionConnectError::Message("串口会话没有返回 ID".into()))
+                                                } else {
+post_session(
+                                                    &base,
+                                                    &token,
+                                                    &request_profile_id,
+                                                    &secret,
+                                                    request_approval.as_ref(),
+                                                )
+                                                }
+                                            },
+                                        )
+                                        .await;
+                                    let _ = this.update(cx, |state, cx| {
+                                        state.connecting = None;
+                                        match result {
+                                            Ok(session_id)=>state.attach_terminal_session(server,session_id,protocol,auto_commands,cx),
+                                            Err(SessionConnectError::HostKey(challenge)) => {
+                                                state.pending_host_key = Some(PendingHostKey {
+                                                    profile_id: profile_id.clone(),
+                                                    challenge,
+                                                    secret:pending_secret,
+                                                });
+                                                state.feedback = Some(
+                                                    "请核实服务器主机指纹，再次点击同一服务器按钮确认。"
+                                                        .into(),
+                                                );
+                                            }
+                                            Err(SessionConnectError::Message(error)) => {
+                                                state.feedback = Some(error)
+                                            }
+                                        }
+                                        cx.notify();
+                                    });
+                                })
+                                .detach();
+
+    }
+}
+
+fn needs_credential(profile:&Value)->bool {
+    let protocol=forms::string(profile,"protocol");let auth=forms::string(profile,"auth");
+    protocol!="serial" && !profile["hasSecret"].as_bool().unwrap_or(false) && (protocol=="rdp"||auth=="password"||auth.is_empty()||(auth=="key"&&forms::string(profile,"keyId").is_empty()))
+}
+
+fn terminal_input_frames(bytes:&[u8])->Vec<String> {
+    bytes.chunks(32768).map(|chunk|serde_json::json!({"type":"input","dataBase64":base64::engine::general_purpose::STANDARD.encode(chunk)}).to_string()).collect()
+}
+
+impl DevShellWindow {
+    fn find_profile(&self,id:&str)->Option<ServerSummary>{self.snapshot.servers.iter().chain(self.temporary_profiles.iter()).find(|server|server.id==id).cloned()}
+    fn attach_terminal_session(&mut self,server:ServerSummary,session_id:String,protocol:String,auto_commands:Vec<String>,cx:&mut Context<Self>){
+        let profile_id=server.id.clone();let session_name=server.name.clone();let session_host=if protocol=="serial"{forms::string(&server.raw,"serialPort")}else if protocol=="local"{"本机终端".into()}else{format!("{}@{}:{}",server.user,server.host,server.port)};let state=self;
+
+                                                state.pending_host_key = None;
+                                                state.feedback = Some(format!(
+                                                    "连接已建立，会话 {}；正在打开终端。",
+                                                    session_id
+                                                ));
+                                                let (sender, receiver) = mpsc::channel();
+                                                let (input_tx, input_rx) = mpsc::channel();
+                                                let base = state.snapshot.base.clone();
+                                                let token = state.token.clone();
+                                                let terminal_id = session_id.clone();
+                                                let reader_protocol=protocol.clone();
+                                                thread::spawn(move || {
+                                                    let event = match terminal_reader(
+                                                        &base,
+                                                        &token,
+                                                        &terminal_id,
+                                                        &reader_protocol,
+                                                        &sender,
+                                                        input_rx,
+                                                    ) {
+                                                        Ok(()) => TerminalEvent::Closed(
+                                                            "终端连接已关闭".into(),
+                                                        ),
+                                                        Err(error) => TerminalEvent::Closed(
+                                                            format!("终端错误：{error}"),
+                                                        ),
+                                                    };
+                                                    let _ = sender.send(event);
+                                                });
+                                                if let Some(preview) = &mut state.workspace.preview { preview.text = state.preview_input.read(cx).text().to_string(); }
+                                                state.park_session();
+                                                if let Some(index)=state.ui.active_start.take() {state.ui.start_tabs.retain(|&id|id!=index);}
+                                                state.ui.session_order.push(session_id.clone());
+                                                state.ui.connections_visible = false;
+                                                let vt_sender=input_tx.clone();
+                                                let terminal_view=cx.new(move|cx|ely_gpui_component::terminal::Terminal::remote(120,30,move|event|{
+                                                    use ely_gpui_component::terminal::RemoteEvent;
+                                                    let input=match event {RemoteEvent::Input(bytes)=>TerminalInput::Bytes(bytes),RemoteEvent::Resize(columns,rows)=>TerminalInput::Resize(columns,rows)};
+                                                    let _=vt_sender.send(input);
+                                                },cx));
+                                                state.workspace.terminal = Some(TerminalState {
+                                                    protocol: protocol.clone(),
+                                                    profile_id: profile_id.clone(),
+                                                    name: session_name,
+                                                    host: session_host,
+                                                    session_id: session_id.clone(),
+                                                    screen: Default::default(),
+                                                    status: "连接中".into(),
+                                                    input_tx: Some(input_tx),
+                                                    view: Some(terminal_view.clone()),
+                                                });
+                                                let input_session=session_id.clone();cx.subscribe(&terminal_view,move|state,_,event:&ely_gpui_component::terminal::TerminalEvent,cx|{match event{ely_gpui_component::terminal::TerminalEvent::Find=>{state.ui.terminal_search_visible=true;state.ui.terminal_search_focus=true;cx.notify();},ely_gpui_component::terminal::TerminalEvent::Input=>{if let Some(session)=state.session_mut(&input_session){session.integration.at_prompt=false;}},_=>{}}}).detach();
+                                                state.workspace.auto_commands=auto_commands;
+                                                state.workspace.command_history = state.snapshot.appearance.get("layout").and_then(|layout|layout.get(format!("dengshell.history.{profile_id}"))).and_then(Value::as_array).map(|items|items.iter().filter_map(Value::as_str).map(ToString::to_string).collect()).unwrap_or_default();
+                                                let output_session = session_id.clone();
+                                                let view = cx.entity().downgrade();
+                                                cx.spawn(async move |_, cx| {
+                                                    let mut closed = false;
+                                                    while !closed {
+                                                        if view.upgrade().is_none() { break; }
+                                                        while let Ok(event) = receiver.try_recv() {
+                                                            let _ = view.update(cx, |state, cx| {
+                                                                closed=state.accept_terminal_event(&output_session,event,cx);
+                                                                cx.notify();
+                                                            });
+                                                        }
+                                                        let _=view.update(cx,|state,cx|state.advance_auto_commands(&output_session,cx));
+                                                        if !closed {
+                                                            cx.background_executor()
+                                                                .timer(Duration::from_millis(50))
+                                                                .await;
+                                                        }
+                                                    }
+                                                })
+                                                .detach();
+                                                if protocol=="ssh" {
+                                                let files_base = state.snapshot.base.clone();
+                                                let files_token = state.token.clone();
+                                                let files_session = session_id.clone();
+                                                let files_result_session = session_id.clone();
+                                                let files_view = cx.entity().downgrade();
+                                                cx.spawn(async move |_, cx| {
+                                                    let result = cx
+                                                        .background_executor()
+                                                        .spawn(async move {
+                                                            load_files(
+                                                                &files_base,
+                                                                &files_token,
+                                                                &files_session,
+                                                                "/",
+                                                            )
+                                                        })
+                                                        .await;
+                                                    let _ = files_view.update(cx, |state, cx| {
+                                                        let Some(session) = state.session_mut(&files_result_session) else { return; };
+                                                        session.selected_file = None;
+                session.files = Some(match result {
+                                                            Ok(files) => files,
+                                                            Err(error) => FileListState {
+                                                                path: "/".into(),
+                                                                entries: Vec::new(),
+                                                                status: error,
+                                                            },
+                                                        });
+                                                        cx.notify();
+                                                    });
+                                                })
+                                                .detach();
+                                                let monitor_base = state.snapshot.base.clone();
+                                                let monitor_token = state.token.clone();
+                                                let transfer_session = session_id.clone();
+                                                let monitor_session = session_id.clone();
+                                                let monitor_result_session = session_id.clone();
+                                                let transfer_result_session = session_id;
+                                                let monitor_view = cx.entity().downgrade();
+                                                cx.spawn(async move |_, cx| {
+                                                    loop {
+                                                        let result = cx
+                                                            .background_executor()
+                                                            .spawn({
+                                                                let monitor_base = monitor_base.clone();
+                                                                let monitor_token = monitor_token.clone();
+                                                                let monitor_session = monitor_session.clone();
+                                                                async move {
+                                                                    load_monitor(
+                                                                        &monitor_base,
+                                                                        &monitor_token,
+                                                                        &monitor_session,
+                                                                    )
+                                                                }
+                                                            })
+                                                            .await;
+                                                        if monitor_view
+                                                            .update(cx, |state, cx| {
+                                                                let Some(session) = state.session_mut(&monitor_result_session) else { return false; };
+                                                                session.monitor = Some(match result {
+                                                                    Ok(monitor) => {
+                                                                        monitor
+                                                                    },
+                                                                    Err(error) => MonitorState {
+                                                                        raw: Value::Null,
+                                                                        load: "未知".into(),
+                                                                        status: error,
+                                                                    },
+                                                                });
+                                                                cx.notify();
+                                                                true
+                                                            })
+                                                            .unwrap_or(false) == false
+                                                        {
+                                                            break;
+                                                        }
+                                                        cx.background_executor()
+                                                            .timer(Duration::from_secs(5))
+                                                            .await;
+                                                    }
+                                                })
+                                                .detach();
+                                                let transfer_base = state.snapshot.base.clone();
+                                                let transfer_token = state.token.clone();
+                                                let transfer_view = cx.entity().downgrade();
+                                                cx.spawn(async move |_, cx| {
+                                                    loop {
+                                                        let result = cx
+                                                            .background_executor()
+                                                            .spawn({
+                                                                let transfer_base = transfer_base.clone();
+                                                                let transfer_token = transfer_token.clone();
+                                                                let transfer_session = transfer_session.clone();
+                                                                async move {
+                                                                    load_transfers(
+                                                                        &transfer_base,
+                                                                        &transfer_token,
+                                                                        &transfer_session,
+                                                                    )
+                                                                }
+                                                            })
+                                                            .await;
+                                                        if transfer_view
+                                                            .update(cx, |state, cx| {
+                                                                let Some(session) = state.session_mut(&transfer_result_session) else { return false; };
+                                                                let refresh=if let Ok(transfers) = result {
+                                                                    let completed=transfers.iter().any(|t|t.status=="done"&&!session.transfers.iter().any(|old|old.id==t.id&&old.status=="done"));session.transfers=transfers;
+                                                                    if completed{session.files.as_ref().map(|f|f.path.clone())}else{None}
+                                                                }else{None};
+                                                                if let Some(path)=refresh{navigate_files_for(cx.entity(),transfer_result_session.clone(),path,cx);}
+
+                                                                cx.notify();
+                                                                true
+                                                            })
+                                                            .unwrap_or(false) == false
+                                                        {
+                                                            break;
+                                                        }
+                                                        cx.background_executor()
+                                                            .timer(Duration::from_secs(2))
+                                                            .await;
+                                                    }
+                                                })
+                                                .detach();
+                                                }
+    }
 }
