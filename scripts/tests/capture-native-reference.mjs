@@ -14,6 +14,13 @@ try {
  await page.reload({waitUntil:'networkidle0'});
  await page.evaluate(()=>{for(const dialog of document.querySelectorAll('dialog[open]'))dialog.close();document.querySelector('#window-controls').hidden=false;});
  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+ await page.evaluate(enrollment=>{const realFetch=window.fetch;window.fetch=(url,options)=>{
+  const path=String(url),status=window.__captureSecurity;
+  if(status&&path.endsWith('/api/security-lock/status'))return Promise.resolve(new Response(JSON.stringify(status),{headers:{'Content-Type':'application/json'}}));
+  if(status&&path.endsWith('/api/security-lock/authorize'))return Promise.resolve(new Response(JSON.stringify({grant:'visual-only'}),{headers:{'Content-Type':'application/json'}}));
+  if(status&&path.endsWith('/api/security-lock/enroll'))return Promise.resolve(new Response(JSON.stringify(enrollment),{headers:{'Content-Type':'application/json'}}));
+  return realFetch(url,options);
+ };},fixture.enrollment);
  const metrics=globalThis.captureMetrics={};
  const capture=async name=>{
   await new Promise(resolve=>setTimeout(resolve,250));
@@ -46,6 +53,14 @@ try {
    }
    if(stage==='keys'){
     for(const [name,trigger] of [['key-import','import-key'],['key-generate','generate-key']]){await page.click('#'+trigger);await capture(name+'-'+theme);await page.click('#cancel-key-editor');}
+   }
+   if(stage==='security'){
+    await page.evaluate(()=>{document.getElementById('security-lock-settings').close();window.__captureSecurity={enabled:true,locked:false,passwordConfigured:true,twoFactorConfigured:true,idleSeconds:300,revision:100};document.getElementById('manage-security-lock').click();});
+    await new Promise(resolve=>setTimeout(resolve,200));await capture('security-authorize-'+theme);
+    await page.type('#security-auth-value','fixture-proof');await page.click('#security-auth-button');await new Promise(resolve=>setTimeout(resolve,150));await capture('security-enabled-'+theme);
+    await page.click('#security-enroll-start');await new Promise(resolve=>setTimeout(resolve,150));await capture('security-enrollment-'+theme);
+    await page.evaluate(()=>{const body=document.querySelector('.security-settings-body');body.scrollTop=body.scrollHeight;});await capture('security-enrollment-bottom-'+theme);
+    await page.evaluate(()=>{window.__captureSecurity={enabled:false,locked:false,passwordConfigured:false,twoFactorConfigured:false,revision:100};});
    }
    await page.evaluate(()=>{for(const d of document.querySelectorAll('dialog[open]'))d.close();});
   }
@@ -81,16 +96,18 @@ try {
  // The original JS still builds and switches all lock-screen states.
  await page.evaluate(()=>{const realFetch=window.fetch;window.fetch=(url,options)=>String(url).endsWith('/api/security-lock/status')&&window.__captureLockStatus?Promise.resolve(new Response(JSON.stringify(window.__captureLockStatus),{headers:{'Content-Type':'application/json'}})):realFetch(url,options);});
  for(const theme of ['light','dark']){
-  for(const stage of ['lock-message','lock-password','lock-totp','lock-retry']){
+  for(const stage of ['lock-message','lock-password','lock-totp','lock-retry','lock-exit']){
    await page.evaluate(({theme,stage})=>{
     DevShellTheme.set(theme);window.__captureLockStatus={enabled:true,locked:true,passwordConfigured:stage!=='lock-totp',twoFactorConfigured:true,passwordHint:'测试密码提示',revision:1000,retryAfterSeconds:stage==='lock-retry'?12:0};
-    document.getElementById('security-unlock-form').hidden=true;document.getElementById('security-lock-message').hidden=false;
+    document.getElementById('security-unlock-form').hidden=true;document.getElementById('security-lock-message').hidden=false;document.getElementById('security-exit-form').hidden=true;
     DengSecurityLock.blocked();
    },{theme,stage});
    await new Promise(resolve=>setTimeout(resolve,200));
    if(stage!=='lock-message')await page.click('#security-unlock-open');
+   await page.evaluate(stage=>{document.getElementById('security-window-close').hidden=false;if(stage==='lock-retry'){const method=document.getElementById('security-unlock-method');method.value='password';method.dispatchEvent(new Event('change'));}if(stage==='lock-exit')DengSecurityLock.confirmExit('确认关闭当前窗口。其他独立窗口会保持运行。',async()=>{},async()=>{});},stage);
    if(stage==='lock-retry')await page.evaluate(()=>{document.getElementById('security-unlock-error').textContent='密码或验证码不正确';});
    await capture(stage+'-'+theme);
+   if(stage==='lock-exit')await page.click('#security-exit-cancel');
   }
  }
  await fs.writeFile(path.join(output,'metrics.json'),JSON.stringify(metrics,null,2));

@@ -328,6 +328,10 @@ impl Render for DevShellWindow {
         if self.ui.terminal_search_focus{use gpui_kit::Focusable;self.ui.terminal_search_focus=false;window.focus(&self.ui.terminal_search.read(cx).focus_handle(cx),cx);}
         if let Some(server)=self.pending_credential.take(){self.open_native_form("credentials",server.raw,window,cx);}
         if self.ui.settings.clear_unlock {self.ui.settings.clear_unlock=false;self.ui.settings.unlock.update(cx,|input,cx|input.set_value("",window,cx));}
+        if let Some(form)=self.form.as_mut().filter(|f|f.kind=="security") {
+            if form.original["_clearProof"]==true{form.original["_clearProof"]=false.into();form.inputs["authValue"].update(cx,|input,cx|input.set_value("",window,cx));}
+            if form.original["_refreshEnrollment"]==true{form.original["_refreshEnrollment"]=false.into();let secret=crate::forms::string(&form.original["_enrollment"],"secret");form.inputs["enrollmentSecret"].update(cx,|input,cx|input.set_value(secret,window,cx));form.inputs["code"].update(cx,|input,cx|input.set_value("",window,cx));}
+        }
         if let Some(text) = self.workspace.preview_sync.take() {
             if let Some(editor)=self.workspace.editor.clone(){self.preview_input=editor;}
             else{let language=self.workspace.preview.as_ref().map(|p|editor_language(&p.path)).unwrap_or("Plain Text");self.preview_input=cx.new(|cx|ely_gpui_component::editor::CodeEditor::new(text.clone(),window,cx).language(language));self.workspace.editor=Some(self.preview_input.clone());}
@@ -504,10 +508,7 @@ impl Render for DevShellWindow {
                         icon_tool("window-maximize", "maximise", "最大化 / 还原").w(px(34.)).on_click(|_, window, _| window.zoom_window()),
                     )
                     .child(
-                        icon_tool("window-close", "close", "关闭窗口").w(px(34.)).on_click(cx.listener(|state, _, _, cx| {
-                            state.ui.close_visible = true;
-                            cx.notify();
-                        })),
+                        icon_tool("window-close", "close", "关闭窗口").w(px(34.)).on_click(cx.listener(|state, _, window, cx| state.request_window_close(window,cx))),
                     )
                     ),
             )
@@ -590,7 +591,7 @@ impl Render for DevShellWindow {
             .when(self.workspace.file_ui.menu.is_some(),|root|root.child(self.file_context_menu(p,window,cx)))
             .when(self.form.is_some(),|root|root.child(self.native_form_dialog(p,window,cx)))
             .when_some(self.workspace.preview.clone(),|root,preview|root.child(file_preview_panel(p,preview,self.preview_input.clone(),cx.entity())))
-            .when(self.ui.close_visible, |root| {
+            .when(self.ui.close_visible&&!self.snapshot.locked, |root| {
                 root.child(
                     overlay(
                         p,

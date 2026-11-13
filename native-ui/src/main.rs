@@ -1450,6 +1450,10 @@ fn main() {
                     }
                 });
                 entity.update(cx,|state,cx|{state.poll_security(cx);state.poll_rdp(cx);});
+                let close_entity=entity.downgrade();
+                window.on_window_should_close(cx,move|window,cx|{
+                    close_entity.update(cx,|state,cx|state.request_window_close(window,cx)).is_err()
+                });
                 #[cfg(feature="visual-test")]
                 if let Some(directory)=env::var_os("DEVSHELL_VISUAL_TEST_DIR"){visual_tests::start(directory.into(),&entity,window,cx);}
                 entity

@@ -2,7 +2,7 @@
 use super::*;
 use crate::{
     forms::{NativeForm, string},
-    workspace::{Palette, icon},
+    workspace::{Palette, icon, icon_tool},
 };
 use gpui_kit::{
     Div, Focusable,
@@ -27,6 +27,151 @@ pub(super) fn unlock_methods(status: &Value) -> Vec<(String, String)> {
 }
 
 impl DevShellWindow {
+    pub(super) fn request_window_close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.ui.close_visible {
+            return;
+        }
+        self.ui.close_visible = true;
+        if self.snapshot.locked {
+            self.ui
+                .settings
+                .unlock
+                .update(cx, |input, cx| input.set_value("", window, cx));
+            self.ui.settings.lock_focus.focus(window, cx);
+        }
+        cx.notify();
+    }
+
+    pub(super) fn cancel_locked_close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.ui.close_visible = false;
+        if self.ui.settings.unlock_form.is_some() {
+            self.ui
+                .settings
+                .unlock
+                .read(cx)
+                .focus_handle(cx)
+                .focus(window, cx);
+        } else {
+            self.ui.settings.lock_focus.focus(window, cx);
+        }
+        cx.notify();
+    }
+
+    fn locked_exit_description(&self, cx: &App) -> String {
+        let mut count = 0;
+        let mut unsaved = 0;
+        let mut transfers = std::collections::BTreeSet::new();
+        for session in std::iter::once(&self.workspace).chain(self.parked.iter()) {
+            if session
+                .terminal
+                .as_ref()
+                .is_some_and(|t| t.protocol == "ssh" && t.input_tx.is_some())
+            {
+                count += 1;
+            }
+            for transfer in &session.transfers {
+                if matches!(transfer.status.as_str(), "queued" | "uploading") {
+                    transfers.insert(&transfer.id);
+                }
+            }
+            if let Some(preview) = session.preview.as_ref() {
+                let text = session
+                    .editor
+                    .as_ref()
+                    .map(|editor| editor.read(cx).text().to_string())
+                    .unwrap_or_else(|| preview.text.clone());
+                if text != preview.saved_text {
+                    unsaved += 1;
+                }
+            }
+        }
+        close_description(count, transfers.len(), unsaved)
+    }
+
+    fn locked_exit_screen(&self, p: Palette, cx: &mut Context<Self>) -> Div {
+        div()
+            .absolute()
+            .inset_0()
+            .p(px(24.))
+            .bg(gpui_kit::rgb(if self.ui.dark {
+                0x0b1015
+            } else {
+                0x27333c
+            }))
+            .occlude()
+            .track_focus(&self.ui.settings.lock_focus)
+            .flex()
+            .items_center()
+            .justify_center()
+            .on_key_down(cx.listener(|_, _, _, cx| cx.stop_propagation()))
+            .child(
+                div()
+                    .w(px(400.))
+                    .max_w_full()
+                    .p(px(28.))
+                    .border_1()
+                    .border_color(gpui_kit::rgb(p.border))
+                    .rounded(px(20.))
+                    .bg(gpui_kit::rgb(p.surface))
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .child(
+                        div()
+                            .size(px(52.))
+                            .mb(px(16.))
+                            .rounded(px(17.))
+                            .border_1()
+                            .border_color(gpui_kit::rgb(p.border))
+                            .bg(gpui_kit::rgb(if self.ui.dark { p.inset } else { 0xf6f8fa }))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .child(icon("close", 26.)),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(21.))
+                            .line_height(px(31.5))
+                            .font_weight(gpui_kit::FontWeight(550.))
+                            .child("关闭当前窗口？"),
+                    )
+                    .child(
+                        div()
+                            .w_full()
+                            .text_center()
+                            .mt(px(10.))
+                            .mb(px(24.))
+                            .text_size(px(12.))
+                            .line_height(px(20.4))
+                            .text_color(gpui_kit::rgb(p.muted))
+                            .child(self.locked_exit_description(cx)),
+                    )
+                    .child(
+                        KitButton::new("security-exit-confirm")
+                            .primary()
+                            .w_full()
+                            .h(px(40.))
+                            .rounded(px(10.))
+                            .label("关闭窗口")
+                            .on_click(|_, _, cx| cx.quit()),
+                    )
+                    .child(
+                        KitButton::new("security-exit-cancel")
+                            .ghost()
+                            .w_full()
+                            .h(px(36.))
+                            .mt(px(10.))
+                            .rounded(px(9.))
+                            .label("继续保持锁定")
+                            .on_click(cx.listener(|state, _, window, cx| {
+                                state.cancel_locked_close(window, cx)
+                            })),
+                    ),
+            )
+            .into()
+    }
+
     pub(super) fn open_unlock(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let methods = unlock_methods(&self.snapshot.security);
         let method = if methods.first().is_some_and(|m| m.0 == "totp") {
@@ -113,6 +258,9 @@ impl DevShellWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Div {
+        if self.ui.close_visible {
+            return self.locked_exit_screen(p, cx);
+        }
         let editing = self.ui.settings.unlock_form.is_some();
         if !editing && !self.ui.settings.lock_focus.contains_focused(window, cx) {
             self.ui.settings.lock_focus.focus(window, cx);
@@ -370,6 +518,26 @@ impl DevShellWindow {
                 }),
             )
             .child(card)
+            .child(div().absolute().top(px(12.)).right(px(12.)).child(
+                icon_tool("security-window-close", "close", "关闭窗口").on_click(
+                    cx.listener(|state, _, window, cx| state.request_window_close(window, cx)),
+                ),
+            ))
             .into()
     }
+}
+
+pub(super) fn close_description(count: usize, transfers: usize, unsaved: usize) -> String {
+    let mut description = if count > 0 {
+        format!("将关闭当前窗口，断开其中 {count} 个 SSH 会话。其他独立窗口会保持运行。")
+    } else {
+        "确认关闭当前窗口。其他独立窗口会保持运行。".into()
+    };
+    if transfers > 0 {
+        description.push_str(&format!(" {transfers} 个传输任务尚未完成。"));
+    }
+    if unsaved > 0 {
+        description.push_str(&format!(" {unsaved} 个远程文件有未保存的修改，退出会丢弃这些修改。请先返回编辑器保存，或明确选择丢弃后继续。"));
+    }
+    description
 }

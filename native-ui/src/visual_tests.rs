@@ -11,6 +11,7 @@ pub(super) fn start(
     entity.update(cx, |_, cx| {
         cx.spawn_in(window, async move |this, cx| {
             fs::create_dir_all(&directory).expect("create native visual test output");
+            let fixture:Value=serde_json::from_slice(&fs::read(env::var_os("DEVSHELL_VISUAL_TEST_FIXTURE").expect("isolated fixture path")).expect("read isolated fixture")).expect("parse isolated fixture");
             cx.update(|_, cx| {
                 // A wrong family silently selects the system fallback on Windows.
                 let fira = cx
@@ -65,10 +66,15 @@ pub(super) fn start(
                     "key-import",
                     "key-generate",
                     "security",
+                    "security-authorize",
+                    "security-enabled",
+                    "security-enrollment",
+                    "security-enrollment-bottom",
                     "lock-message",
                     "lock-password",
                     "lock-totp",
                     "lock-retry",
+                    "lock-exit",
                     "monitor",
                 ] {
                     this.update_in(cx, |state, window, cx| {
@@ -90,16 +96,29 @@ pub(super) fn start(
                         state.ui.settings.unlock_form=None;
                         state.ui.settings.error=None;
                         state.ui.settings.busy=false;
+                        state.ui.close_visible=false;
                         state.feedback = None;
                         state.ui.manager.menu = None;
                         state.workspace = SessionWorkspace::default();
                         if matches!(stage,"keys"|"key-import"|"key-generate"){state.ui.settings.keys_visible=true;if stage!="keys"{state.open_key_editor(if stage=="key-import"{"import"}else{"generate"},serde_json::json!({}),window,cx);}}
                         if stage=="security"{state.open_security_settings(window,cx);state.form.as_mut().unwrap().original["_grant"]=Value::from("visual-only");state.form.as_mut().unwrap().busy=false;state.ui.settings.busy=false;}
+                        if stage.starts_with("security-") {
+                            state.snapshot.security=serde_json::json!({"enabled":true,"locked":false,"passwordConfigured":true,"twoFactorConfigured":true,"idleSeconds":300});
+                            state.open_security_settings(window,cx);
+                            let form=state.form.as_mut().unwrap();
+                            if stage!="security-authorize"{form.original["_grant"]="visual-only".into();}
+                            if stage.starts_with("security-enrollment"){
+                                form.original["_enrollment"]=fixture["enrollment"].clone();form.original["_refreshEnrollment"]=true.into();
+                                let bytes=base64::engine::general_purpose::STANDARD.decode(fixture["enrollment"]["qr"].as_str().expect("fixture enrollment QR").strip_prefix("data:image/png;base64,").unwrap()).unwrap();
+                                form.image=Some(std::sync::Arc::new(gpui_kit::Image::from_bytes(gpui_kit::ImageFormat::Png,bytes)));
+                            }
+                        }
                         if stage.starts_with("lock-"){
                             state.snapshot.locked=true;
                             state.snapshot.security=serde_json::json!({"enabled":true,"locked":true,"passwordConfigured":stage!="lock-totp","twoFactorConfigured":true,"passwordHint":"测试密码提示","retryAfterSeconds":if stage=="lock-retry"{12}else{0}});
                             if stage!="lock-message"{state.open_unlock(window,cx);}
                             if stage=="lock-retry"{state.ui.settings.error=Some("密码或验证码不正确".into());}
+                            if stage=="lock-exit"{state.request_window_close(window,cx);}
                         }
                         state.snapshot.appearance["ansiSchemes"]=serde_json::json!([]);
                         state.snapshot.appearance["ansiPalette"]=Value::from("soft");
@@ -161,6 +180,10 @@ pub(super) fn start(
                         "{stage}-{}.png",
                         if dark { "dark" } else { "light" }
                     ));
+                    if stage=="security-enrollment-bottom"{
+                        this.update(cx,|state,cx|{let max=state.ui.settings.security_scroll.max_offset();assert!(max.y>px(0.),"enrollment body must scroll");state.ui.settings.security_scroll.set_offset(gpui_kit::point(px(0.),-max.y));cx.notify();}).expect("scroll enrollment to manual key");
+                        cx.update(|window,cx|{let _=window.draw(cx);}).expect("draw scrolled enrollment");
+                    }
                     cx.update(|window, _| {
                         let image = window.render_to_image().expect("render GPUI scene");
                         eprintln!(
@@ -185,6 +208,7 @@ pub(super) fn start(
             this.update_in(cx,|state,_,cx|{state.snapshot.locked=true;state.snapshot.security=serde_json::json!({"enabled":true,"locked":true,"passwordConfigured":true,"twoFactorConfigured":true,"retryAfterSeconds":12});state.ui.settings.unlock_form=None;cx.notify();}).expect("set locked keyboard probe");
             cx.update(|window,cx|{let _=window.draw(cx);window.dispatch_keystroke(gpui_kit::Keystroke::parse("enter").unwrap(),cx);}).expect("open unlock with Enter");
             this.update_in(cx,|state,window,cx|{assert!(state.ui.settings.unlock_form.is_some(),"Enter did not open identity verification");state.ui.settings.unlock.update(cx,|input,cx|input.set_value("probe-secret",window,cx));state.submit_unlock(cx);assert!(!state.ui.settings.busy,"retry lockout submitted credentials");}).expect("verify retry blocks submission");
+            this.update_in(cx,|state,window,cx|{state.request_window_close(window,cx);assert!(state.ui.close_visible&&state.snapshot.locked);assert!(state.ui.settings.unlock.read(cx).value().is_empty(),"close confirmation retained credentials");state.cancel_locked_close(window,cx);assert!(!state.ui.close_visible&&state.snapshot.locked&&state.ui.settings.unlock_form.is_some(),"cancel close did not restore verification");}).expect("verify locked close cancellation");
             cx.update(|window,cx|{let _=window.draw(cx);window.dispatch_keystroke(gpui_kit::Keystroke::parse("escape").unwrap(),cx);}).expect("dispatch locked Escape");
             this.update_in(cx,|state,window,cx|{assert!(state.snapshot.locked&&state.ui.settings.unlock_form.is_some(),"Escape dismissed the lock");state.snapshot.locked=false;state.ui.settings.unlock_form=None;state.ui.settings.unlock.update(cx,|input,cx|input.set_value("",window,cx));state.open_file_menu(gpui_kit::point(px(500.),px(400.)),Vec::new(),false,window,cx);}).expect("open keyboard menu probe");
             cx.update(|window,cx|{let _=window.draw(cx);window.dispatch_keystroke(gpui_kit::Keystroke::parse("down").unwrap(),cx);}).expect("navigate file menu");

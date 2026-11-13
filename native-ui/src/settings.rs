@@ -14,12 +14,13 @@ pub(super) struct SettingsUi {
     pub clear_unlock:bool,
     pub keys_visible:bool,
     pub preferences:Option<forms::NativeForm>,
+    pub security_scroll:gpui_kit::ScrollHandle,
 }
 impl SettingsUi {
     pub fn new(window:&mut Window,cx:&mut Context<DevShellWindow>)->Self {
         let unlock=cx.new(|cx|InputState::new(window,cx).placeholder("请输入解锁密码").masked(true));
         cx.subscribe_in(&unlock,window,|state,_,event:&gpui_kit::component::input::InputEvent,_,cx|{if matches!(event,gpui_kit::component::input::InputEvent::PressEnter{..}){state.submit_unlock(cx);}}).detach();
-        Self{unlock,unlock_method:"password",unlock_form:None,lock_focus:cx.focus_handle(),error:None,busy:false,last_activity:std::time::Instant::now(),pending_activity:false,clear_unlock:false,keys_visible:false,preferences:None}
+        Self{unlock,unlock_method:"password",unlock_form:None,lock_focus:cx.focus_handle(),error:None,busy:false,last_activity:std::time::Instant::now(),pending_activity:false,clear_unlock:false,keys_visible:false,preferences:None,security_scroll:Default::default()}
     }
 }
 
@@ -80,9 +81,11 @@ impl DevShellWindow {
     }
 
     pub(super) fn open_security_settings(&mut self,window:&mut Window,cx:&mut Context<Self>) {
+        self.ui.settings.security_scroll.set_offset(gpui_kit::point(px(0.),px(0.)));
         let draft=crate::security_panel::security_draft(&self.snapshot.security);
         self.open_native_form("security",draft,window,cx);self.settings_visible=false;
         let f=self.form.as_mut().unwrap();
+        f.inputs["authValue"].update(cx,|input,cx|input.set_placeholder("",window,cx));
         for (key,placeholder) in [("password",if self.snapshot.security["passwordConfigured"]==true{"留空保留现有密码"}else{"至少 4 位，可使用数字或其他字符"}),("repeatPassword","再次输入密码"),("passwordHint","解锁时显示，请不要直接填写密码"),("code","000000")] {
             f.inputs[key].update(cx,|input,cx|input.set_placeholder(placeholder,window,cx));
         }
@@ -117,7 +120,7 @@ impl DevShellWindow {
                     Ok((response,snapshot))=>{
                         if let Some(mut snapshot)=snapshot{if !crate::lock_panel::accept_status(&state.snapshot.security,&snapshot.security){snapshot.security=state.snapshot.security.clone();snapshot.locked=state.snapshot.locked;}state.snapshot=snapshot;}
                         match action {"authorize"|"enroll"=>{
-                            if let Some(form)=state.form.as_mut().filter(|f|Some(f.original["_nativeSerial"].clone())==serial){form.busy=false;if action=="authorize"{form.original["_grant"]=response["grant"].clone();}else{form.image=response["qr"].as_str().and_then(|s|s.strip_prefix("data:image/png;base64,")).and_then(|s|base64::engine::general_purpose::STANDARD.decode(s).ok()).map(|bytes|std::sync::Arc::new(gpui_kit::Image::from_bytes(gpui_kit::ImageFormat::Png,bytes)));form.original["_enrollment"]=response;}}
+                            if let Some(form)=state.form.as_mut().filter(|f|Some(f.original["_nativeSerial"].clone())==serial){form.busy=false;if action=="authorize"{form.original["_grant"]=response["grant"].clone();form.original["_clearProof"]=true.into();}else{form.image=response["qr"].as_str().and_then(|s|s.strip_prefix("data:image/png;base64,")).and_then(|s|base64::engine::general_purpose::STANDARD.decode(s).ok()).map(|bytes|std::sync::Arc::new(gpui_kit::Image::from_bytes(gpui_kit::ImageFormat::Png,bytes)));form.original["_enrollment"]=response;form.original["_refreshEnrollment"]=true.into();}}
                         },"settings"=>{state.form=None;state.feedback=Some("安全锁定设置已保存".into());},"unlock"=>{state.ui.settings.clear_unlock=true;state.ui.settings.unlock_form=None;state.apply_security_status(response,cx);},"lock"=>{state.apply_security_status(response,cx);},_=>{}}
                     },Err(error)=>{if action=="unlock"{state.ui.settings.clear_unlock=true;}state.ui.settings.error=Some(error.clone());if let Some(form)=state.form.as_mut().filter(|f|Some(f.original["_nativeSerial"].clone())==serial){form.busy=false;form.error=Some(error);}}
                 }cx.notify();

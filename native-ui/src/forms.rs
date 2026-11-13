@@ -38,7 +38,7 @@ impl NativeForm {
             ("proxyHost","127.0.0.1",""),("proxyPort","7890","1080"),("proxyUser","用户名（可选）",""),("proxyPassword","留空保留已保存密码",""),
             ("serialPort","例如 COM3",""),("baudRate","115200","115200"),("emoji","选用下方图标，或输入表情符号",""),("backgroundColor","跟随主题",""),
             ("passphrase","私钥口令（可选）",""),("sourcePath","选择私钥文件",""),("confirmName","输入名称以确认",""),
-            ("authValue","密码或 2FA 验证码",""),("password","留空保留现有密码",""),("repeatPassword","再次输入密码",""),("passwordHint","密码提示（可选）",""),("idleSeconds","自动锁定秒数","300"),("code","验证码",""),
+            ("authValue","密码或 2FA 验证码",""),("password","留空保留现有密码",""),("repeatPassword","再次输入密码",""),("passwordHint","密码提示（可选）",""),("idleSeconds","自动锁定秒数","300"),("code","验证码",""),("enrollmentSecret","",""),
         ] {
             let value=form.original.get(key).map(value_text).filter(|s|!s.is_empty()).unwrap_or(default.into());
             let masked=matches!(key,"secret"|"proxyPassword"|"passphrase"|"authValue"|"password"|"repeatPassword");

@@ -1,9 +1,6 @@
 //! Layout and enablement rules from the pinned security-lock settings dialog.
 use super::*;
-use crate::{
-    forms::string,
-    workspace::{Palette, icon, icon_tool},
-};
+use crate::workspace::{Palette, icon, icon_tool};
 use gpui_kit::{
     Div,
     component::{checkbox::Checkbox, select::Select},
@@ -207,6 +204,7 @@ impl DevShellWindow {
             .id("security-settings-body")
             .min_h_0()
             .overflow_y_scroll()
+            .track_scroll(&self.ui.settings.security_scroll)
             .px(px(22.))
             .pb(px(18.))
             .flex()
@@ -215,11 +213,12 @@ impl DevShellWindow {
             let authorization = section(p).mb(px(4.)).bg(gpui_kit::rgb(inset))
                 .child(text("验证后修改", 13.).font_weight(gpui_kit::FontWeight(550.)))
                 .child(text("修改或关闭安全锁定前，请验证当前密码或验证码。", 11.)
-                    .mt(px(12.)).mb(px(14.)).text_color(gpui_kit::rgb(p.muted)))
+                    .mt(px(14.)).mb(px(14.)).line_height(px(18.7)).text_color(gpui_kit::rgb(p.muted)))
                 .child(div().flex().gap(px(14.))
                     .child(self.security_select("proofMethod", "验证方式", !f.busy, p))
                     .child(self.security_input("authValue", "密码或验证码", !f.busy, p)))
                 .child(KitButton::new("security-authorize").secondary().h(px(36.))
+                    .bg(gpui_kit::rgb(p.surface)).border_1().border_color(gpui_kit::rgb(p.border))
                     .px(px(13.)).rounded(px(9.)).mt(px(12.)).self_start()
                     .child(text("验证并编辑", 12.)).disabled(f.busy)
                     .on_click(cx.listener(|state, _, _, cx| {
@@ -319,6 +318,9 @@ impl DevShellWindow {
                         .child(
                             KitButton::new("security-enroll")
                                 .secondary()
+                                .bg(gpui_kit::rgb(p.surface))
+                                .border_1()
+                                .border_color(gpui_kit::rgb(p.border))
                                 .h(px(36.))
                                 .px(px(13.))
                                 .rounded(px(9.))
@@ -387,10 +389,19 @@ impl DevShellWindow {
                         );
                     binding = binding.child(enrollment).child(
                         div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(8.))
                             .child(text("无法扫码？手动输入密钥", 12.))
                             .child(
-                                text(string(&f.original["_enrollment"], "secret"), 11.)
-                                    .font_family("Consolas"),
+                                gpui_kit::Styled::h(
+                                    Input::new(&f.inputs["enrollmentSecret"]).readonly(true),
+                                    px(40.),
+                                )
+                                .rounded(px(10.))
+                                .px(px(12.))
+                                .text_size(px(11.))
+                                .font_family("Consolas"),
                             )
                             .child(
                                 text("请妥善保管验证器或此密钥。", 11.)

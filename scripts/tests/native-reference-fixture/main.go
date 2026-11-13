@@ -36,7 +36,13 @@ func main() {
 	must(err)
 	defer application.Close()
 	must(application.Start("127.0.0.1:0", os.DirFS(*web)))
-	fixture := map[string]string{"url": application.BrowserURL(), "base": application.URL(), "token": application.Token()}
+	// Generate a real, uncommitted enrollment QR in this isolated QA store.
+	// Do not enable the lock or save the ephemeral secret to its policy.
+	grant, err := application.AuthorizeLockSettings(app.LockProof{})
+	must(err)
+	enrollment, err := application.EnrollLockTOTP(grant)
+	must(err)
+	fixture := map[string]any{"url": application.BrowserURL(), "base": application.URL(), "token": application.Token(), "enrollment": enrollment}
 	bytes, _ := json.Marshal(fixture)
 	must(os.WriteFile(filepath.Join(*root, "fixture.json"), bytes, 0600))
 	fmt.Println("Reference fixture ready")
