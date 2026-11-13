@@ -555,7 +555,7 @@ impl Render for DevShellWindow {
                         div()
                             .absolute()
                             .inset_0()
-                            .bg(gpui_kit::rgba(if self.settings_visible && !self.ui.connections_visible && self.ui.utility.is_none() {0x00000000} else if self.form.as_ref().is_some_and(|f|matches!(f.kind,"file-action"|"file-upload")){0x1f354655}else if self.ui.dark { 0x00000066 } else { 0x172b4033 }))
+                            .bg(gpui_kit::rgba(if self.settings_visible && !self.ui.connections_visible && self.ui.utility.is_none() {0x00000000} else if self.ui.settings.keys_visible||self.form.as_ref().is_some_and(|f|matches!(f.kind,"file-action"|"file-upload"|"key"|"key-public"|"delete-key"|"ansi"|"security")){0x1f354655}else if self.ui.dark { 0x00000066 } else { 0x172b4033 }))
                             .occlude()
                             .on_mouse_down(gpui_kit::MouseButton::Left, cx.listener(|state, _, _, cx| {
                                 state.settings_visible = false;state.ui.pinned_visible=false;
@@ -583,7 +583,7 @@ impl Render for DevShellWindow {
                 root.child(self.about_dialog(p, cx))
             })
             .when(self.ui.utility.is_some(),|root|root.child(self.utility_dialog(p,cx)))
-            .when(self.ui.settings.keys_visible,|root|root.child(self.keys_manager(p,cx)))
+            .when(self.ui.settings.keys_visible,|root|root.child(self.original_keys_manager(p,cx)))
             .when(self.ui.manager.menu.is_some(),|root|root.child(self.server_context_menu(p,window,cx)))
             .when(self.workspace.charts.hover.is_some(),|root|root.child(self.monitor_chart_tooltip(p,window)))
             .when(self.workspace.file_ui.menu.is_some(),|root|root.child(self.file_context_menu(p,window,cx)))

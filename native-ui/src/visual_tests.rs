@@ -61,6 +61,10 @@ pub(super) fn start(
                     "files-upload",
                     "ansi",
                     "ansi-populated",
+                    "keys",
+                    "key-import",
+                    "key-generate",
+                    "security",
                     "monitor",
                 ] {
                     this.update_in(cx, |state, window, cx| {
@@ -75,10 +79,13 @@ pub(super) fn start(
                         state.settings_visible = stage == "settings";
                         state.ui.settings_view = "main";
                         state.ui.settings.preferences = None;
+                        state.ui.settings.keys_visible = false;
                         state.form = None;
                         state.feedback = None;
                         state.ui.manager.menu = None;
                         state.workspace = SessionWorkspace::default();
+                        if matches!(stage,"keys"|"key-import"|"key-generate"){state.ui.settings.keys_visible=true;if stage!="keys"{state.open_key_editor(if stage=="key-import"{"import"}else{"generate"},serde_json::json!({}),window,cx);}}
+                        if stage=="security"{state.open_security_settings(window,cx);}
                         state.snapshot.appearance["ansiSchemes"]=serde_json::json!([]);
                         state.snapshot.appearance["ansiPalette"]=Value::from("soft");
                         if stage=="ansi-populated"{let colors:Value=serde_json::from_str(include_str!("../assets/ansi-palettes.json")).unwrap();state.snapshot.appearance["ansiSchemes"]=serde_json::json!([{"name":"柔和测试方案","colors":colors["soft"]},{"name":"鲜亮测试方案","colors":colors["bright"]}]);state.snapshot.appearance["ansiPalette"]=Value::from("custom");state.snapshot.appearance["ansiScheme"]=Value::from("柔和测试方案");}

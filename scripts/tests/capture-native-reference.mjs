@@ -44,6 +44,9 @@ try {
     await page.evaluate(()=>{document.getElementById('ansi-schemes-dialog').close();appearance.ansiSchemes=[{name:'柔和测试方案',colors:ansiPalettes.soft},{name:'鲜亮测试方案',colors:ansiPalettes.bright}];appearance.ansiPalette='custom';appearance.ansiScheme='柔和测试方案';document.getElementById('manage-ansi-schemes').click();});
     await capture('ansi-populated-'+theme);await page.evaluate(()=>{appearance.ansiSchemes=[];appearance.ansiPalette='soft';appearance.ansiScheme='';});
    }
+   if(stage==='keys'){
+    for(const [name,trigger] of [['key-import','import-key'],['key-generate','generate-key']]){await page.click('#'+trigger);await capture(name+'-'+theme);await page.click('#cancel-key-editor');}
+   }
    await page.evaluate(()=>{for(const d of document.querySelectorAll('dialog[open]'))d.close();});
   }
  }

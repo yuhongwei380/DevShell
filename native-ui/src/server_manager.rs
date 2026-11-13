@@ -155,6 +155,8 @@ impl DevShellWindow {
         if form.kind=="file-upload"{return self.local_upload_dialog(p,window,cx);}
         if form.kind=="file-action"{return self.original_file_action_dialog(p,window,cx);}
         if form.kind=="ansi"{return self.original_ansi_dialog(p,window,cx);}
+        if matches!(form.kind,"key"|"key-public"|"delete-key"){return self.original_key_dialog(p,window,cx);}
+        if form.kind=="security"{return self.original_security_dialog(p,window,cx);}
         if matches!(form.kind,"ui-style"|"charts"|"shell-fonts"|"ui-fonts"){return self.original_appearance_dialog(p,window,cx);}
         let title=match form.kind {"file-action"=>form.original["_title"].as_str().unwrap_or("文件操作"),"file-paths"=>if form.original["_pathsKind"]=="directory-favorites"{"常用目录"}else{"历史路径"},"connection"=>if string(&form.original,"id").is_empty(){"新建连接"}else{"编辑连接"},"group"=>if string(&form.original,"id").is_empty(){"新建分组"}else{"编辑分组"},"move"=>"移动连接","key"=>"密钥管理器","security"=>"安全锁定","credentials"=>"连接凭据","config"=>"连接配置文档","mirror"=>"更新加速域名","help"=>"使用手册与功能引导","font-library"=>"在线字体库","font-license"=>"字体下载与许可","font-info"=>"字体许可","asset-rename"=>"修改字体名称","asset-delete"=>"删除字体","font-color"=>"字体颜色","quick-connect"=>"快速连接","rename-session"=>"重命名标签","shell-fonts"=>"Shell 字体与颜色","ui-fonts"=>"界面字体与文字颜色","ui-style"=>"全局主题","charts"=>"曲线样式","ansi"=>"配色方案","prompt-colors"=>"提示符颜色","backup"=>"备份",_=>"确认操作"};
         let width:f32=if form.kind=="help" {1000.}else if form.kind=="font-library"{760.}else if form.kind=="connection" {800.}else if form.kind=="file-action"{if form.original["_action"]=="permissions"{440.}else{430.}}else{520.};let width=width.min((f32::from(window.viewport_size().width)/crate::ui_scale::current())-32.);
@@ -169,7 +171,6 @@ impl DevShellWindow {
                 .when(form.kind=="mirror",|body|body.child(form.field("updateMirror","更新加速域名")).child(paragraph("留空时直连 GitHub；只影响更新检查与下载。")))
                 .when(form.kind=="font-library",|body|body.child(self.font_library_fields(cx)))
                 .when(form.kind=="font-license",|body|body.child(heading(string(&form.original,"name"))).child(paragraph(string(&form.original,"description"))).child(paragraph(format!("下载来源：{}",string(&form.original,"project")))).child(paragraph(format!("文件大小：{} bytes",form.original["file"]["size"]))).child(div().text_size(px(11.)).child(string(&form.original,"licenseText"))).when(form.original.get("_fontJob").is_some(),|body|body.child(paragraph(format!("下载进度：{} / {} bytes",form.original["_fontJob"]["received"],form.original["_fontJob"]["total"])))))
-                .when(form.kind=="security",|body|body.child(self.security_fields(cx)))
                 .when(matches!(form.kind,"shell-fonts"|"ui-fonts"|"ui-style"|"charts"|"ansi"|"prompt-colors"|"font-color"),|body|body.child(self.appearance_fields(cx)))
                 .when(form.kind=="credentials",|body|body.child(paragraph(format!("连接 {}",string(&form.original,"name")))).child(form.field("secret",if string(&form.original,"auth")=="key"{"私钥口令"}else{"密码"})))
                 .when(form.kind=="quick-connect",|body|body.child(form.field("quickCommand","SSH 命令")).child(form.select("auth","认证方式")).when(form.selected("auth",cx)=="key",|b|b.child(form.select("keyId","选择私钥"))))

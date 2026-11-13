@@ -42,11 +42,12 @@ impl NativeForm {
         ] {
             let value=form.original.get(key).map(value_text).filter(|s|!s.is_empty()).unwrap_or(default.into());
             let masked=matches!(key,"secret"|"proxyPassword"|"passphrase"|"authValue"|"password"|"repeatPassword");
-            let placeholder=if kind=="file-action"&&key=="name" {""} else {placeholder};
+            let placeholder=if kind=="file-action"&&key=="name" {""} else if kind=="key"&&key=="passphrase" {if form.original["hasPassphrase"]==true{"已保存，留空保留"}else{""}}else{placeholder};
             form.inputs.insert(key.into(),cx.new(|cx|InputState::new(window,cx).default_value(value).placeholder(placeholder).masked(masked)));
         }
-        for (key,placeholder) in [("notes","续费网址、到期时间、用途等"),("autoCommands","cd /data\ntmux attach -t dev || tmux new -s dev"),("privateKey","粘贴 PEM 或 OpenSSH 私钥")] {
+        for (key,placeholder) in [("notes","续费网址、到期时间、用途等"),("autoCommands","cd /data\ntmux attach -t dev || tmux new -s dev"),("privateKey","粘贴 PEM 或 OpenSSH 私钥"),("publicKey","")] {
             let value=match form.original.get(key) {Some(Value::Array(lines))=>lines.iter().filter_map(Value::as_str).collect::<Vec<_>>().join("\n"),Some(value)=>value_text(value),None=>String::new()};
+            let placeholder=if kind=="key"&&key=="privateKey"{"-----BEGIN OPENSSH PRIVATE KEY-----"}else{placeholder};
             form.areas.insert(key.into(),cx.new(|cx|TextareaState::new(window,cx).default_value(value).placeholder(placeholder).auto_grow(3,6)));
         }
         for key in ["autoRun","rdpClipboard","clearProxyPassword","generate","enabled","passwordEnabled","twoFactorEnabled"] {form.flags.insert(key.into(),form.original.get(key).and_then(Value::as_bool).unwrap_or(false));}

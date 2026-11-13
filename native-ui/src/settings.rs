@@ -1,6 +1,6 @@
 use super::*;
 use crate::forms::string;
-use crate::workspace::{Palette,icon,icon_tool,overlay};
+use crate::workspace::{Palette,icon};
 use gpui_kit::{Div,Focusable,component::Sizable};
 
 pub(super) struct SettingsUi {
@@ -66,36 +66,25 @@ impl DevShellWindow {
     }
 
     pub(super) fn open_security_settings(&mut self,window:&mut Window,cx:&mut Context<Self>) {
-        let mut draft=self.snapshot.security.clone();
-        draft["passwordEnabled"]=draft["passwordConfigured"].clone();draft["twoFactorEnabled"]=draft["twoFactorConfigured"].clone();
-        draft["lockMode"]=Value::String(if draft["idleSeconds"].as_u64().unwrap_or(0)>0 {"idle"}else{"manual"}.into());
+        let draft=crate::security_panel::security_draft(&self.snapshot.security);
         self.open_native_form("security",draft,window,cx);self.settings_visible=false;
+        let f=self.form.as_mut().unwrap();
+        for (key,placeholder) in [("password",if self.snapshot.security["passwordConfigured"]==true{"留空保留现有密码"}else{"至少 4 位，可使用数字或其他字符"}),("repeatPassword","再次输入密码"),("passwordHint","解锁时显示，请不要直接填写密码"),("code","000000")] {
+            f.inputs[key].update(cx,|input,cx|input.set_placeholder(placeholder,window,cx));
+        }
+        f.add_choices("lockMode",vec![("manual".into(),"仅手动主动上锁".into()),("idle".into(),"无操作后自动锁定".into())],&string(&f.original,"lockMode"),window,cx);
+        let methods:Vec<(String,String)>=[("password","密码","passwordConfigured"),("totp","2FA 验证码","twoFactorConfigured")].into_iter().filter(|(_,_,key)|self.snapshot.security[*key]==true).map(|(id,name,_)|(id.into(),name.into())).collect::<Vec<_>>();
+        if !methods.is_empty(){let selected=methods[0].0.clone();f.add_choices("proofMethod",methods,&selected,window,cx);f.inputs["authValue"].update(cx,|input,cx|input.set_masked(selected=="password",window,cx));}
+        let choice=f.choices["proofMethod"].clone();
+        cx.subscribe_in(&choice,window,|state,_,event:&gpui_kit::component::select::SelectEvent<Vec<forms::Choice>>,window,cx|{if let gpui_kit::component::select::SelectEvent::Confirm(Some(method))=event{if let Some(f)=state.form.as_ref().filter(|f|f.kind=="security"){f.inputs["authValue"].update(cx,|input,cx|{input.set_value("",window,cx);input.set_masked(method=="password",window,cx);});}}}).detach();
+        let proof=f.inputs["authValue"].clone();
+        cx.subscribe_in(&proof,window,|state,_,event:&gpui_kit::component::input::InputEvent,_,cx|{if matches!(event,gpui_kit::component::input::InputEvent::PressEnter{..}){if let Some(f)=state.form.as_ref().filter(|f|f.kind=="security"&&!f.busy){let body=serde_json::json!({"method":f.selected("proofMethod",cx),"value":f.text("authValue",cx)});state.security_call("authorize",body,cx);}}}).detach();
         if !self.snapshot.security["enabled"].as_bool().unwrap_or(false){self.security_call("authorize",serde_json::json!({}),cx);}
-    }
-
-    pub(super) fn security_fields(&self,cx:&mut Context<Self>)->Div {
-        let form=self.form.as_ref().unwrap();let authorized=form.original.get("_grant").and_then(Value::as_str).is_some_and(|s|!s.is_empty());
-        div().flex().flex_col().gap_3()
-            .when(!authorized,|body|body.child(paragraph("修改安全设置前，请先验证身份。" )).child(form.select("proofMethod","验证方式")).child(form.field("authValue","密码 / 2FA 验证码"))
-                .child(KitButton::new("security-authorize").primary().small().label("验证后修改").disabled(form.busy).on_click(cx.listener(|state,_,_,cx|{if let Some(form)=&state.form{let body=serde_json::json!({"method":form.selected("proofMethod",cx),"value":form.text("authValue",cx)});state.security_call("authorize",body,cx);}}))))
-            .when(authorized,|body|body.child(form.toggle("enabled","启用安全锁定",cx))
-                .child(form.select("lockMode","锁定方式"))
-                .when(form.selected("lockMode",cx)=="idle",|body|body.child(form.field("idleSeconds","闲置多少秒后锁定")))
-                .child(form.toggle("passwordEnabled","使用密码解锁",cx))
-                .when(form.flag("passwordEnabled"),|body|body.child(form.field("password","设置密码（留空保留现有密码）")).child(form.field("repeatPassword","确认密码")).child(form.field("passwordHint","密码提示")))
-                .child(form.toggle("twoFactorEnabled","使用 2FA 验证码解锁",cx))
-                .when(form.flag("twoFactorEnabled"),|body|body.child(KitButton::new("security-enroll").secondary().small().label(if form.original["twoFactorConfigured"].as_bool().unwrap_or(false){"重新绑定验证器"}else{"扫码绑定验证器"}).disabled(form.busy).on_click(cx.listener(|state,_,_,cx|{if let Some(form)=&state.form{state.security_call("enroll",serde_json::json!({"grant":form.original["_grant"]}),cx);}}))))
-                .when(form.original.get("_enrollment").is_some(),|body|{
-                    body.child(paragraph("在验证器中添加下方密钥，并输入当前验证码，保存后生效。"))
-                        .when_some(form.image.clone(),|body,image|body.child(gpui_kit::img(image).size(px(220.))))
-                        .child(div().text_size(px(13.)).child(string(&form.original["_enrollment"],"secret")))
-                        .child(form.field("code","当前验证码"))
-                }))
     }
 
     pub(super) fn save_security_settings(&mut self,cx:&mut Context<Self>) {
         let Some(form)=self.form.as_ref()else{return;};
-        if form.text("password",cx)!=form.text("repeatPassword",cx){self.form.as_mut().unwrap().error=Some("两次输入的密码不一致".into());cx.notify();return;}
+        if form.flag("enabled")&&form.flag("passwordEnabled")&&form.text("password",cx)!=form.text("repeatPassword",cx){self.form.as_mut().unwrap().error=Some("两次输入的密码不一致".into());cx.notify();return;}
         let body=serde_json::json!({"grant":form.original["_grant"],"enabled":form.flag("enabled"),"idleSeconds":if form.selected("lockMode",cx)=="manual"{0}else{form.text("idleSeconds",cx).parse::<u64>().unwrap_or(0)},"passwordEnabled":form.flag("passwordEnabled"),"password":form.text("password",cx),"passwordHint":form.text("passwordHint",cx),"twoFactorEnabled":form.flag("twoFactorEnabled"),"code":form.text("code",cx)});
         self.security_call("settings",body,cx);
     }
@@ -140,18 +129,4 @@ impl DevShellWindow {
                 }))))
     }
 
-    pub(super) fn keys_manager(&self,p:Palette,cx:&mut Context<Self>)->Div {
-        overlay(p,"密钥管理器",icon_tool("keys-close","close","关闭密钥管理器").on_click(cx.listener(|state,_,_,cx|{state.ui.settings.keys_visible=false;cx.notify();})))
-            .child(div().id("keys-scroll").max_h(px(500.)).overflow_y_scroll().p_5().flex().flex_col().gap_3()
-                .child(paragraph("导入私钥，或生成 Ed25519 密钥；公钥可复制到服务器。"))
-                .child(KitButton::new("key-import").primary().small().label("导入 / 生成密钥").on_click(cx.listener(|state,_,window,cx|state.open_native_form("key",serde_json::json!({}),window,cx))))
-                .children(self.snapshot.keys.iter().map(|key|{
-                    let id=string(key,"id");let edit=key.clone();let delete=key.clone();let public=string(key,"publicKey");
-                    div().p_3().rounded_lg().border_1().border_color(gpui_kit::rgb(p.border)).flex().flex_col().gap_2().child(paragraph(string(key,"name"))).child(paragraph(string(key,"fingerprint")))
-                        .child(div().flex().gap_2()
-                            .child(KitButton::new(format!("key-public-{id}")).ghost().small().label("复制公钥").on_click(move|_,_,cx|cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(public.clone()))))
-                            .child(KitButton::new(format!("key-edit-{id}")).ghost().small().label("编辑").on_click(cx.listener(move|state,_,window,cx|state.open_native_form("key",edit.clone(),window,cx))))
-                            .child(KitButton::new(format!("key-delete-{id}")).ghost().small().label("删除").on_click(cx.listener(move|state,_,window,cx|state.open_native_form("delete-key",delete.clone(),window,cx)))))
-                })))
-    }
 }

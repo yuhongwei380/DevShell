@@ -282,6 +282,14 @@ fn file_list_retains_symlinks_and_server_timestamps() {
 }
 
 #[test]
+fn security_editor_keeps_manual_lock_and_defaults_to_a_password_method() {
+    let draft=crate::security_panel::security_draft(&serde_json::json!({"enabled":false,"idleSeconds":0,"passwordConfigured":false,"twoFactorConfigured":false}));
+    assert_eq!(draft["lockMode"],"manual");assert_eq!(draft["idleSeconds"],300);assert_eq!(draft["passwordEnabled"],true);
+    let draft=crate::security_panel::security_draft(&serde_json::json!({"enabled":true,"idleSeconds":600,"passwordConfigured":false,"twoFactorConfigured":true}));
+    assert_eq!(draft["lockMode"],"idle");assert_eq!(draft["idleSeconds"],600);assert_eq!(draft["passwordEnabled"],false);assert_eq!(draft["twoFactorEnabled"],true);
+}
+
+#[test]
 fn old_directory_replies_and_failed_reads_preserve_the_current_directory(){
     let mut workspace=session("first","/var/www");workspace.file_ui.navigation=3;workspace.file_ui.selected.insert("keep.txt".into());
     assert!(!workspace.accept_listing(2,"/old".into(),Ok(FileListState{path:"/old".into(),entries:vec![],status:"已加载".into()})));assert_eq!(workspace.files.as_ref().unwrap().path,"/var/www");

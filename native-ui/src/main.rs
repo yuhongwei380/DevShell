@@ -4,6 +4,8 @@ mod assets;
 mod appearance;
 mod appearance_panels;
 mod ansi_schemes;
+mod key_panels;
+mod security_panel;
 mod file_browser;
 mod file_view;
 mod file_actions;

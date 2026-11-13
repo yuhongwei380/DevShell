@@ -32,7 +32,7 @@ go run .
 | --- | --- |
 | 材质 | 原版模态背景模糊和液态玻璃折射/动态光场尚未实现；仅保存主题选项不构成材质还原。 |
 | 监控和 SFTP | MTR、完整进程列表、文件编辑器及目录收藏/历史弹窗仍需逐项恢复原版布局与交互；网络采样和文件操作尚需真实 SSH 验收。 |
-| 其他对话框 | 安全锁、密钥、字体颜色/在线字体库等仍有通用表单或简化布局；配色方案的批量导入与管理已移植。 |
+| 其他对话框 | 锁屏、字体颜色/在线字体库等仍有简化布局；密钥管理及导入/生成/编辑/公钥弹窗、安全设置卡片已移植，授权及绑定状态仍需真实流程验证。 |
 | 会话和工具 | 标签分离窗口、常用应用全部高级选项等尚未等价；分组排序尚未完整复现原版中文拼音排序。 |
 | 实机交互 | 真实 SSH/SFTP、RDP/串口、本地终端全流程和 macOS 实机尚未完整验证。 |
 
@@ -45,10 +45,10 @@ cargo build --manifest-path native-ui/Cargo.toml --release --features visual-tes
 pwsh -NoProfile -File scripts/tests/capture-native-scenes.ps1
 ```
 
-视觉工具需要先导出固定 tag 的 `web/` 到 `build/ui-qa/baseline-v26.11.3-rc.3`，再用 `go run ./scripts/tests/native-reference-fixture` 启动隔离的 Go fixture；不得指向生产会话。`capture-native-reference.mjs` 以固定版本的真实 HTML/CSS/JS 生成原版截图及 DOM 样式/尺寸。`capture-native-scenes.ps1` 使用 GPUI 自己的场景绘制接口生成 1280×800 截图，不读取其他应用窗口，不需要桌面自动化服务。覆盖主界面、服务器管理、连接、设置菜单、主题、曲线、字体、监控、文件面板及其菜单/操作弹窗、配色方案，共 46 个浅色/深色状态，并实际分派菜单按键与文件导航回归。截图是对照证据，不是像素一致性断言。
+视觉工具需要先导出固定 tag 的 `web/` 到 `build/ui-qa/baseline-v26.11.3-rc.3`，再用 `go run ./scripts/tests/native-reference-fixture` 启动隔离的 Go fixture；不得指向生产会话。`capture-native-reference.mjs` 以固定版本的真实 HTML/CSS/JS 生成原版截图及 DOM 样式/尺寸。`capture-native-scenes.ps1` 使用 GPUI 自己的场景绘制接口生成 1280×800 截图，不读取其他应用窗口，不需要桌面自动化服务。覆盖主界面、服务器管理、连接、设置菜单、主题、曲线、字体、监控、文件面板及其菜单/操作弹窗、配色方案、密钥管理/导入/生成和安全设置，共 54 个浅色/深色状态，并实际分派菜单按键与文件导航回归。截图是对照证据，不是像素一致性断言。
 
 编译输出、本地预览、临时配置、参考库导出、浏览器依赖、截图及日志都留在已忽略的 `native-ui/target/`、`build/local-*/` 和 `build/ui-qa/`，不提交 Git。`assets/` 中的字体、图标、许可和确定性 JSON 测试输入是源码所需资源。
 
-`visual-test` 只用于场景导出；提供给用户的普通二进制应不带此 feature。当前验证：Rust 39 项通过，46 个场景及菜单/导航回归通过，原始终端输入及 RDP 宿主授权的 Go 定向测试通过。Go 全套测试曾出现 Windows 临时目录清理失败，不能写成全套通过。
+`visual-test` 只用于场景导出；提供给用户的普通二进制应不带此 feature。当前验证：Rust 40 项通过，54 个场景及菜单/导航回归通过，原始终端输入及 RDP 宿主授权的 Go 定向测试通过。Go 全套测试曾出现 Windows 临时目录清理失败，不能写成全套通过。
 
 没有修改 ApplicationBuild、打 tag 或发布。任何发版仍须用户单独明确确认。
