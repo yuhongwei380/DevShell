@@ -413,6 +413,7 @@ impl Render for DevShellWindow {
                 }
             }))
             .on_key_down(cx.listener(|state, event: &gpui_kit::KeyDownEvent, _, cx| {
+                if state.snapshot.locked {cx.stop_propagation();return;}
                 if event.keystroke.key == "escape" {
                     if state.form.is_some(){state.dismiss_native_form(cx);cx.stop_propagation();return;}
                     if state.workspace.file_ui.menu.take().is_some(){cx.notify();cx.stop_propagation();return;}

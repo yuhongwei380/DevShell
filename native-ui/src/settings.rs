@@ -1,11 +1,12 @@
 use super::*;
 use crate::forms::string;
-use crate::workspace::{Palette,icon};
-use gpui_kit::{Div,Focusable,component::Sizable};
+use gpui_kit::Div;
 
 pub(super) struct SettingsUi {
     pub unlock:Entity<InputState>,
     pub unlock_method:&'static str,
+    pub unlock_form:Option<forms::NativeForm>,
+    pub lock_focus:gpui_kit::FocusHandle,
     pub error:Option<String>,
     pub busy:bool,
     pub last_activity:std::time::Instant,
@@ -16,11 +17,22 @@ pub(super) struct SettingsUi {
 }
 impl SettingsUi {
     pub fn new(window:&mut Window,cx:&mut Context<DevShellWindow>)->Self {
-        Self{unlock:cx.new(|cx|InputState::new(window,cx).placeholder("密码或验证码").masked(true)),unlock_method:"password",error:None,busy:false,last_activity:std::time::Instant::now(),pending_activity:false,clear_unlock:false,keys_visible:false,preferences:None}
+        let unlock=cx.new(|cx|InputState::new(window,cx).placeholder("请输入解锁密码").masked(true));
+        cx.subscribe_in(&unlock,window,|state,_,event:&gpui_kit::component::input::InputEvent,_,cx|{if matches!(event,gpui_kit::component::input::InputEvent::PressEnter{..}){state.submit_unlock(cx);}}).detach();
+        Self{unlock,unlock_method:"password",unlock_form:None,lock_focus:cx.focus_handle(),error:None,busy:false,last_activity:std::time::Instant::now(),pending_activity:false,clear_unlock:false,keys_visible:false,preferences:None}
     }
 }
 
 impl DevShellWindow {
+    pub(super) fn apply_security_status(&mut self,status:Value,cx:&mut Context<Self>) {
+        if !crate::lock_panel::accept_status(&self.snapshot.security,&status){return;}
+        let locked=status["locked"].as_bool().unwrap_or(false);
+        if locked!=self.snapshot.locked {
+            self.ui.settings.unlock_form=None;self.ui.settings.clear_unlock=true;self.ui.settings.error=None;
+            if locked {self.form=None;self.settings_visible=false;self.ui.connections_visible=false;self.ui.settings.keys_visible=false;}
+        }
+        self.snapshot.locked=locked;self.snapshot.security=status;cx.notify();
+    }
     pub(super) fn ensure_preferences(&mut self,window:&mut Window,cx:&mut Context<Self>) {
         if self.ui.settings.preferences.is_some(){return;}
         use gpui_kit::component::select::SelectEvent;
@@ -52,14 +64,16 @@ impl DevShellWindow {
     }
     pub(super) fn note_activity(&mut self) {if self.ui.settings.last_activity.elapsed()>=Duration::from_millis(500){self.ui.settings.pending_activity=true;self.ui.settings.last_activity=std::time::Instant::now();}}
     pub(super) fn poll_security(&mut self,cx:&mut Context<Self>) {
+        #[cfg(feature="visual-test")]
+        if env::var_os("DEVSHELL_VISUAL_TEST_DIR").is_some(){return;}
         let weak=cx.entity().downgrade();
         cx.spawn(async move|_,cx|{loop{
             let Some((base,token,activity))=weak.update(cx,|state,_|{let activity=std::mem::take(&mut state.ui.settings.pending_activity);(state.snapshot.base.clone(),state.token.clone(),activity&&state.snapshot.security.get("enabled").and_then(Value::as_bool).unwrap_or(false)&&!state.snapshot.locked)}).ok()else{break;};
             let result=cx.background_executor().spawn(async move{if activity {post_json(&base,&token,"/api/security-lock/activity",serde_json::json!({}))}else{get_json(&base,&token,"/api/security-lock/status")}}).await;
-            if weak.update(cx,|state,cx|{if let Ok(status)=result {
-                let locked=status.get("locked").and_then(Value::as_bool).unwrap_or(false);
-                if locked&&!state.snapshot.locked {state.form=None;state.settings_visible=false;state.ui.connections_visible=false;state.ui.settings.keys_visible=false;}
-                if locked!=state.snapshot.locked||status!=state.snapshot.security {state.snapshot.locked=locked;state.snapshot.security=status;cx.notify();}
+            if weak.update(cx,|state,cx|{match result {
+                Ok(status)=>state.apply_security_status(status,cx),
+                Err(_) if state.snapshot.security["enabled"]==true=>{let mut status=state.snapshot.security.clone();status["locked"]=Value::Bool(true);state.apply_security_status(status,cx);state.ui.settings.error=Some("暂时无法连接锁定服务，请稍后重试".into());cx.notify();},
+                Err(_)=>{},
             }}).is_err(){break;}
             cx.background_executor().timer(Duration::from_secs(1)).await;
         }}).detach();
@@ -101,32 +115,15 @@ impl DevShellWindow {
                 state.ui.settings.busy=false;
                 match result {
                     Ok((response,snapshot))=>{
-                        if let Some(snapshot)=snapshot{state.snapshot=snapshot;}
+                        if let Some(mut snapshot)=snapshot{if !crate::lock_panel::accept_status(&state.snapshot.security,&snapshot.security){snapshot.security=state.snapshot.security.clone();snapshot.locked=state.snapshot.locked;}state.snapshot=snapshot;}
                         match action {"authorize"|"enroll"=>{
                             if let Some(form)=state.form.as_mut().filter(|f|Some(f.original["_nativeSerial"].clone())==serial){form.busy=false;if action=="authorize"{form.original["_grant"]=response["grant"].clone();}else{form.image=response["qr"].as_str().and_then(|s|s.strip_prefix("data:image/png;base64,")).and_then(|s|base64::engine::general_purpose::STANDARD.decode(s).ok()).map(|bytes|std::sync::Arc::new(gpui_kit::Image::from_bytes(gpui_kit::ImageFormat::Png,bytes)));form.original["_enrollment"]=response;}}
-                        },"settings"=>{state.form=None;state.feedback=Some("安全锁定设置已保存".into());},"unlock"=>{state.ui.settings.clear_unlock=true;state.snapshot.locked=false;},"lock"=>{state.snapshot.locked=true;state.snapshot.security=response;},_=>{}}
-                    },Err(error)=>{state.ui.settings.error=Some(error.clone());if let Some(form)=state.form.as_mut().filter(|f|Some(f.original["_nativeSerial"].clone())==serial){form.busy=false;form.error=Some(error);}}
+                        },"settings"=>{state.form=None;state.feedback=Some("安全锁定设置已保存".into());},"unlock"=>{state.ui.settings.clear_unlock=true;state.ui.settings.unlock_form=None;state.apply_security_status(response,cx);},"lock"=>{state.apply_security_status(response,cx);},_=>{}}
+                    },Err(error)=>{if action=="unlock"{state.ui.settings.clear_unlock=true;}state.ui.settings.error=Some(error.clone());if let Some(form)=state.form.as_mut().filter(|f|Some(f.original["_nativeSerial"].clone())==serial){form.busy=false;form.error=Some(error);}}
                 }cx.notify();
             });
         }).detach();cx.notify();
     }
 
-    pub(super) fn lock_screen(&mut self,p:Palette,window:&mut Window,cx:&mut Context<Self>)->Div {
-        let handle=self.ui.settings.unlock.read(cx).focus_handle(cx);
-        if !handle.is_focused(window){window.focus(&handle,cx);}
-        let password=self.snapshot.security["passwordConfigured"].as_bool().unwrap_or(false);let totp=self.snapshot.security["twoFactorConfigured"].as_bool().unwrap_or(false);
-        if !password&&totp {self.ui.settings.unlock_method="totp";}
-        div().absolute().inset_0().bg(gpui_kit::rgb(p.background)).occlude().flex().items_center().justify_center()
-            .child(div().w(px(370.)).p_6().rounded(px(18.)).bg(gpui_kit::rgb(p.surface)).border_1().border_color(gpui_kit::rgb(p.border)).flex().flex_col().gap_4()
-                .child(div().flex().items_center().gap_3().child(icon("lock",24.)).child(heading("DevShell 已锁定")))
-                .child(paragraph("解锁后继续使用工作台。"))
-                .when(password&&totp,|body|body.child(div().flex().gap_2().children([("password","密码解锁"),("totp","2FA 验证码解锁")].map(|(method,label)|KitButton::new(format!("unlock-{method}")).ghost().small().label(label).when(self.ui.settings.unlock_method==method,|b|b.secondary()).on_click(cx.listener(move|state,_,_,cx|{state.ui.settings.unlock_method=method;cx.notify();}))))))
-                .child(Input::new(&self.ui.settings.unlock).mask_toggle())
-                .when(!string(&self.snapshot.security,"passwordHint").is_empty(),|body|body.child(paragraph(format!("密码提示：{}",string(&self.snapshot.security,"passwordHint")))))
-                .when_some(self.ui.settings.error.clone(),|body,error|body.child(div().text_color(gpui_kit::rgb(0xc46c68)).child(error)))
-                .child(KitButton::new("unlock-confirm").primary().label(if self.ui.settings.busy{"正在验证…"}else{"解锁"}).disabled(self.ui.settings.busy).on_click(cx.listener(|state,_,_,cx|{
-                    state.security_call("unlock",serde_json::json!({"method":state.ui.settings.unlock_method,"value":state.ui.settings.unlock.read(cx).value().to_string()}),cx);
-                }))))
-    }
 
 }

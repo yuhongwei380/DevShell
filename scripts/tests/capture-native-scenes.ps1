@@ -21,9 +21,9 @@ try {
     }
     if ($taskCaptureProcess.ExitCode -ne 0) { throw "Native scene capture failed; inspect $taskOutput\stderr.log." }
     $taskScenes = @(Get-ChildItem -LiteralPath $taskOutput -Filter '*.png')
-    if ($taskScenes.Count -ne 54) { throw "Expected fifty-four native scene captures; found $($taskScenes.Count)." }
+    if ($taskScenes.Count -ne 62) { throw "Expected sixty-two native scene captures; found $($taskScenes.Count)." }
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'native-ui-comparison.html') -Destination (Join-Path (Split-Path $taskOutput -Parent) 'comparison.html') -Force
-    Write-Output "Captured fifty-four GPUI scenes in $taskOutput"
+    Write-Output "Captured sixty-two GPUI scenes in $taskOutput"
 } finally {
     Remove-Item Env:DEVSHELL_VISUAL_TEST_DIR -ErrorAction SilentlyContinue
 }

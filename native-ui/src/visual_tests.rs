@@ -65,6 +65,10 @@ pub(super) fn start(
                     "key-import",
                     "key-generate",
                     "security",
+                    "lock-message",
+                    "lock-password",
+                    "lock-totp",
+                    "lock-retry",
                     "monitor",
                 ] {
                     this.update_in(cx, |state, window, cx| {
@@ -81,11 +85,22 @@ pub(super) fn start(
                         state.ui.settings.preferences = None;
                         state.ui.settings.keys_visible = false;
                         state.form = None;
+                        state.snapshot.locked=false;
+                        state.snapshot.security=serde_json::json!({"enabled":false,"locked":false});
+                        state.ui.settings.unlock_form=None;
+                        state.ui.settings.error=None;
+                        state.ui.settings.busy=false;
                         state.feedback = None;
                         state.ui.manager.menu = None;
                         state.workspace = SessionWorkspace::default();
                         if matches!(stage,"keys"|"key-import"|"key-generate"){state.ui.settings.keys_visible=true;if stage!="keys"{state.open_key_editor(if stage=="key-import"{"import"}else{"generate"},serde_json::json!({}),window,cx);}}
-                        if stage=="security"{state.open_security_settings(window,cx);}
+                        if stage=="security"{state.open_security_settings(window,cx);state.form.as_mut().unwrap().original["_grant"]=Value::from("visual-only");state.form.as_mut().unwrap().busy=false;state.ui.settings.busy=false;}
+                        if stage.starts_with("lock-"){
+                            state.snapshot.locked=true;
+                            state.snapshot.security=serde_json::json!({"enabled":true,"locked":true,"passwordConfigured":stage!="lock-totp","twoFactorConfigured":true,"passwordHint":"测试密码提示","retryAfterSeconds":if stage=="lock-retry"{12}else{0}});
+                            if stage!="lock-message"{state.open_unlock(window,cx);}
+                            if stage=="lock-retry"{state.ui.settings.error=Some("密码或验证码不正确".into());}
+                        }
                         state.snapshot.appearance["ansiSchemes"]=serde_json::json!([]);
                         state.snapshot.appearance["ansiPalette"]=Value::from("soft");
                         if stage=="ansi-populated"{let colors:Value=serde_json::from_str(include_str!("../assets/ansi-palettes.json")).unwrap();state.snapshot.appearance["ansiSchemes"]=serde_json::json!([{"name":"柔和测试方案","colors":colors["soft"]},{"name":"鲜亮测试方案","colors":colors["bright"]}]);state.snapshot.appearance["ansiPalette"]=Value::from("custom");state.snapshot.appearance["ansiScheme"]=Value::from("柔和测试方案");}
@@ -167,7 +182,11 @@ pub(super) fn start(
                     .expect("capture native test state");
                 }
             }
-            this.update_in(cx,|state,window,cx|{state.open_file_menu(gpui_kit::point(px(500.),px(400.)),Vec::new(),false,window,cx);}).expect("open keyboard menu probe");
+            this.update_in(cx,|state,_,cx|{state.snapshot.locked=true;state.snapshot.security=serde_json::json!({"enabled":true,"locked":true,"passwordConfigured":true,"twoFactorConfigured":true,"retryAfterSeconds":12});state.ui.settings.unlock_form=None;cx.notify();}).expect("set locked keyboard probe");
+            cx.update(|window,cx|{let _=window.draw(cx);window.dispatch_keystroke(gpui_kit::Keystroke::parse("enter").unwrap(),cx);}).expect("open unlock with Enter");
+            this.update_in(cx,|state,window,cx|{assert!(state.ui.settings.unlock_form.is_some(),"Enter did not open identity verification");state.ui.settings.unlock.update(cx,|input,cx|input.set_value("probe-secret",window,cx));state.submit_unlock(cx);assert!(!state.ui.settings.busy,"retry lockout submitted credentials");}).expect("verify retry blocks submission");
+            cx.update(|window,cx|{let _=window.draw(cx);window.dispatch_keystroke(gpui_kit::Keystroke::parse("escape").unwrap(),cx);}).expect("dispatch locked Escape");
+            this.update_in(cx,|state,window,cx|{assert!(state.snapshot.locked&&state.ui.settings.unlock_form.is_some(),"Escape dismissed the lock");state.snapshot.locked=false;state.ui.settings.unlock_form=None;state.ui.settings.unlock.update(cx,|input,cx|input.set_value("",window,cx));state.open_file_menu(gpui_kit::point(px(500.),px(400.)),Vec::new(),false,window,cx);}).expect("open keyboard menu probe");
             cx.update(|window,cx|{let _=window.draw(cx);window.dispatch_keystroke(gpui_kit::Keystroke::parse("down").unwrap(),cx);}).expect("navigate file menu");
             this.update(cx,|state,_|{assert_eq!(state.workspace.file_ui.menu_index,2,"keyboard navigation selected a separator");}).expect("verify separator navigation");
             cx.update(|window,cx|{let _=window.draw(cx);window.dispatch_keystroke(gpui_kit::Keystroke::parse("right").unwrap(),cx);}).expect("open create submenu");

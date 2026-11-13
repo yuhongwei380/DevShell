@@ -77,6 +77,22 @@ try {
   await page.evaluate(({theme,data})=>{const state=current();Date.now=()=>data.now;DevShellTheme.set(theme);appearance.monitorVisible=true;setWorkspaceVisible(false,false);state.stats=data.stats;state.networkStats=data.network;state.latency=data.latency;rememberNetworkSample(state,data.network);renderSessionInfo();applyUIScale();}, {theme,data:monitorFixture});
   await capture('monitor-'+theme);
  }
+ // Inject only the security status response in this isolated reference page.
+ // The original JS still builds and switches all lock-screen states.
+ await page.evaluate(()=>{const realFetch=window.fetch;window.fetch=(url,options)=>String(url).endsWith('/api/security-lock/status')&&window.__captureLockStatus?Promise.resolve(new Response(JSON.stringify(window.__captureLockStatus),{headers:{'Content-Type':'application/json'}})):realFetch(url,options);});
+ for(const theme of ['light','dark']){
+  for(const stage of ['lock-message','lock-password','lock-totp','lock-retry']){
+   await page.evaluate(({theme,stage})=>{
+    DevShellTheme.set(theme);window.__captureLockStatus={enabled:true,locked:true,passwordConfigured:stage!=='lock-totp',twoFactorConfigured:true,passwordHint:'测试密码提示',revision:1000,retryAfterSeconds:stage==='lock-retry'?12:0};
+    document.getElementById('security-unlock-form').hidden=true;document.getElementById('security-lock-message').hidden=false;
+    DengSecurityLock.blocked();
+   },{theme,stage});
+   await new Promise(resolve=>setTimeout(resolve,200));
+   if(stage!=='lock-message')await page.click('#security-unlock-open');
+   if(stage==='lock-retry')await page.evaluate(()=>{document.getElementById('security-unlock-error').textContent='密码或验证码不正确';});
+   await capture(stage+'-'+theme);
+  }
+ }
  await fs.writeFile(path.join(output,'metrics.json'),JSON.stringify(metrics,null,2));
  console.log('Pinned reference screenshots and metrics saved.');
 }catch(error){console.error(String(error?.stack||error).split(fixture.token).join('[redacted]'));process.exitCode=1;}finally{if(globalThis.captureMetrics&&Object.keys(globalThis.captureMetrics).length)await fs.writeFile(path.join(output,'metrics.json'),JSON.stringify(globalThis.captureMetrics,null,2));await browser.close();}

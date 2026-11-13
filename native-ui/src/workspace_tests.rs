@@ -290,6 +290,23 @@ fn security_editor_keeps_manual_lock_and_defaults_to_a_password_method() {
 }
 
 #[test]
+fn security_status_rejects_delayed_unlock_and_incomplete_replies() {
+    let locked=serde_json::json!({"enabled":true,"locked":true,"revision":8});
+    assert!(!crate::lock_panel::accept_status(&locked,&serde_json::json!({"enabled":true,"locked":false,"revision":7})));
+    assert!(!crate::lock_panel::accept_status(&locked,&serde_json::json!({"revision":9})));
+    assert!(crate::lock_panel::accept_status(&locked,&serde_json::json!({"enabled":true,"locked":false,"revision":9})));
+    assert!(crate::lock_panel::accept_status(&locked,&serde_json::json!({"enabled":true,"locked":true,"revision":8,"retryAfterSeconds":12})));
+}
+
+#[test]
+fn unlock_choices_only_include_configured_methods() {
+    let only_totp=crate::lock_panel::unlock_methods(&serde_json::json!({"passwordConfigured":false,"twoFactorConfigured":true}));
+    assert_eq!(only_totp.iter().map(|(id,_)|id.as_str()).collect::<Vec<_>>(),vec!["totp"]);
+    assert!(crate::lock_panel::unlock_methods(&serde_json::json!({})).is_empty());
+    assert_eq!(crate::lock_panel::unlock_methods(&serde_json::json!({"passwordConfigured":true,"twoFactorConfigured":true})).len(),2);
+}
+
+#[test]
 fn old_directory_replies_and_failed_reads_preserve_the_current_directory(){
     let mut workspace=session("first","/var/www");workspace.file_ui.navigation=3;workspace.file_ui.selected.insert("keep.txt".into());
     assert!(!workspace.accept_listing(2,"/old".into(),Ok(FileListState{path:"/old".into(),entries:vec![],status:"已加载".into()})));assert_eq!(workspace.files.as_ref().unwrap().path,"/var/www");
