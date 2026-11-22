@@ -147,6 +147,6 @@
   transition:background .16s,color .16s,transform .16s,opacity .12s ease; }
 .terminal-command-bar textarea { transition:min-height .24s cubic-bezier(.4,.1,.2,1),padding .24s cubic-bezier(.4,.1,.2,1); }
 .terminal-command-bar.command-bar-collapsed { width:47px; max-width:none; min-height:34px; gap:0; }
-.terminal-command-bar.command-bar-collapsed form,.terminal-command-bar.command-bar-collapsed > .terminal-tool { opacity:0; }
+.terminal-command-bar.command-bar-collapsed form,.terminal-command-bar.command-bar-collapsed > .terminal-tool { opacity:0; visibility:hidden; }
 .terminal-command-bar.command-bar-collapsed textarea { min-height:0!important; height:auto!important; padding-block:0!important; }
 @media(prefers-reduced-motion:reduce){.terminal-command-bar,.terminal-command-bar form,.terminal-command-bar textarea{transition:none}}
