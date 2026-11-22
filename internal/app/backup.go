@@ -12,20 +12,23 @@ import (
 	"time"
 )
 
-// Session backups move connections, groups, managed keys, proxies and known
-// host keys between installations. Secrets (saved passwords, proxy passwords,
-// private key files and key passphrases) are only included when explicitly
-// requested, because the backup file itself is plaintext JSON.
+// Session backups move connections, favorites, groups, managed keys, proxies
+// and known host keys between installations. Secrets (saved passwords, proxy
+// passwords, private key files and key passphrases) are only included when
+// explicitly requested, because the backup file itself is plaintext JSON.
 const BackupSchema = "devshell.backup.v1"
 
 // legacyBackupSchema was written before the rename; imports keep accepting it.
 const legacyBackupSchema = "dengshell.backup.v1"
+
+const backupFavoritesLayoutKey = "dengshell.pinned.v1"
 
 const (
 	backupMaxConnections = 2000
 	backupMaxKeys        = 200
 	backupMaxProxies     = 200
 	backupMaxHostKeys    = 2000
+	backupMaxFavorites   = 2000
 	backupMaxKeyBytes    = 2 << 20
 	backupMaxBodyBytes   = 32 << 20
 )
@@ -36,21 +39,23 @@ type BackupKey struct {
 }
 
 type Backup struct {
-	Backup         string              `json:"backup"`
-	ExportedAt     time.Time           `json:"exportedAt"`
-	AppVersion     string              `json:"appVersion"`
-	IncludeSecrets bool                `json:"includeSecrets"`
-	Connections    []Profile           `json:"connections"`
-	Groups         []string            `json:"groups,omitempty"`
-	GroupNodes     []ServerGroup       `json:"groupNodes,omitempty"`
-	Keys           []BackupKey         `json:"keys,omitempty"`
-	Proxies        []ManagedProxy      `json:"proxies,omitempty"`
-	HostKeys       map[string]string   `json:"hostKeys,omitempty"`
+	Backup         string            `json:"backup"`
+	ExportedAt     time.Time         `json:"exportedAt"`
+	AppVersion     string            `json:"appVersion"`
+	IncludeSecrets bool              `json:"includeSecrets"`
+	Connections    []Profile         `json:"connections"`
+	Favorites      []string          `json:"favorites,omitempty"`
+	Groups         []string          `json:"groups,omitempty"`
+	GroupNodes     []ServerGroup     `json:"groupNodes,omitempty"`
+	Keys           []BackupKey       `json:"keys,omitempty"`
+	Proxies        []ManagedProxy    `json:"proxies,omitempty"`
+	HostKeys       map[string]string `json:"hostKeys,omitempty"`
 }
 
 type BackupImportSummary struct {
 	ConnectionsAdded   int `json:"connectionsAdded"`
 	ConnectionsSkipped int `json:"connectionsSkipped"`
+	FavoritesAdded     int `json:"favoritesAdded"`
 	GroupsAdded        int `json:"groupsAdded"`
 	KeysAdded          int `json:"keysAdded"`
 	KeysSkipped        int `json:"keysSkipped"`
@@ -63,6 +68,7 @@ func (s *Store) exportBackup(includeSecrets bool) Backup {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	backup := Backup{Backup: BackupSchema, ExportedAt: time.Now().UTC(), AppVersion: ApplicationVersion, IncludeSecrets: includeSecrets}
+	exportedConnectionIDs := make(map[string]bool, len(s.config.Servers))
 	for _, profile := range s.config.Servers {
 		if profile.DeletedAt != nil || profile.Temporary {
 			continue
@@ -79,6 +85,17 @@ func (s *Store) exportBackup(includeSecrets bool) Backup {
 			profile.Proxy.HasPassword = false
 		}
 		backup.Connections = append(backup.Connections, profile)
+		exportedConnectionIDs[profile.ID] = true
+	}
+	var favorites []string
+	if json.Unmarshal(s.config.Appearance.Layout[backupFavoritesLayoutKey], &favorites) == nil {
+		seen := make(map[string]bool, len(favorites))
+		for _, id := range favorites {
+			if exportedConnectionIDs[id] && !seen[id] {
+				backup.Favorites = append(backup.Favorites, id)
+				seen[id] = true
+			}
+		}
 	}
 	backup.Groups = append([]string{}, s.config.Groups...)
 	backup.GroupNodes = append([]ServerGroup{}, s.config.GroupNodes...)
@@ -118,15 +135,17 @@ func validateBackup(backup Backup) error {
 	if backup.Backup != BackupSchema && backup.Backup != legacyBackupSchema {
 		return errors.New("文件不是 DevShell 会话备份")
 	}
-	if len(backup.Connections) > backupMaxConnections || len(backup.Keys) > backupMaxKeys || len(backup.Proxies) > backupMaxProxies || len(backup.HostKeys) > backupMaxHostKeys {
+	if len(backup.Connections) > backupMaxConnections || len(backup.Favorites) > backupMaxFavorites || len(backup.Keys) > backupMaxKeys || len(backup.Proxies) > backupMaxProxies || len(backup.HostKeys) > backupMaxHostKeys {
 		return errors.New("备份内容超出允许范围")
 	}
+	connectionIDs := make(map[string]bool, len(backup.Connections))
 	for _, profile := range backup.Connections {
 		profile.Name = strings.TrimSpace(profile.Name)
 		profile.Host = strings.TrimSpace(profile.Host)
 		if profile.ID == "" || len(profile.ID) > 64 || profile.DeletedAt != nil || profile.Temporary {
 			return errors.New("备份包含异常连接条目")
 		}
+		connectionIDs[profile.ID] = true
 		switch profile.Protocol {
 		case "", "ssh", "rdp", "serial":
 		default:
@@ -141,6 +160,13 @@ func validateBackup(backup Backup) error {
 		if profile.Port < 0 || profile.Port > 65535 {
 			return errors.New("备份包含无效端口")
 		}
+	}
+	favoriteIDs := make(map[string]bool, len(backup.Favorites))
+	for _, id := range backup.Favorites {
+		if id == "" || len(id) > 64 || !connectionIDs[id] || favoriteIDs[id] {
+			return errors.New("备份包含异常收藏条目")
+		}
+		favoriteIDs[id] = true
 	}
 	for _, key := range backup.Keys {
 		if key.ID == "" || len(key.ID) > 64 {
@@ -246,15 +272,25 @@ func (s *Store) importBackup(backup Backup) (BackupImportSummary, error) {
 		proxySignatures[proxySignature(proxy.Proxy)] = id
 		summary.ProxiesAdded++
 	}
-	existingProfileIDs := map[string]bool{}
-	profileSignatures := map[string]bool{}
+	existingProfileIDs := map[string]string{}
+	profileSignatures := map[string]string{}
 	for _, profile := range s.config.Servers {
-		existingProfileIDs[profile.ID] = true
-		profileSignatures[strings.Join([]string{profile.Name, profile.Host, fmt.Sprint(profile.Port), profile.User}, "|")] = true
+		existingProfileIDs[profile.ID] = profile.ID
+		signature := strings.Join([]string{profile.Name, profile.Host, fmt.Sprint(profile.Port), profile.User}, "|")
+		if _, exists := profileSignatures[signature]; !exists {
+			profileSignatures[signature] = profile.ID
+		}
 	}
+	profileIDMap := make(map[string]string, len(backup.Connections))
 	for _, profile := range backup.Connections {
 		signature := strings.Join([]string{strings.TrimSpace(profile.Name), strings.TrimSpace(profile.Host), fmt.Sprint(profile.Port), strings.TrimSpace(profile.User)}, "|")
-		if existingProfileIDs[profile.ID] || profileSignatures[signature] {
+		if existingID, exists := existingProfileIDs[profile.ID]; exists {
+			profileIDMap[profile.ID] = existingID
+			summary.ConnectionsSkipped++
+			continue
+		}
+		if existingID, exists := profileSignatures[signature]; exists {
+			profileIDMap[profile.ID] = existingID
 			summary.ConnectionsSkipped++
 			continue
 		}
@@ -284,9 +320,38 @@ func (s *Store) importBackup(backup Backup) (BackupImportSummary, error) {
 		profile.Proxy.HasPassword = false
 		profile.Proxy.ClearPassword = false
 		s.config.Servers = append(s.config.Servers, profile)
-		existingProfileIDs[profile.ID] = true
-		profileSignatures[signature] = true
+		existingProfileIDs[profile.ID] = profile.ID
+		profileSignatures[signature] = profile.ID
+		profileIDMap[profile.ID] = profile.ID
 		summary.ConnectionsAdded++
+	}
+	if len(backup.Favorites) > 0 {
+		var favorites []string
+		_ = json.Unmarshal(s.config.Appearance.Layout[backupFavoritesLayoutKey], &favorites)
+		merged := append([]string{}, favorites...)
+		seen := make(map[string]bool, len(merged)+len(backup.Favorites))
+		for _, id := range merged {
+			seen[id] = true
+		}
+		for _, id := range backup.Favorites {
+			if mapped, exists := profileIDMap[id]; exists && mapped != "" && !seen[mapped] {
+				merged = append(merged, mapped)
+				seen[mapped] = true
+				summary.FavoritesAdded++
+			}
+		}
+		if summary.FavoritesAdded > 0 {
+			appearance := cloneAppearance(s.config.Appearance)
+			if appearance.Layout == nil {
+				appearance.Layout = map[string]json.RawMessage{}
+			}
+			data, err := json.Marshal(merged)
+			if err != nil {
+				return BackupImportSummary{}, err
+			}
+			appearance.Layout[backupFavoritesLayoutKey] = data
+			s.config.Appearance = appearance
+		}
 	}
 	knownGroups := map[string]bool{}
 	for _, group := range s.config.Groups {

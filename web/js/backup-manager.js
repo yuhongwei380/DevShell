@@ -1,4 +1,4 @@
-/* Session backup export/import: connections, groups, managed keys, proxies and known host keys move between installations. */
+/* Session backup export/import: connections, favorites, groups, managed keys, proxies and known host keys move between installations. */
 'use strict';
 (function () {
   const picker = document.getElementById('backup-picker');
@@ -25,7 +25,7 @@
       link.click();
       setTimeout(() => URL.revokeObjectURL(link.href), 30000);
       status.textContent = `已导出 ${name}`;
-      toast(`已导出备份：${(backup.connections || []).length} 个连接${secrets.checked ? '（含密码与私钥，请妥善保管文件）' : ''}`);
+      toast(`已导出备份：${(backup.connections || []).length} 个连接、${(backup.favorites || []).length} 个收藏${secrets.checked ? '（含密码与私钥，请妥善保管文件）' : ''}`);
       dialog.close();
     } catch (error) {
       status.textContent = `导出失败：${error?.message || error}`;
@@ -46,7 +46,8 @@
       const backup = JSON.parse(await file.text());
       const summary = await post('/api/backup/import', backup);
       await loadProfiles();
-      toast(`导入完成：新增 ${summary.connectionsAdded} 个连接、${summary.keysAdded} 个密钥，跳过 ${summary.connectionsSkipped} 个重复`);
+      const favorites = summary.favoritesAdded ? `、${summary.favoritesAdded} 个收藏` : '';
+      toast(`导入完成：新增 ${summary.connectionsAdded} 个连接${favorites}、${summary.keysAdded} 个密钥，跳过 ${summary.connectionsSkipped} 个重复`);
     } catch (error) {
       toast(`导入失败：${error?.message || error}`);
     }
