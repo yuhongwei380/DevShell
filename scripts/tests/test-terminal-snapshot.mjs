@@ -23,7 +23,9 @@ try{
  const result=await evaluate(`(async()=>{
  const results=[];const check=(name,ok)=>{if(!ok)throw Error(name);results.push(name)};
  const write=(t,s)=>new Promise(resolve=>t.write(s,resolve));
- function make(cols=20,rows=8){const term=new Terminal({cols,rows,scrollback:10000,allowProposedApi:true});const element=document.createElement('div');element.style.cssText='width:800px;height:400px';document.body.append(element);term.open(element);installTerminalScrollback({term});const addon=new SerializeAddon.SerializeAddon();term.loadAddon(addon);return {term,addon}}
+ const app=await(await fetch('/app.js')).text();
+ const scrollback=Number(app.match(/scrollback: (\\d+)/)[1]);
+ function make(cols=20,rows=8,limit=scrollback){const term=new Terminal({cols,rows,scrollback:limit,allowProposedApi:true});const element=document.createElement('div');element.style.cssText='width:800px;height:400px';document.body.append(element);term.open(element);installTerminalScrollback({term});const addon=new SerializeAddon.SerializeAddon();term.loadAddon(addon);return {term,addon}}
  function shape(term){return JSON.stringify({state:DengTerminalSnapshot.capture(term),normal:read(term.buffer.normal),alt:read(term.buffer.alternate)})}
  function read(buffer){return Array.from({length:buffer.length},(_,i)=>({text:buffer.getLine(i).translateToString(false),wrapped:buffer.getLine(i).isWrapped}))}
  async function roundtrip(source){const saved=DengTerminalSnapshot.capture(source.term), restored=make(source.term.cols,source.term.rows);let dataEvents=0;restored.term.onData(()=>dataEvents++);await write(restored.term,source.addon.serialize());DengTerminalSnapshot.restore(restored.term,JSON.parse(JSON.stringify(saved)));check('runtime snapshot equality',JSON.stringify(DengTerminalSnapshot.capture(restored.term))===JSON.stringify(saved));check('restore sends no terminal input',dataEvents===0);return restored}
@@ -37,7 +39,6 @@ try{
  const wrapping=make(8,4);await write(wrapping.term,'12345678');const wrapped=await roundtrip(wrapping);await write(wrapping.term,'中x');await write(wrapped.term,'中x');check('pending autowrap and CJK continuation agree',shape(wrapping.term)===shape(wrapped.term));
  const charset=make();await write(charset.term,String.fromCharCode(27)+'[3g'+String.fromCharCode(27)+'[1;6H'+String.fromCharCode(27)+'H'+String.fromCharCode(27)+'(0lq');const ch=await roundtrip(charset);await write(charset.term,'qk\\tX');await write(ch.term,'qk\\tX');check('line drawing charset and custom tabs agree',shape(charset.term)===shape(ch.term));
  const good=DengTerminalSnapshot.capture(target.term),before=shape(target.term);for(const mutation of [s=>s.normal.top=-1,s=>s.alternate.bottom=999,s=>s.mouseEncoding='unknown',s=>s.normal.savedAttrs.fg=NaN,s=>s.charsets=[{evil:'x'}]]){const bad=structuredClone(good);mutation(bad);let rejected=false;try{DengTerminalSnapshot.restore(target.term,bad)}catch{rejected=true}check('invalid snapshot rejected before mutation',rejected&&shape(target.term)===before)}
- const app=await(await fetch('/app.js')).text();
  const reconnectCode=app.slice(app.indexOf('function writeTerminalAndWait('),app.indexOf('function showConnectionProgress('));
  const reconnectSource=make(40,8),reconnectTarget=make(80,12);
  const oldState={id:'old',term:reconnectSource.term,serialize:reconnectSource.addon},newState={id:'new',term:reconnectTarget.term};
@@ -78,9 +79,30 @@ try{
  await write(altReading.term,String.fromCharCode(27)+'[?1049hTUI');const altResumed=await roundtrip(altReading);
  const exitTUI=String.fromCharCode(27)+'[?1049lAfter TUI\\r\\n';await write(altReading.term,exitTUI);await write(altResumed.term,exitTUI);
  check('restoring an alternate screen preserves the normal reader on exit',altResumed.term.buffer.normal.viewportY===altReading.term.buffer.normal.viewportY);
+ const bounded=make(100,30),baseline=make(100,30,10000);
+ const output=Array.from({length:11000},(_,i)=>'Memory '+i+' 中文 '+String.fromCharCode(27)+'[31mRED'+String.fromCharCode(27)+'[0m\\r\\n').join('');
+ await write(bounded.term,output);await write(baseline.term,output);
+ check('sustained output caps history at 5000 lines plus viewport',bounded.term.buffer.normal.length===5000+bounded.term.rows);
+ const history=read(bounded.term.buffer.normal).map(line=>line.text).join('\\n');
+ check('bounded history evicts oldest output and keeps latest Unicode text',!history.includes('Memory 0 中文')&&history.includes('Memory 10999 中文 RED'));
+ const bufferBytes=term=>{const lines=term._core._bufferService.buffers.normal.lines;let bytes=0;for(let i=0;i<lines.length;i++)bytes+=lines.get(i)._data.buffer.byteLength;return bytes;};
+ const beforeBytes=bufferBytes(baseline.term),afterBytes=bufferBytes(bounded.term);
+ check('terminal cell storage falls by at least 49 percent',afterBytes/beforeBytes<0.51);
+ results.push('buffer bytes at 100 columns: '+beforeBytes+' -> '+afterBytes);
+ bounded.term.scrollToLine(100);
+ const boundedRestored=await roundtrip(bounded);
+ check('full bounded history survives window handoff',JSON.stringify(read(boundedRestored.term.buffer.normal))===JSON.stringify(read(bounded.term.buffer.normal)));
+ for(const fixture of [bounded,baseline,boundedRestored])fixture.term.dispose();
  const closing=make(),closingState={term:closing.term};
- const drained=reconnect.writeTerminalAndWait(closingState,'queued');closingState.closed=true;for(const done of closingState.terminalWriteWaiters)done();closing.term.dispose();
+ closingState.autoCommands=['must not run'];
+ closingState.autoCommandTimer=setTimeout(()=>{throw Error('closed auto command timer fired')},15000);
+ closingState.terminalBackgroundTimer=setTimeout(()=>{throw Error('closed background timer fired')},15000);
+ const cleared=[],closingSessions=new Map([['closing',closingState]]);
+ const dropCode=app.slice(app.indexOf('function dropSessionView('),app.indexOf('async function closeSession('));
+ const drop=new Function('sessions','activeID','clearTimeout','releaseConnectionAttempt','activate','renderTabs','renderSessionInfo','renderFiles','updateTransferNotice',dropCode+';return dropSessionView;')(closingSessions,'closing',timer=>{cleared.push(timer);clearTimeout(timer)},()=>{},()=>{},()=>{},()=>{},()=>{},()=>{});
+ const drained=reconnect.writeTerminalAndWait(closingState,'queued');drop('closing');
  check('closing a tab releases a pending renderer write',await drained===false);
+ check('closing a tab cancels timers retaining the terminal',cleared.length===2&&cleared.every(timer=>timer>0)&&closingState.autoCommandTimer===null&&closingState.terminalBackgroundTimer===null&&closingState.autoCommands===null&&closingSessions.size===0);
  return results;
 })()`);
  for(const name of result)console.log('PASS:',name);
